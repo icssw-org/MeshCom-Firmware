@@ -102,6 +102,7 @@
     A(char, node_atxt, [40], {0})                                                                        \
     M(int, node_sset2, 0x0000)                                                                           \
     M(int, node_owgpio, MC_PLATFORM_DEFAULT(36, 16))                                                     \
+    M(int, node_dht_type, 11) /* SENS-04: one-wire DHT type, 11 (DHT11) or 22 (DHT22), --dht */          \
     M(float, node_temp2, 0)                                                                              \
     M(float, node_utcoff, MC_PLATFORM_DEFAULT(2, 0))                                                     \
     M(float, node_gas_res, 0) /* BME680 */                                                               \
@@ -252,7 +253,13 @@
         /* TD-23 backlight: day and night level 1..16 (SYM+B), auto day/night switch */             \
         M(int, node_bl_day, 16)                                                                      \
         M(int, node_bl_night, 4)                                                                     \
-        M(bool, node_bl_auto, false)
+        M(bool, node_bl_auto, false)                                                                 \
+        /* TD-THEME-01: 0 auto, 1 dark, 2 light (--theme). Shared block incl. T-Deck Pro (harmless there) */ \
+        M(uint8_t, node_tdeck_theme, 0)                                                              \
+        /* 0 S (12 px), 1 M (14 px), 2 L (16 px) chat body text (--chatfont) */                      \
+        M(uint8_t, node_tdeck_chatfont, 0)                                                           \
+        /* Display mode night: with node_bl_auto off, 1 = fixed night level (0 = day level) */      \
+        M(uint8_t, node_bl_fnight, 0)
 #else
     #define MESHCOM_SETTINGS_MEMBERS_TDECK(M, A)
 #endif

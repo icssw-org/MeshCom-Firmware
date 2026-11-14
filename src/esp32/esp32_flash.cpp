@@ -242,6 +242,10 @@ bool sanitize_loaded_settings(void)
     if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
         fixed++;
 
+    // DHT type: the schema range 11..22 lets e.g. 15 through; --info/--persiststat must show 11 or 22 only
+    if(sanitize_dht_type(meshcom_settings.node_dht_type, sanitize_log))
+        fixed++;
+
     // Ping target must be a plain callsign (no group, special target, own call)
     if(sanitize_ping_target(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), meshcom_settings.node_call, sanitize_log))
         fixed++;
@@ -271,6 +275,24 @@ bool sanitize_loaded_settings(void)
         fixed++;
     if(sanitize_backlight_level(meshcom_settings.node_bl_night, BL_NIGHT_DEFAULT, "node_bl_night", sanitize_log))
         fixed++;
+    // TD-THEME-01: 0 auto, 1 dark, 2 light; anything else is a corrupt value -> auto
+    if(meshcom_settings.node_tdeck_theme > 2)
+    {
+        meshcom_settings.node_tdeck_theme = 0;
+        fixed++;
+    }
+    // 0 S, 1 M, 2 L chat font; anything else is a corrupt value -> S
+    if(meshcom_settings.node_tdeck_chatfont > 2)
+    {
+        meshcom_settings.node_tdeck_chatfont = 0;
+        fixed++;
+    }
+    // Display mode: forced-night flag is 0 or 1
+    if(meshcom_settings.node_bl_fnight > 1)
+    {
+        meshcom_settings.node_bl_fnight = 0;
+        fixed++;
+    }
     #endif
 
     if(fixed > 0)

@@ -34,6 +34,7 @@ using namespace ace_button;
 #include <TouchDrvGT911.hpp>
 #include <lvgl.h>
 #include "lv_obj_functions.h"
+#include "tdeck_theme.h"
 #include "lv_obj_functions_extern.h"
 #include "tdeck_debug.h"
 #include "kbd_repeat.h"
@@ -504,7 +505,8 @@ void setupLvgl()
     disp_drv.full_refresh = 0;
     disp_drv.monitor_cb = tdeck_dbg_monitor_cb;
     disp_drv.render_start_cb = tdeck_dbg_render_start_cb;
-    lv_disp_drv_register( &disp_drv );
+    lv_disp_t *theme_disp = lv_disp_drv_register( &disp_drv );
+    tdeck_theme_init(theme_disp); // TD-THEME-01: before any widget exists
 
     /*Initialize the  input device driver*/
 

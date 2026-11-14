@@ -141,6 +141,7 @@ extern TinyGPSPlus gps;
 #include <t-deck/lv_obj_functions.h>
 #include <t-deck/tdeck_debug.h>
 #include <t-deck/tdeck_helpers.h>   // TD-23: --bl
+#include <t-deck/tdeck_theme.h>     // TD-THEME-01: --theme
 #include <SD.h>
 #include <esp32/esp32_audio.h>
 #ifdef HEAP_TEST
@@ -1859,7 +1860,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--lps33 on/off          LPS33\n");
             #endif
             #ifdef OneWire_GPIO
-            printdeb("--onewire on/off        1-Wire DSxxxx\n--onewire gpio 99       1-Wire pin\n");
+            printdeb("--onewire on/off        1-Wire DSxxxx\n--onewire gpio 99       1-Wire pin\n--dht 11|22            1-Wire DHT type\n");
             #endif
             #if defined (ENABLE_INA226)
             printdeb("--ina226 on/off         INA226\n--shunt 9.999           INA226 shunt ohms\n--imax 9.9              INA226 max current A\n--isamp 9               INA226 sample count\n");
@@ -1890,7 +1891,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--persiststat           NVS-only values\n");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             printdeb("--keylock on/off        SYM+K lock\n");
-            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl day|night 1-16     saved level\n");
+            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl mode auto|day|night  display mode\n--bl day|night 1-16     saved level\n--theme auto|dark|light  display theme\n--chatfont s|m|l        chat text 12/14/16 px\n");
             #endif
             #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
             printdeb("--board led on/off      board LED\n");
@@ -3019,6 +3020,39 @@ void commandAction(char *umsg_text, bool ble)
         if(bONEWIRE)
         {
             init_onewire_ds18();
+            init_onewire_dht();
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"dht ") == 0)
+    {
+        // SENS-04: DHT type, 11 or 22; anything else is refused and the stored value stays.
+        int idht = 0;
+        CmdSetResult setres = cmdStoreInt(msg_text+6, &idht, 0.0, 99.0, &iVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("dht", msg_text+6); return; }
+
+        if(setres == CMD_SET_RANGE || !dht_type_valid(idht))
+        {
+            printfdeb("dht type must be 11 or 22, ignored\n");
+            return;
+        }
+
+        meshcom_settings.node_dht_type = idht;
+
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        printfdeb("\ndht type:%i\n", meshcom_settings.node_dht_type);
+
+        bReturn = true;
+
+        save_settings();
+
+        if(bONEWIRE)
+        {
             init_onewire_dht();
         }
     }
@@ -4186,7 +4220,7 @@ void commandAction(char *umsg_text, bool ble)
 
         String sShort = convertCallToShort(meshcom_settings.node_call);
         bSameCall = bSameCall && sShort.equals(meshcom_settings.node_short);
-        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", sShort.c_str());
+        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%.5s", sShort.c_str());
 
         printfdeb("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
 
@@ -6150,6 +6184,8 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_cleanflash,
                       meshcom_settings.node_fwversion);
 
+        Serial.printf("[PERSIST];sens;dht;%d\n", meshcom_settings.node_dht_type);
+
         Serial.printf("[PERSIST];gw;gwrf;%d;gwrc;%s\n", meshcom_settings.node_gwrf, meshcom_settings.node_gwrc);
 
         #if defined(ESP32) && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO))
@@ -6159,7 +6195,7 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_immediate_save ? 1 : 0,
                       meshcom_settings.node_mute ? 1 : 0);
 
-        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d\n",
+        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d;theme;%d;chatfont;%d;blfnight;%d\n",
                       meshcom_settings.node_keyboardlock ? 1 : 0,
                       meshcom_settings.node_backlightlock ? 1 : 0,
                       meshcom_settings.node_kbllightlock ? 1 : 0,
@@ -6169,7 +6205,10 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_wifion ? 1 : 0,
                       meshcom_settings.node_bl_day,
                       meshcom_settings.node_bl_night,
-                      meshcom_settings.node_bl_auto ? 1 : 0);
+                      meshcom_settings.node_bl_auto ? 1 : 0,
+                      (int)meshcom_settings.node_tdeck_theme,
+                      (int)meshcom_settings.node_tdeck_chatfont,
+                      (int)meshcom_settings.node_bl_fnight);
 
         // One path per line: these are free-text char[128] and a ';' inside a
         // path would otherwise split a field of the line above.
@@ -6248,7 +6287,33 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"bl auto on") == 0 ||
        commandCheck(msg_text+2, (char*)"bl auto off") == 0)
     {
-        meshcom_settings.node_bl_auto = (commandCheck(msg_text+2, (char*)"bl auto on") == 0);
+        // on = mode auto, off = mode day (fixed day level)
+        brightness_mode_flags(commandCheck(msg_text+2, (char*)"bl auto on") == 0 ? BL_MODE_AUTO : BL_MODE_DAY,
+                              &meshcom_settings.node_bl_auto, &meshcom_settings.node_bl_fnight);
+        save_settings();
+        brightnessTick(true);
+        tdeck_refresh_SET_view();
+        return;
+    }
+    else
+    // --bl mode auto|day|night (exact lower case): auto = day/night switching, day = fixed day level, night = fixed night level
+    if(commandCheck(msg_text+2, (char*)"bl mode ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 8;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        const int m = brightness_mode_parse(arg);
+        if(m < 0)
+        {
+            Serial.printf("[TFT];bl;error;mode;%s;allowed;auto|day|night\n", arg);
+            return;
+        }
+        brightness_mode_flags(m, &meshcom_settings.node_bl_auto, &meshcom_settings.node_bl_fnight);
         save_settings();
         brightnessTick(true);
         tdeck_refresh_SET_view();
@@ -6268,12 +6333,76 @@ void commandAction(char *umsg_text, bool ble)
         }
         save_settings();
         brightnessTick(true);
+        tdeck_refresh_SET_view();
         return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"bl") == 0)
     {
         brightnessLogState("show");
+        return;
+    }
+    else
+    // TD-THEME-01: --theme auto|dark|light. Stored, saved and applied live; bare --theme shows it.
+    // The argument is matched exactly in lower case (tdeck_theme_parse); anything else is an error.
+    if(commandCheck(msg_text+2, (char*)"theme ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 6;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        int t = tdeck_theme_parse(arg);
+        if(t < 0)
+        {
+            Serial.printf("[TFT];theme;error;arg;%s;allowed;auto|dark|light\n", arg);
+            return;
+        }
+        meshcom_settings.node_tdeck_theme = (uint8_t)t;
+        save_settings();
+        tdeck_theme_reapply();
+        tdeck_refresh_SET_view();
+        Serial.printf("[TFT];theme;%s;dark;%d\n", tdeck_theme_name(meshcom_settings.node_tdeck_theme), tdeck_theme_is_dark() ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"theme") == 0)
+    {
+        Serial.printf("[TFT];theme;%s;dark;%d\n", tdeck_theme_name(meshcom_settings.node_tdeck_theme), tdeck_theme_is_dark() ? 1 : 0);
+        return;
+    }
+    else
+    // --chatfont s|m|l: chat bubble body text 12/14/16 px. Exact lower-case (tdeck_chatfont_parse); bare shows it.
+    if(commandCheck(msg_text+2, (char*)"chatfont ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 9;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        int t = tdeck_chatfont_parse(arg);
+        if(t < 0)
+        {
+            Serial.printf("[TFT];chatfont;error;arg;%s;allowed;s|m|l\n", arg);
+            return;
+        }
+        meshcom_settings.node_tdeck_chatfont = (uint8_t)t;
+        save_settings();
+        tdeck_chatfont_apply();
+        tdeck_refresh_SET_view();
+        Serial.printf("[TFT];chatfont;%s\n", tdeck_chatfont_name(meshcom_settings.node_tdeck_chatfont));
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"chatfont") == 0)
+    {
+        Serial.printf("[TFT];chatfont;%s\n", tdeck_chatfont_name(meshcom_settings.node_tdeck_chatfont));
         return;
     }
     #endif
@@ -7379,7 +7508,7 @@ void commandAction(char *umsg_text, bool ble)
                 printfdeb("...WIND: off\n");
             #endif
 
-            printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
+            printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%i%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, meshcom_settings.node_dht_type, cdht);
 
             #ifdef NTC_PIN
                 printfdeb("...NTC-TEMP: %.1f °C  ...FAN: %s\n", meshcom_settings.node_ntctemp, meshcom_settings.node_fanon ? "on" : "off");

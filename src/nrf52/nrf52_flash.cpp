@@ -392,6 +392,10 @@ void sanitize_loaded_settings(void)
 	if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
 		fixed++;
 
+	// DHT type: the schema range 11..22 lets e.g. 15 through; --info/--persiststat must show 11 or 22 only
+	if(sanitize_dht_type(meshcom_settings.node_dht_type, sanitize_log))
+		fixed++;
+
 	// Ping target must be a plain callsign (no group, special target, own call)
 	if(sanitize_ping_target(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), meshcom_settings.node_call, sanitize_log))
 		fixed++;
