@@ -893,7 +893,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     static lv_style_t tr_style;
     lv_style_init(&tr_style);
-    lv_style_set_text_font(&tr_style, &lv_font_unscii_16);
+    lv_style_set_text_font(&tr_style, &mc_font_latin_12);   // same font as the table pages
     lv_style_set_bg_opa(&tr_style, LV_OPA_100);
     lv_style_set_line_width(&tr_style, 4);
 
@@ -1820,14 +1820,23 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_textarea_set_cursor_click_pos(track_ta, false);
     lv_textarea_set_text_selection(track_ta, false);
     lv_textarea_set_cursor_pos(track_ta, 0);
-    lv_obj_set_size(track_ta, 300, LV_VER_RES * 0.72);
+    // Page without padding/scroll (166 px high); 9 lines x 17 px = 153 px
+    // + 2x2 pad + 2x2 border = 161 px; SEND POS sits right of the text, not below
+    lv_obj_set_style_pad_all(t6, 0, LV_PART_MAIN);
+    lv_obj_set_scroll_dir(t6, LV_DIR_NONE);
+    lv_obj_set_scrollbar_mode(t6, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_size(track_ta, 196, 163);
+    lv_obj_set_pos(track_ta, 2, 1);
     lv_textarea_set_text(track_ta, "");
     lv_textarea_set_max_length(track_ta, 1000);
-    lv_obj_align(track_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_style(track_ta, &tr_style, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(track_ta, 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(track_ta, 2, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(track_ta, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_scroll_dir(track_ta, LV_DIR_NONE);
 
     lv_obj_t * btsendpos = lv_btn_create(t6);
-    lv_obj_set_pos(btsendpos, 180, 150);
+    lv_obj_set_pos(btsendpos, 208, 4);
     lv_obj_set_size(btsendpos, 100, 20);
     lv_obj_add_event_cb(btsendpos, btn_event_handler_sendpos, LV_EVENT_ALL, NULL);
 
