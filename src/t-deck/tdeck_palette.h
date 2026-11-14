@@ -51,12 +51,14 @@ inline const TdeckPalette& tdeck_palette(bool dark)
         0xD03A55, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0x2A2F36, 0x2A2F36, 0, 0x14161A};
     // Light text, muted and bubble fills sit on the RGB565 grid (tdeck_rgb565 is the identity on them) and
     // are >= 1.2:1 off chat_bg; the panel washes out the near-white range (test_light_bubbles_stand_out).
-    // Every light bubble and chat group button also gets a 3 px near-black outline, >= 3:1 against chat_bg and each fill (operator,
+    // Panel photos (DISP-PAT-01, 2026-11-08): text and outline pure black, muted 0x212021, sent bubble light green,
+    // system bubble pale yellow; every chat fill >= 3 RGB565 steps from every other (test_light_panel_measured).
+    // Every light bubble and chat group button also gets a 3 px black outline, >= 3:1 against chat_bg and each fill (operator,
     // T-Deck photos 2026-11-08); the outline, not the fill, carries the WCAG 1.4.11 boundary.
     static const TdeckPalette kLight = {
-        0xA2182F, 0xFFFFFF, 0xFCEDF0, 0xA2182F, 0xFFFFFF, 0xF9F9F9, 0x181818, 0x4A494A, 0x767676,
-        0xA2182F, 0xFCEDF0, 0x252323, 0x1A7F37, 0xFFFFFF, 0xFFEBEF, 0xA2182F, 0xFFD166, 0x8A5A00, 0x0969DA,
-        0xA2182F, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0xEFF7FF, 0x181818, 3, 0xCED7DE};
+        0xA2182F, 0xFFFFFF, 0xFCEDF0, 0xA2182F, 0xFFFFFF, 0xF9F9F9, 0x000000, 0x212021, 0x767676,
+        0xA2182F, 0xFCEDF0, 0x252323, 0x1A7F37, 0xFFFFFF, 0xCEF3CE, 0xA2182F, 0xFFD166, 0x8A5A00, 0x0969DA,
+        0xA2182F, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0xFFF3C6, 0x000000, 3, 0xCED7DE};
     return dark ? kDark : kLight;
 }
 
@@ -114,6 +116,19 @@ inline uint32_t tdeck_rgb565(uint32_t c)
     uint32_t r5 = (c >> 19) & 0x1F, g6 = (c >> 10) & 0x3F, b5 = (c >> 3) & 0x1F;
     uint32_t r = (r5 << 3) | (r5 >> 2), g = (g6 << 2) | (g6 >> 4), b = (b5 << 3) | (b5 >> 2);
     return (r << 16) | (g << 8) | b;
+}
+
+// Largest per-channel distance of two colours on the panel, in 5-bit steps (green's 6-bit steps count half).
+// DISP-PAT-01 photos (2026-11-08): near white the panel separates only about every third RGB565 step, so two
+// fills the eye must tell apart need >= 3 here.
+inline double tdeck_rgb565_steps(uint32_t a, uint32_t b)
+{
+    const int ar = (a >> 19) & 0x1F, ag = (a >> 10) & 0x3F, ab = (a >> 3) & 0x1F;
+    const int br = (b >> 19) & 0x1F, bg = (b >> 10) & 0x3F, bb = (b >> 3) & 0x1F;
+    const double dr = ar > br ? ar - br : br - ar, dg = (ag > bg ? ag - bg : bg - ag) / 2.0,
+                 db = ab > bb ? ab - bb : bb - ab;
+    double m = dr > dg ? dr : dg;
+    return m > db ? m : db;
 }
 
 // WCAG 2.x contrast ratio (1..21) of two 0xRRGGBB colours.
