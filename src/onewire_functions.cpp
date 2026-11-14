@@ -2,6 +2,7 @@
 #include "loop_functions_extern.h"
 
 #include "onewire_functions.h"
+#include "settings_sanitize.h"   // SENS-04: dht_type_valid / sanitize_dht_type / dht_name_matches
 
 byte i;
 byte present = 0;
@@ -19,16 +20,15 @@ float celsius, fahrenheit;
 // Feather HUZZAH ESP8266 note: use pins 3, 4, 5, 12, 13 or 14 --
 // Pin 15 can work but DHT must be disconnected during program upload.
 
-// Uncomment the type of sensor in use:
-#define DHTTYPE    DHT11     // DHT 11
-//#define DHTTYPE    DHT22     // DHT 22 (AM2302)
-//#define DHTTYPE    DHT21     // DHT 21 (AM2301)
+// SENS-04: the sensor type is the persisted setting node_dht_type (--dht 11|22, default 11). The library has no
+// type setter, so the object is created in init_onewire_dht() after the settings are loaded, with the
+// configured pin and type (DHT11 == 11, DHT22 == 22 in DHT.h).
 
 // See guide for details on sensor wiring and usage:
 //   https://learn.adafruit.com/dht/overview
 
 uint32_t delayMS;
-DHT_Unified dht(OneWire_GPIO, DHTTYPE);
+static DHT_Unified *dht = nullptr;
 
 void init_onewire_dht()
 {
@@ -47,11 +47,11 @@ void init_onewire_dht()
         }
     #endif
 
-    Serial.printf("[INIT]...ONEWIRE - DHT GPIO:%i\n", meshcom_settings.node_owgpio);
+    sanitize_dht_type(meshcom_settings.node_dht_type, nullptr);
 
-    if(meshcom_settings.node_owgpio > 0)
-        DHT_Unified dht(meshcom_settings.node_owgpio, DHTTYPE);
-    else
+    Serial.printf("[INIT]...ONEWIRE - DHT GPIO:%i TYPE:%i\n", meshcom_settings.node_owgpio, meshcom_settings.node_dht_type);
+
+    if(meshcom_settings.node_owgpio <= 0)
     {
         #ifdef OneWire_GPIO
             // R3-03: Der Makro-Rueckfall lief UNGEPRUEFT. Acht Varianten
@@ -66,20 +66,27 @@ void init_onewire_dht()
                 return;
 
             meshcom_settings.node_owgpio = OneWire_GPIO;
-            DHT_Unified dht(meshcom_settings.node_owgpio, DHTTYPE);
         #else
             return;
         #endif
     }
 
-    dht.begin();
+    // SENS-04: the former block-local objects never reached dht.begin(), which ran on a global built with the
+    // compile-time pin; build the one object here with the configured pin and type.
+    // Invariant: `dht` is created, read and deleted from the loop task only (readDHT/--dht/init run there);
+    // no other task holds the pointer, so the delete needs no lock. Do not touch it from another task.
+    if(dht != nullptr)
+        delete dht;
+    dht = new DHT_Unified(meshcom_settings.node_owgpio, (uint8_t)meshcom_settings.node_dht_type);
+
+    dht->begin();
 
     Serial.println(F("[INIT]...DHTxx Unified Sensor found"));
     // Print temperature sensor details.
     sensor_t sensor;
-    dht.temperature().getSensor(&sensor);
+    dht->temperature().getSensor(&sensor);
 
-    if(strcmp(sensor.name, "DHT11") == 0)
+    if(dht_name_matches(sensor.name, meshcom_settings.node_dht_type))
     {
         dht_found = true;
 
@@ -94,7 +101,7 @@ void init_onewire_dht()
         Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
         Serial.println(F("------------------------------------"));
         // Print humidity sensor details.
-        dht.humidity().getSensor(&sensor);
+        dht->humidity().getSensor(&sensor);
         Serial.println(F("Humidity Sensor"));
         Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
         Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
@@ -112,7 +119,7 @@ void init_onewire_dht()
 
 bool loop_onewire_dht()
 {
-    if(!dht_found)
+    if(!dht_found || dht == nullptr)
     {
         return false;
     }
@@ -127,7 +134,7 @@ bool loop_onewire_dht()
 
     // Get temperature event and print its value.
     sensors_event_t event;
-    dht.temperature().getEvent(&event);
+    dht->temperature().getEvent(&event);
     if (isnan(event.temperature))
     {
         if(bWXDEBUG)
@@ -148,7 +155,7 @@ bool loop_onewire_dht()
     }
 
     // Get humidity event and print its value.
-    dht.humidity().getEvent(&event);
+    dht->humidity().getEvent(&event);
     if (isnan(event.relative_humidity))
     {
         if(bWXDEBUG)

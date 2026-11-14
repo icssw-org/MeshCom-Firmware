@@ -102,6 +102,7 @@
     A(char, node_atxt, [40], {0})                                                                        \
     M(int, node_sset2, 0x0000)                                                                           \
     M(int, node_owgpio, MC_PLATFORM_DEFAULT(36, 16))                                                     \
+    M(int, node_dht_type, 11) /* SENS-04: one-wire DHT type, 11 (DHT11) or 22 (DHT22), --dht */          \
     M(float, node_temp2, 0)                                                                              \
     M(float, node_utcoff, MC_PLATFORM_DEFAULT(2, 0))                                                     \
     M(float, node_gas_res, 0) /* BME680 */                                                               \

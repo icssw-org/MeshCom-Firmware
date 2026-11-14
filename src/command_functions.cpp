@@ -1860,7 +1860,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--lps33 on/off          LPS33\n");
             #endif
             #ifdef OneWire_GPIO
-            printdeb("--onewire on/off        1-Wire DSxxxx\n--onewire gpio 99       1-Wire pin\n");
+            printdeb("--onewire on/off        1-Wire DSxxxx\n--onewire gpio 99       1-Wire pin\n--dht 11|22            1-Wire DHT type\n");
             #endif
             #if defined (ENABLE_INA226)
             printdeb("--ina226 on/off         INA226\n--shunt 9.999           INA226 shunt ohms\n--imax 9.9              INA226 max current A\n--isamp 9               INA226 sample count\n");
@@ -3020,6 +3020,39 @@ void commandAction(char *umsg_text, bool ble)
         if(bONEWIRE)
         {
             init_onewire_ds18();
+            init_onewire_dht();
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"dht ") == 0)
+    {
+        // SENS-04: DHT type, 11 or 22; anything else is refused and the stored value stays.
+        int idht = 0;
+        CmdSetResult setres = cmdStoreInt(msg_text+6, &idht, 0.0, 99.0, &iVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("dht", msg_text+6); return; }
+
+        if(setres == CMD_SET_RANGE || !dht_type_valid(idht))
+        {
+            printfdeb("dht type must be 11 or 22, ignored\n");
+            return;
+        }
+
+        meshcom_settings.node_dht_type = idht;
+
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        printfdeb("\ndht type:%i\n", meshcom_settings.node_dht_type);
+
+        bReturn = true;
+
+        save_settings();
+
+        if(bONEWIRE)
+        {
             init_onewire_dht();
         }
     }
@@ -6151,6 +6184,8 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_cleanflash,
                       meshcom_settings.node_fwversion);
 
+        Serial.printf("[PERSIST];sens;dht;%d\n", meshcom_settings.node_dht_type);
+
         Serial.printf("[PERSIST];gw;gwrf;%d;gwrc;%s\n", meshcom_settings.node_gwrf, meshcom_settings.node_gwrc);
 
         #if defined(ESP32) && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO))
@@ -7473,7 +7508,7 @@ void commandAction(char *umsg_text, bool ble)
                 printfdeb("...WIND: off\n");
             #endif
 
-            printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
+            printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%i%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, meshcom_settings.node_dht_type, cdht);
 
             #ifdef NTC_PIN
                 printfdeb("...NTC-TEMP: %.1f °C  ...FAN: %s\n", meshcom_settings.node_ntctemp, meshcom_settings.node_fanon ? "on" : "off");

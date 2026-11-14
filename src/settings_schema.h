@@ -111,6 +111,8 @@ size_t fieldCount();
     X("node_cflash",    CFG_INT, node_cleanflash, CFG_NORANGE, CFG_NOESC)                        \
     /* gateway registration state (gw_reg_runtime.cpp): persisted, never exported/imported. */   \
     X("node_gwrf",      CFG_INT, node_gwrf,       CFG_NORANGE, CFG_NOESC)                        \
+    /* SENS-04: one-wire DHT type (11 or 22), --dht; persisted, not exported. */                  \
+    X("node_dht",       CFG_INT, node_dht_type,   11.0, 22.0, CFG_NOESC)                         \
     X("node_gwrc",      CFG_STR, node_gwrc,       CFG_NORANGE, CFG_NOESC)                        \
     SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)
 
