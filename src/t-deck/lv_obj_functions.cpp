@@ -2612,95 +2612,55 @@ static void update_header_batt_indicator(float batt, int proz)
  */
 extern volatile bool deviceConnected; // from esp32_main.cpp (volatile since BLC-01)
 
+static void hidden_set_if_changed(lv_obj_t *obj, bool hidden)
+{
+    if(obj == NULL || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN) == hidden)
+        return;
+    if(hidden)
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Header icons for WLAN and BLE, one rule in the theme colours:
+//   hdr_on  (white)  link up: WLAN connected or AP active / phone connected over BLE
+//   hdr_err (yellow) switched on, no link yet: WLAN configured but not connected / BLE advertising
+//   hdr_off (grey)   switched off; the icon stays visible
 static void update_header_wifi_indicator(void)
 {
     if(header_wifi_icon == NULL)
         return;
 
-    // If the user explicitly disabled Wi‑Fi via the T‑Deck Settings, show
-    // the Wi‑Fi icon as 'off' (white) regardless of configured SSID.
-    {
-        if(!meshcom_settings.node_wifion)
-        {
-            if (bDEBUG)
-                Serial.printf("[TDECK]...update_header_wifi_indicator: node_wifion=false, WiFi.status=%d, ssid='%s'\n", (int)WiFi.status(), meshcom_settings.node_ssid);
-            
-            text_color_set_if_changed(header_wifi_icon, lv_color_white());
-            label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-            lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-            return;
-        }
-    }
+    label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
+    hidden_set_if_changed(header_wifi_icon, false);
 
-    // AP mode considered connected
-    // Check actual WiFi state for Green (Connected or AP created)
-    bool is_connected = (WiFi.status() == WL_CONNECTED);
-    bool is_ap_active = (WiFi.getMode() == WIFI_MODE_AP) || (WiFi.getMode() == WIFI_MODE_APSTA);
+    const TdeckPalette &p = tdeck_theme_pal();
+    const bool is_connected = (WiFi.status() == WL_CONNECTED);
+    const bool is_ap_active = (WiFi.getMode() == WIFI_MODE_AP) || (WiFi.getMode() == WIFI_MODE_APSTA);
+    const bool configured = bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1);
 
-    if(is_connected || is_ap_active)
-    {
-        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_GREEN));
-        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-
-    // If configured/enabled but not yet connected/active -> Red
-    // Only if global switch is ON (which we checked above, but double check logic)
-    if (bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1))
-    {
-        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_LIME));  //ex lv_palette_main(LV_PALETTE_RED)
-        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-    }
-    else
-    {
-        // Not enabled/configured -> White
-        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_GREY)); //ex lv_color_white()
-        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-        lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-    }
+    uint32_t c = p.hdr_off;
+    if(meshcom_settings.node_wifion && (is_connected || is_ap_active))
+        c = p.hdr_on;
+    else if(meshcom_settings.node_wifion && configured)
+        c = p.hdr_err;
+    text_color_set_if_changed(header_wifi_icon, lv_color_hex(c));
 }
 
 static void update_header_bt_indicator(void)
 {
     if(header_bt_icon == NULL)
         return;
-    // Always render the icon glyph in white
-    text_color_set_if_changed(header_bt_icon, lv_palette_main(LV_PALETTE_GREY)); //ex lv_color_white()
+
+    // Rule above update_header_wifi_indicator(). BLE advertises once its name is set.
+    const TdeckPalette &p = tdeck_theme_pal();
+    uint32_t c = p.hdr_off;
+    if(deviceConnected)
+        c = p.hdr_on;
+    else if(strlen(cBLEName) > 1)
+        c = p.hdr_err;
+    text_color_set_if_changed(header_bt_icon, lv_color_hex(c));
     label_set_if_changed(header_bt_icon, LV_SYMBOL_BLUETOOTH);
-
-    /* KBC
-    // Ensure a square touch/visual area for the icon
-    lv_obj_set_size(header_bt_icon, 22, 22);
-    lv_obj_set_style_text_align(header_bt_icon, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(header_bt_icon, 0, LV_PART_MAIN);
-
-    // Default: no border / transparent background
-    lv_obj_set_style_border_width(header_bt_icon, 0, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(header_bt_icon, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_radius(header_bt_icon, 12, LV_PART_MAIN);
-    */
-
-    // deviceConnected is set by NimBLE callbacks
-    if (deviceConnected)
-    {
-        // Connected: blue logo
-        text_color_set_if_changed(header_bt_icon, lv_palette_main(LV_PALETTE_LIME)); //ex lv_color_make(0x00, 0x00, 0xff)
-    }
-    else
-    {
-        // BLE advertising active: white glyph with white ring
-        if (strlen(cBLEName) > 1)
-        {
-            //ex lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
-            lv_obj_set_style_border_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
-        }
-        else
-        {
-            // BLE disabled: plain white glyph, no border (default above)
-        }
-    }
 }
 
 /* Public wrappers so other modules can trigger a header refresh */
@@ -2768,6 +2728,11 @@ void tdeck_update_header_standby(void)
         save_node_keyboardlock = kbl;
         header_lock_apply(kbl != 0);
     }
+
+    // WLAN and BLE icons follow the live state; the *_if_changed() helpers touch LVGL only
+    // when something really changes (the BLE name is set only after the header was built).
+    update_header_wifi_indicator();
+    update_header_bt_indicator();
 }
 
 /* Pause/resume a small set of UI timers when the display is turned off/on.
