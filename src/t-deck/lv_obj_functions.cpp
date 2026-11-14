@@ -29,6 +29,7 @@
 #include <SD.h>
 #include <SPI.h>
 #include "tdeck_sdmap.h"
+#include "tdeck_theme.h"   // TD-THEME-01
 #include "tdeck_text_cover.h"
 #include "pos_persist.h"
 #include "msg_persist_policy.h"
@@ -347,6 +348,71 @@ static lv_obj_t *get_tab_bar()
     return lv_tabview_get_tab_btns(tv);
 }
 
+// TD-THEME-01: the colours that cannot be shared styles. The three header icons take their colour from a state
+// (menu open, keyboard backlight lock, backlight lock); the setup/table styles are file-local lv_style_t.
+// ONE tdeck_theme_on_change slot (theme_recolor_cb) re-colours both after every theme apply.
+static lv_style_t *s_th_ta = NULL, *s_th_tr = NULL, *s_th_input = NULL, *s_th_cursor = NULL;
+static lv_style_t *s_th_cell = NULL, *s_th_cell1 = NULL, *s_th_cell2 = NULL, *s_th_bg = NULL;
+
+static void tab_icons_recolor(void)
+{
+    const TdeckPalette &p = tdeck_theme_pal();
+    if(tab_menu_icon_label != NULL)
+        lv_obj_set_style_text_color(tab_menu_icon_label, lv_color_hex(tab_menu_visible ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
+    if(tab_kbl_icon_label != NULL)
+        lv_obj_set_style_text_color(tab_kbl_icon_label, lv_color_hex(meshcom_settings.node_kbllightlock ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
+    if(tab_standby_icon_label != NULL)
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_color_hex(meshcom_settings.node_backlightlock ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
+}
+
+static void theme_fill_static_styles(void)
+{
+    const TdeckPalette &p = tdeck_theme_pal();
+    const lv_color_t text = lv_color_hex(p.text), surf = lv_color_hex(p.surface), brd = lv_color_hex(p.border);
+    if(s_th_bg)
+        lv_style_set_text_color(s_th_bg, text);
+    if(s_th_ta)
+    {
+        lv_style_set_text_color(s_th_ta, text);
+        lv_style_set_bg_color(s_th_ta, surf);
+        lv_style_set_border_color(s_th_ta, brd);
+    }
+    if(s_th_tr)
+    {
+        lv_style_set_text_color(s_th_tr, text);
+        lv_style_set_bg_color(s_th_tr, surf);
+        lv_style_set_border_color(s_th_tr, brd);
+    }
+    if(s_th_input)
+    {
+        lv_style_set_text_color(s_th_input, text);
+        lv_style_set_bg_color(s_th_input, surf);
+    }
+    if(s_th_cursor)
+        lv_style_set_bg_color(s_th_cursor, text);
+    if(s_th_cell)
+        lv_style_set_bg_color(s_th_cell, surf);
+    lv_style_t *cells[2] = {s_th_cell1, s_th_cell2};
+    for(lv_style_t *c : cells)
+        if(c)
+        {
+            lv_style_set_bg_color(c, surf);
+            lv_style_set_text_color(c, text);
+            lv_style_set_border_color(c, brd);
+        }
+}
+
+// The single tdeck_theme_on_change slot of this file.
+static void theme_recolor_cb(void)
+{
+    tab_icons_recolor();
+    theme_fill_static_styles();
+    lv_style_t *all[] = {s_th_bg, s_th_ta, s_th_tr, s_th_input, s_th_cursor, s_th_cell, s_th_cell1, s_th_cell2};
+    for(lv_style_t *st : all)
+        if(st)
+            lv_obj_report_style_change(st);
+}
+
 static void update_tab_button_state(bool show)
 {
     if(tab_menu_button != NULL)
@@ -359,9 +425,7 @@ static void update_tab_button_state(bool show)
 
     if(tab_menu_icon_label != NULL)
     {
-        lv_color_t color = show ? lv_palette_main(LV_PALETTE_RED)
-                                : lv_palette_main(LV_PALETTE_LIME); //ex LV_PALETTE_LIGHT_GREEN
-        lv_obj_set_style_text_color(tab_menu_icon_label, color, LV_PART_MAIN);
+        tab_icons_recolor();   // reads tab_menu_visible, which tdeck_set_tab_menu_visible() sets before calling here
     }
 }
 
@@ -423,14 +487,12 @@ static void tab_standby_button_event_cb(lv_event_t * e)
         {
             meshcom_settings.node_modus = meshcom_settings.node_modus | 0x02;
 
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
         }
         else
         {
             meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFD;
-
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
+        tab_icons_recolor();
 
         save_settings();
     }
@@ -452,7 +514,6 @@ static void tab_kbl_button_event_cb(lv_event_t * e)
             if (bDEBUG)
                 Serial.println("[TDECK]...tab_kbl: turn on keyboard backlight");
             setKeyboardBacklight(150);
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
         }
         else
         {
@@ -462,8 +523,8 @@ static void tab_kbl_button_event_cb(lv_event_t * e)
                 Serial.println("[TDECK]...tab_kbl: turn off keyboard backlight");
                 
             setKeyboardBacklight(0);
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
+        tab_icons_recolor();
 
         save_settings();
     }
@@ -570,12 +631,10 @@ static void msg_input_budget_cb(lv_event_t *e)
 void setDisplayLayout(lv_obj_t *parent)
 {
     static lv_style_t lable_style;
-    lv_style_init(&lable_style);
-    lv_style_set_text_color(&lable_style, lv_color_white());
+    lv_style_init(&lable_style);   // unused; colour dropped (TD-THEME-01)
 
     static lv_style_t bg_style;
     lv_style_init(&bg_style);
-    lv_style_set_text_color(&bg_style, lv_color_white());
     lv_style_set_text_font(&bg_style, &mc_font_latin_16);
     //lv_style_set_bg_img_src(&bg_style, &image);
     lv_style_set_bg_opa(&bg_style, LV_OPA_100);
@@ -586,8 +645,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_menu_header = lv_obj_create(parent);
     lv_obj_set_size(tab_menu_header, screen_w, header_height);
-    lv_obj_set_style_bg_color(tab_menu_header, lv_palette_main(LV_PALETTE_BLUE_GREY), LV_PART_MAIN); //ex LV_PALETTE_BLUE
-    lv_obj_set_style_bg_opa(tab_menu_header, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_add_style(tab_menu_header, &tdeck_style_header, LV_PART_MAIN);   // bg + opa + text colour from the theme
     lv_obj_set_style_border_width(tab_menu_header, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_menu_header, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(tab_menu_header, 4, LV_PART_MAIN);
@@ -597,60 +655,57 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(tab_menu_button, 32, header_height - 4);
     lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(tab_menu_button, tab_menu_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE_GREY); //ex LV_PALETTE_BLUE
-    lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(tab_menu_button, &tdeck_style_header, LV_PART_MAIN);
+    lv_obj_add_style(tab_menu_button, &tdeck_style_header, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_menu_button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_menu_button, 4, LV_PART_MAIN);
 
     tab_menu_icon_label = lv_label_create(tab_menu_button);
     lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_BARS);
     lv_obj_set_style_text_font(tab_menu_icon_label, &mc_font_latin_18, LV_PART_MAIN);
-    lv_obj_set_style_text_color(tab_menu_icon_label, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_MAIN);
     lv_obj_center(tab_menu_icon_label);
 
     tab_kbl_button = lv_btn_create(tab_menu_header);
     lv_obj_set_size(tab_kbl_button, 32, header_height - 4);
     lv_obj_align_to(tab_kbl_button, tab_menu_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_kbl_button, tab_kbl_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(tab_kbl_button, &tdeck_style_header, LV_PART_MAIN);
+    lv_obj_add_style(tab_kbl_button, &tdeck_style_header, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_kbl_button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_kbl_button, 4, LV_PART_MAIN);
 
     tab_kbl_icon_label = lv_label_create(tab_kbl_button);
     lv_label_set_text(tab_kbl_icon_label, LV_SYMBOL_KEYBOARD);
     lv_obj_set_style_text_font(tab_kbl_icon_label, &mc_font_latin_18, LV_PART_MAIN);
-    lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_kbl_icon_label);
 
     tab_standby_button = lv_btn_create(tab_menu_header);
     lv_obj_set_size(tab_standby_button, 32, header_height - 4);
     lv_obj_align_to(tab_standby_button, tab_kbl_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_standby_button, tab_standby_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(tab_standby_button, &tdeck_style_header, LV_PART_MAIN);
+    lv_obj_add_style(tab_standby_button, &tdeck_style_header, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_standby_button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_standby_button, 4, LV_PART_MAIN);
 
     tab_standby_icon_label = lv_label_create(tab_standby_button);
     lv_label_set_text(tab_standby_icon_label, LV_SYMBOL_EYE_OPEN);
     lv_obj_set_style_text_font(tab_standby_icon_label, &mc_font_latin_18, LV_PART_MAIN);
-    lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_standby_icon_label);
+    tab_icons_recolor();   // initial state colours of the three header icons
 
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
     lv_obj_set_style_text_font(header_time_label, &mc_font_latin_18, LV_PART_MAIN);
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_time_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
+    lv_obj_add_style(header_time_label, &tdeck_style_header_text, LV_PART_MAIN);
     lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     header_batt_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_label, "0%");
     lv_obj_set_style_text_font(header_batt_label, &mc_font_latin_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_batt_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
+    lv_obj_add_style(header_batt_label, &tdeck_style_header_text, LV_PART_MAIN);
     lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -35, 0);
 
     header_batt_icon = lv_label_create(tab_menu_header);
@@ -662,7 +717,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_label_set_text(header_sat_label, "0");
     lv_obj_set_style_text_font(header_sat_label, &mc_font_latin_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_sat_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
+    lv_obj_add_style(header_sat_label, &tdeck_style_header_text, LV_PART_MAIN);
     lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     header_sat_icon = lv_label_create(tab_menu_header);
@@ -731,31 +786,23 @@ void setDisplayLayout(lv_obj_t *parent)
 
     static lv_style_t ta_style;
     lv_style_init(&ta_style);
-    lv_style_set_text_color(&ta_style, lv_color_black());
     lv_style_set_bg_opa(&ta_style, LV_OPA_100);
-    lv_style_set_bg_color(&ta_style, lv_color_white());
-    lv_style_set_border_color(&ta_style, lv_color_black());
     lv_style_set_line_width(&ta_style, 4);
 
     static lv_style_t tr_style;
+    lv_style_init(&tr_style);
     lv_style_set_text_font(&tr_style, &lv_font_unscii_16);
-    lv_style_set_text_color(&tr_style, lv_color_black());
     lv_style_set_bg_opa(&tr_style, LV_OPA_100);
-    lv_style_set_bg_color(&tr_style, lv_color_white());
-    lv_style_set_border_color(&tr_style, lv_color_black());
     lv_style_set_line_width(&tr_style, 4);
 
     static lv_style_t ta_input_style;
     lv_style_init(&ta_input_style);
     lv_style_set_text_font(&ta_input_style, &mc_font_latin_12);
-    lv_style_set_text_color(&ta_input_style, lv_color_black()); // BLAU lv_color_make(0x1C, 0x73, 0xFF));
     lv_style_set_bg_opa(&ta_input_style, LV_OPA_100);
-    lv_style_set_bg_color(&ta_input_style, lv_color_white());
 
     static lv_style_t ta_input_cursor;
     lv_style_init(&ta_input_cursor);
     lv_style_set_bg_opa(&ta_input_cursor, LV_OPA_80);
-    lv_style_set_bg_color(&ta_input_cursor, lv_color_black());
     lv_style_set_border_width(&ta_input_cursor, 1);
 
     static lv_style_t cell_style;
@@ -767,18 +814,14 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_bottom(&cell_style, 0);
     lv_style_set_pad_left(&cell_style, 0);
     lv_style_set_pad_right(&cell_style, 0);
-    lv_style_set_bg_color(&cell_style, lv_color_white());
 
     lv_style_init(&cell_style1);
     lv_style_set_pad_top(&cell_style1, 1);
     lv_style_set_pad_bottom(&cell_style1, 1);
     lv_style_set_pad_left(&cell_style1, 2);
     lv_style_set_pad_right(&cell_style1, 2);
-    lv_style_set_bg_color(&cell_style1, lv_color_white());
-    lv_style_set_text_color(&cell_style1, lv_color_black());
     lv_style_set_text_font(&cell_style1, &mc_font_latin_12);
     lv_style_set_border_width(&cell_style1, 1);
-    lv_style_set_border_color(&cell_style1, lv_color_black());
     lv_style_set_border_side(&cell_style1, LV_BORDER_SIDE_FULL);
 
     lv_style_init(&cell_style2);
@@ -786,12 +829,15 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_bottom(&cell_style2, 1);
     lv_style_set_pad_left(&cell_style2, 2);
     lv_style_set_pad_right(&cell_style2, 2);
-    lv_style_set_bg_color(&cell_style2, lv_color_white());
-    lv_style_set_text_color(&cell_style2, lv_color_black());
     lv_style_set_text_font(&cell_style2, &mc_font_latin_12);
     lv_style_set_border_width(&cell_style2, 1);
-    lv_style_set_border_color(&cell_style2, lv_color_black());
     lv_style_set_border_side(&cell_style2, LV_BORDER_SIDE_FULL);
+
+    // TD-THEME-01: the colours of the styles above come from the palette and follow a live theme switch.
+    s_th_bg = &bg_style;  s_th_ta = &ta_style;  s_th_tr = &tr_style;  s_th_input = &ta_input_style;
+    s_th_cursor = &ta_input_cursor;  s_th_cell = &cell_style;  s_th_cell1 = &cell_style1;  s_th_cell2 = &cell_style2;
+    theme_fill_static_styles();
+    tdeck_theme_on_change(theme_recolor_cb);
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -866,8 +912,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_wifi, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_wifi, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_wifi, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_wifi, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_wifi, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_wifi, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_wifi_label = lv_label_create(btn_wifi);
@@ -880,8 +926,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_gps, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_gps, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_gps, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_gps, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_gps, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_gps, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_gps_label = lv_label_create(btn_gps);
@@ -894,8 +940,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_soundon, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_soundon, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_soundon, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_soundon, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_soundon, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_soundon, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_soundon_label = lv_label_create(btn_soundon);
@@ -1059,8 +1105,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_track, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_track, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_track, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_track, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_track, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_track, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_track_label = lv_label_create(btn_track);
@@ -1099,8 +1145,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_webserver, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_webserver, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_webserver, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_webserver, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_webserver, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_webserver, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_webserver_label = lv_label_create(btn_webserver);
@@ -1139,8 +1185,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_wifiap, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_wifiap, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_wifiap, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_wifiap, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_wifiap, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_wifiap, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_wifiap_label = lv_label_create(btn_wifiap);
@@ -1329,8 +1375,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_mesh, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_mesh, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_mesh, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_mesh, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_mesh, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_mesh, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_mesh_label = lv_label_create(btn_mesh);
@@ -1345,8 +1391,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_noallmsg, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_noallmsg, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_noallmsg, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_noallmsg, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_noallmsg, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_noallmsg, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_noallmsg_label = lv_label_create(btn_noallmsg);
@@ -1379,8 +1425,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_blauto, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_blauto, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_blauto, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_blauto, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_blauto, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_blauto, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_blauto_label = lv_label_create(btn_blauto);
@@ -1449,8 +1495,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // Make the button checkable (like a toggle) 
     lv_obj_add_flag(btn_persist_to_flash, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_persist_to_flash, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_persist_to_flash, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_persist_to_flash, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_to_flash_label = lv_label_create(btn_persist_to_flash);
@@ -1464,8 +1510,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // Make the button checkable (like a toggle)
     lv_obj_add_flag(btn_persist_to_SD, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_persist_to_SD, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_persist_to_SD, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_persist_to_SD, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_to_SD_label = lv_label_create(btn_persist_to_SD);
@@ -1479,8 +1525,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // Make the button checkable (like a toggle)
     lv_obj_add_flag(btn_persist_immediate, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_persist_immediate, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_persist_immediate, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_persist_immediate, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_immediate_label = lv_label_create(btn_persist_immediate);
@@ -1600,7 +1646,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     map_no_data_label = lv_label_create(t7);
     lv_label_set_text(map_no_data_label, "No card selected\nor present!");
-    lv_obj_set_style_text_color(map_no_data_label, lv_color_white(), 0);
+    lv_obj_add_style(map_no_data_label, &tdeck_style_text, 0);
     lv_obj_set_style_text_align(map_no_data_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(map_no_data_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(map_no_data_label, 200);
@@ -1734,7 +1780,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     msg_budget_label = lv_label_create(t5);
     lv_label_set_text(msg_budget_label, "149 bytes left");
-    lv_obj_set_style_text_color(msg_budget_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(msg_budget_label, &tdeck_style_muted, LV_PART_MAIN);
     lv_obj_align_to(msg_budget_label, text_input, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 2);
 
     msg_controls = lv_obj_create(t5);
@@ -2584,13 +2630,8 @@ static void apply_tab_bar_styles(void)
     if(tab_bar == NULL)
         return;
 
-    lv_obj_set_style_text_color(tab_bar, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_ITEMS);
-    lv_obj_set_style_text_color(tab_bar, lv_palette_main(LV_PALETTE_RED), LV_PART_ITEMS | LV_STATE_CHECKED);
-
-    lv_obj_set_style_bg_color(tab_bar, lv_color_black(), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_opa(tab_bar, LV_OPA_80, LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(tab_bar, lv_palette_darken(LV_PALETTE_BLUE_GREY, 2), LV_PART_ITEMS);   //ex LV_PALETTE_BLUE
-    lv_obj_set_style_bg_opa(tab_bar, LV_OPA_60, LV_PART_ITEMS);
+    lv_obj_add_style(tab_bar, &tdeck_style_tab, LV_PART_ITEMS);
+    lv_obj_add_style(tab_bar, &tdeck_style_tab_sel, LV_PART_ITEMS | LV_STATE_CHECKED);
 
     lv_obj_set_style_border_width(tab_bar, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(tab_bar, 4, LV_PART_ITEMS);
@@ -2679,7 +2720,7 @@ static void msg_list_show_hint(const char *text)
     msg_list_clear();
     msg_list_hint_label = lv_label_create(msg_list);
     lv_label_set_text(msg_list_hint_label, text != NULL ? text : "");
-    lv_obj_set_style_text_color(msg_list_hint_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(msg_list_hint_label, &tdeck_style_muted, LV_PART_MAIN);
     lv_obj_align(msg_list_hint_label, LV_ALIGN_CENTER, 0, 0);
 }
 
@@ -2691,18 +2732,12 @@ static void ensure_msg_styles(void)
     msg_styles_ready = true;
 
     lv_style_init(&msg_style_incoming);
-    lv_style_set_bg_opa(&msg_style_incoming, LV_OPA_COVER);
-    lv_style_set_bg_color(&msg_style_incoming, lv_color_hex(0xD7F5D0));
     lv_style_set_radius(&msg_style_incoming, 14);
 
     lv_style_init(&msg_style_outgoing);
-    lv_style_set_bg_opa(&msg_style_outgoing, LV_OPA_COVER);
-    lv_style_set_bg_color(&msg_style_outgoing, lv_color_hex(0xD4E8FF));
     lv_style_set_radius(&msg_style_outgoing, 14);
 
     lv_style_init(&msg_style_system);
-    lv_style_set_bg_opa(&msg_style_system, LV_OPA_COVER);
-    lv_style_set_bg_color(&msg_style_system, lv_palette_lighten(LV_PALETTE_GREY, 2));
     lv_style_set_radius(&msg_style_system, 14);
 }
 
@@ -2740,7 +2775,6 @@ static void init_msg_tab_bar(lv_obj_t *parent)
     lv_obj_set_height(msg_tab_bar, 28);
     lv_obj_align(msg_tab_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_opa(msg_tab_bar, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(msg_tab_bar, lv_palette_lighten(LV_PALETTE_GREY, 4), LV_PART_MAIN);
     lv_obj_set_style_border_width(msg_tab_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(msg_tab_bar, 6, LV_PART_MAIN);
     lv_obj_set_style_pad_all(msg_tab_bar, 4, LV_PART_MAIN);
@@ -2753,7 +2787,7 @@ static void init_msg_tab_bar(lv_obj_t *parent)
 
     msg_tab_hint_label = lv_label_create(msg_tab_bar);
     lv_label_set_text(msg_tab_hint_label, "No MSG groups");
-    lv_obj_set_style_text_color(msg_tab_hint_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(msg_tab_hint_label, &tdeck_style_muted, LV_PART_MAIN);
 
     msg_tab_entries.clear();
     msg_active_tab_index = -1;
@@ -2973,8 +3007,8 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
     new_entry.last_activity = msg_tab_stamp();
     new_entry.button = lv_btn_create(msg_tab_bar);
 
-    lv_obj_set_style_bg_color(new_entry.button, lv_palette_lighten(LV_PALETTE_BLUE, 3), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(new_entry.button, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(new_entry.button, &tdeck_style_tab, LV_PART_MAIN);
+    lv_obj_add_style(new_entry.button, &tdeck_style_tab_sel, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(new_entry.button, LV_OPA_70, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(new_entry.button, LV_OPA_100, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(new_entry.button, 0, LV_PART_MAIN);
@@ -3342,11 +3376,20 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_obj_set_flex_flow(bubble_obj, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(bubble_obj, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
+    // TD-THEME-01: the shared style carries bg colour + opa + text colour, the msg style only the shape (radius).
+    lv_style_t *theme_style = &tdeck_style_bubble_in;
     const lv_style_t *style = &msg_style_incoming;
     if(bubble.type == MsgBubbleType::Outgoing)
+    {
+        theme_style = &tdeck_style_bubble_out;
         style = &msg_style_outgoing;
+    }
     else if(bubble.type == MsgBubbleType::System)
+    {
+        theme_style = &tdeck_style_bubble_sys;
         style = &msg_style_system;
+    }
+    lv_obj_add_style(bubble_obj, theme_style, LV_PART_MAIN);
     lv_obj_add_style(bubble_obj, const_cast<lv_style_t *>(style), LV_PART_MAIN);
 
     if(bubble.type == MsgBubbleType::Outgoing)
@@ -3382,7 +3425,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
 
     lv_obj_t *header = lv_label_create(header_row);
     lv_label_set_text(header, display_header.c_str());
-    lv_obj_set_style_text_color(header, lv_palette_darken(LV_PALETTE_BLUE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(header, &tdeck_style_muted, LV_PART_MAIN);
     lv_label_set_long_mode(header, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(header, LV_SIZE_CONTENT);
     lv_obj_set_style_max_width(header, content_max_width, LV_PART_MAIN);
@@ -3459,7 +3502,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
 
     lv_obj_t *time_label = lv_label_create(footer_row);
     lv_label_set_text(time_label, bubble.timestamp.c_str());
-    lv_obj_set_style_text_color(time_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(time_label, &tdeck_style_muted, LV_PART_MAIN);
     lv_label_set_long_mode(time_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(time_label, LV_SIZE_CONTENT);
     lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
@@ -3468,7 +3511,6 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_label_set_text(body, bubble.body.c_str());
     lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(body, content_max_width);
-    lv_obj_set_style_text_color(body, lv_color_black(), LV_PART_MAIN);
 
     // footer row with timestamp aligned to right-bottom
     if(bubble.timestamp.length() > 0)
@@ -3485,7 +3527,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
 
         lv_obj_t *time_label = lv_label_create(footer_row);
         lv_label_set_text(time_label, msg_footer_text(bubble).c_str());
-        lv_obj_set_style_text_color(time_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+        lv_obj_add_style(time_label, &tdeck_style_muted, LV_PART_MAIN);
         lv_label_set_long_mode(time_label, LV_LABEL_LONG_CLIP);
         lv_obj_set_width(time_label, LV_SIZE_CONTENT);
         lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);

@@ -24,7 +24,7 @@ bool tdeck_theme_on_change(void (*cb)(void));
 
 extern lv_style_t tdeck_style_header, tdeck_style_header_text, tdeck_style_tab, tdeck_style_tab_sel,
     tdeck_style_screen, tdeck_style_surface, tdeck_style_text, tdeck_style_muted, tdeck_style_btn_on,
-    tdeck_style_btn_off, tdeck_style_bubble_in, tdeck_style_bubble_out;
+    tdeck_style_btn_off, tdeck_style_bubble_in, tdeck_style_bubble_out, tdeck_style_bubble_sys;
 
 #endif
 #endif

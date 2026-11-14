@@ -20,6 +20,7 @@
 #include "tdeck_extern.h"
 #include <node_position.h>
 #include <daylight.h>
+#include "tdeck_theme.h"
 #define CET_AGE_WITH_CLOCK
 #include <cet_age.h>
 
@@ -41,12 +42,29 @@ static double s_bl_elev = 0.0;
 static unsigned long s_bl_tick_ms = 0;
 static bool s_bl_save_pending = false;
 static unsigned long s_bl_save_ms = 0;
+static void (*s_bl_change_cb)(uint8_t) = nullptr;
+
+// TD-THEME-01: the theme follows the sun period whether or not backlight auto is on.
+// Fires only on a DAY<->NIGHT change (and once with the first known period); the
+// fallback period (no clock or position) never calls it, the theme stays at its unknown state.
+static bool s_theme_night_known = false;
+static bool s_theme_night = false;
+
+static void themeNightSync(BlPeriod sun)
+{
+    if (sun == BL_PERIOD_FALLBACK)
+        return;
+    const bool night = (sun == BL_PERIOD_NIGHT);
+    if (s_theme_night_known && night == s_theme_night)
+        return;
+    s_theme_night_known = true;
+    s_theme_night = night;
+    tdeck_theme_set_night(night);
+}
 
 static BlPeriod brightnessEvalPeriod()
 {
     s_bl_elev_ok = false;
-    if (!meshcom_settings.node_bl_auto)
-        return BL_PERIOD_DAY;
 
     const CetClock c = cetDeviceClock();
     const double lat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
@@ -60,10 +78,13 @@ static BlPeriod brightnessEvalPeriod()
         s_bl_was_day = daylight_is_day_elev(s_bl_elev, s_bl_was_day);
     }
 
-    return brightness_period(true, c.now_ok, pos_ok, s_bl_was_day);
+    const BlPeriod sun = brightness_period(true, c.now_ok, pos_ok, s_bl_was_day);
+    themeNightSync(sun);
+    // backlight: with auto off the day level stays in use
+    return meshcom_settings.node_bl_auto ? sun : BL_PERIOD_DAY;
 }
 
-static uint8_t brightnessActiveLevel()
+uint8_t brightnessActiveLevel()
 {
     return brightness_level_for(s_bl_period, meshcom_settings.node_bl_day, meshcom_settings.node_bl_night);
 }
@@ -143,6 +164,34 @@ void cycleBrightness()
     s_bl_save_ms = millis() + BL_SAVE_DELAY_MS;
 
     brightnessLogState("symb");
+    if (s_bl_change_cb)
+        s_bl_change_cb(level);
+}
+
+/**
+ * slider API: sets the active period's level (1..16, never 0 = panel off); no callback
+ */
+void brightnessSetActiveLevel(uint8_t level)
+{
+    if (level < 1)
+        level = 1;
+    if (level > BRIGHTNESS_STEPS)
+        level = BRIGHTNESS_STEPS;
+
+    if (current_brightness_level > 0 && !tft_is_sleeping)
+        setBrightness(level);
+    pre_sleep_brightness_level = level;
+
+    brightness_store_level(s_bl_period, level, &meshcom_settings.node_bl_day, &meshcom_settings.node_bl_night);
+    s_bl_save_pending = true;
+    s_bl_save_ms = millis() + BL_SAVE_DELAY_MS;
+
+    brightnessLogState("slider");
+}
+
+void brightnessSetChangeCallback(void (*cb)(uint8_t))
+{
+    s_bl_change_cb = cb;
 }
 
 /**

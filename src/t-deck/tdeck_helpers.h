@@ -26,6 +26,9 @@ void setBrightness(uint8_t);
 void brightnessApplySaved();
 void brightnessTick(bool force);
 void brightnessLogState(const char *why);
+uint8_t brightnessActiveLevel();
+void brightnessSetActiveLevel(uint8_t level);          // 1..16, no callback
+void brightnessSetChangeCallback(void (*cb)(uint8_t)); // fired by cycleBrightness (SYM+B) only
 void setKeyboardBacklight(uint8_t value);
 
 void log_json_to_sd(const char* filename, const String& json_object_str);

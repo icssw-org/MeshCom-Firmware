@@ -8,7 +8,7 @@
 
 lv_style_t tdeck_style_header, tdeck_style_header_text, tdeck_style_tab, tdeck_style_tab_sel, tdeck_style_screen,
     tdeck_style_surface, tdeck_style_text, tdeck_style_muted, tdeck_style_btn_on, tdeck_style_btn_off,
-    tdeck_style_bubble_in, tdeck_style_bubble_out;
+    tdeck_style_bubble_in, tdeck_style_bubble_out, tdeck_style_bubble_sys;
 
 static bool s_inited = false;
 static lv_disp_t* s_disp = NULL;
@@ -64,6 +64,9 @@ static void fill_styles(const TdeckPalette& p)
     lv_style_set_bg_opa(&tdeck_style_bubble_out, LV_OPA_COVER);
     lv_style_set_bg_color(&tdeck_style_bubble_out, C(p.bubble_out));
     lv_style_set_text_color(&tdeck_style_bubble_out, C(p.text));
+    lv_style_set_bg_opa(&tdeck_style_bubble_sys, LV_OPA_COVER);
+    lv_style_set_bg_color(&tdeck_style_bubble_sys, C(p.bubble_sys));
+    lv_style_set_text_color(&tdeck_style_bubble_sys, C(p.text));
 }
 
 static void apply(bool dark)
@@ -94,7 +97,8 @@ void tdeck_theme_init(lv_disp_t* disp)
         lv_style_t* all[] = {&tdeck_style_header, &tdeck_style_header_text, &tdeck_style_tab,
                              &tdeck_style_tab_sel, &tdeck_style_screen, &tdeck_style_surface,
                              &tdeck_style_text, &tdeck_style_muted, &tdeck_style_btn_on,
-                             &tdeck_style_btn_off, &tdeck_style_bubble_in, &tdeck_style_bubble_out};
+                             &tdeck_style_btn_off, &tdeck_style_bubble_in, &tdeck_style_bubble_out,
+                             &tdeck_style_bubble_sys};
         for(lv_style_t* s : all)
             lv_style_init(s);
     }
