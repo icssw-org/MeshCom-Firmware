@@ -30,6 +30,7 @@
 #include <SPI.h>
 #include "tdeck_sdmap.h"
 #include "tdeck_theme.h"   // TD-THEME-01
+#include "tdeck_gps_sky.h"   // GPS-SKY
 LV_IMG_DECLARE(mc_lock_img);
 LV_IMG_DECLARE(mc_logo_img);
 #include "tdeck_text_cover.h"
@@ -1833,6 +1834,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * btnlabelsendpos = lv_label_create(btsendpos);
     lv_label_set_text(btnlabelsendpos, "SEND POS");
     lv_obj_center(btnlabelsendpos);
+
+    tdeckGpsSkyCreate(t6, track_ta);   // GPS-SKY: sky plot over the text view + SKY/TEXT toggle
 
     ////////////////////////////////////////////////////////////////////////////
     // TEXT MHEARD (Quelle seit Welle 4: nbr_views, siehe tdeck_refresh_mh_view())
@@ -4791,6 +4794,7 @@ void tdeck_send_track_view()
         snprintf(ctrack, sizeof(ctrack), "\n\n\n\n        GPS\n   POSITION SENT\n");
 
     lv_textarea_set_text(track_ta, ctrack);
+    tdeckGpsSkyNotice("POS SENT");   // GPS-SKY: track_ta is hidden while the sky plot shows
 
     // show the message briefly, then restore the normal track view
     // delete any existing timer and create a new short one (2000ms)
@@ -4839,6 +4843,8 @@ void tdeck_refresh_track_view()
 {
     if (lv_tabview_get_tab_act(tv) != 4) // GPS screen not active
         return;
+
+    tdeckGpsSkyRefresh();   // GPS-SKY: no-op while the text view is shown
 
     int pos_seconds = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
 

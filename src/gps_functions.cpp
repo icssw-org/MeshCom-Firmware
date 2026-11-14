@@ -14,8 +14,18 @@
 
 #include "gps_functions.h"
 
-#if defined(BOARD_HELTEC_T114)
+// GSV (satellites in view) feeds the graphic GPS page: Heltec T114 and T-Deck / T-Deck Plus
+#if defined(BOARD_HELTEC_T114) || defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#define GPS_SKY_FEED 1
 #include "gps_skyplot.h"   // GSV parser for the GPS page
+#endif
+
+// T-Deck / T-Deck Plus: with GSV on, the default 256 B UART RX buffer overflows within ~70 ms at 38400 baud
+// while LVGL renders. setRxBufferSize() only works on a stopped port, hence end() first (no-op if not started).
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#define GPS_RXBUF_PREPARE() do { GPSSerial.end(); GPSSerial.setRxBufferSize(2048); } while(0)
+#else
+#define GPS_RXBUF_PREPARE() do { } while(0)
 #endif
 
 #include "gps_filter.h"
@@ -270,6 +280,7 @@ static int gpsScanBauds()
         Serial1.begin(GPS_BAUDS[iGpsBaud]);
         Serial1.flush();
         #else
+        GPS_RXBUF_PREPARE();
         GPSSerial.begin(GPS_BAUDS[iGpsBaud], SERIAL_8N1, s_gpsRxPin, s_gpsTxPin);
         GPSSerial.flush();
         #endif
@@ -654,7 +665,17 @@ void SetupUBLOX()
   }
 
   // 1. Alle Nachrichten (GSV) ausschalten, um Flut an Daten zu reduzieren
+  #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+  // T-Deck: GSV on (UART1 rate 1) for the sky plot. GSV is ~1 kB/s and would saturate 9600 baud; the
+  // guard follows the compile-time new_baud (38400 today). If the module stays at 9600 it cannot decode
+  // this 38400 command, so GSV is never enabled on a slow link.
+  if (new_baud >= 38400)
+    sendUBXCommand("$PUBX,40,GSV,0,1,0,0,0,0*58");
+  else
+    sendUBXCommand("$PUBX,40,GSV,0,0,0,0,0,0*59");
+  #else
   sendUBXCommand("$PUBX,40,GSV,0,0,0,0,0,0*59");
+  #endif
   sendUBXCommand("$PUBX,40,VTG,0,0,0,0,0,0*5E");
   sendUBXCommand("$PUBX,40,GSA,0,0,0,0,0,0*4E");
   sendUBXCommand("$PUBX,40,GLL,0,0,0,0,0,0*5C");
@@ -726,8 +747,8 @@ void SetupL76K() {
   #endif
   delay(250);
   // ask for only RMC and GGA
-  #if defined(BOARD_HELTEC_T114)
-  // T114: GSV (satellites in view) in addition, for the graphic GPS page
+  #if defined(GPS_SKY_FEED)
+  // T114 / T-Deck: GSV (satellites in view) in addition, for the graphic GPS page
   Serial.printf("[GPS ]>>> $PCAS03,1,0,0,1,1,0,0,0,0,0,,,0,0*03\n");
   Serial1.write("$PCAS03,1,0,0,1,1,0,0,0,0,0,,,0,0*03\r\n");
   #elif defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
@@ -995,6 +1016,7 @@ void WZ_GPS_Init()
     #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
     Serial1.begin(detectedBaud);
     #else
+    GPS_RXBUF_PREPARE();
     GPSSerial.begin(detectedBaud,SERIAL_8N1,s_gpsRxPin,s_gpsTxPin);
     #endif
 
@@ -1047,7 +1069,7 @@ void WZ_GPS_Feed()
 
         if (gps.encode(char(ic))) { updateGPSdata = true; }
 
-        #if defined(BOARD_HELTEC_T114)
+        #if defined(GPS_SKY_FEED)
         gpsSkyFeed(char(ic), millis());   // satellites in view for the GPS page
         #endif
 
@@ -1438,6 +1460,7 @@ void WZ_L76Kreset() {
 
   // Baudrate-Erkennung: Jede Baudrate kurz ausprobieren
   for (size_t i = 0; i < GPS_BAUD_COUNT; i++) {
+    GPS_RXBUF_PREPARE();
     GPSSerial.begin(GPS_BAUDS[i], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     Serial.printf("[GPS ]...test %lu Baud...\n", GPS_BAUDS[i]);
 
