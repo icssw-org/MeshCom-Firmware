@@ -4913,8 +4913,8 @@ void esp32loop()
         telemetry_timer = millis();
     }
 
-    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-        { INSTR_SECTION("display_tick"); LOOP_SECTION(LSEC_DISPLAY); mainStartTimeLoop(); }
+    // CLK-PING-01: clock tick always; the clock line skips itself while a held frame is shown.
+    { INSTR_SECTION("display_tick"); LOOP_SECTION(LSEC_DISPLAY); mainStartTimeLoop(); }
 
     #if not defined(BOARD_T_DECK_PRO)
     if(DisplayOffWait > 0)
@@ -4930,8 +4930,7 @@ void esp32loop()
                 digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
                 #endif
 
-                if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-                    sendDisplay1306(true, true, 0, 0, (char*)"#C");
+                sendDisplay1306(true, true, 0, 0, (char*)"#C");
             }
         }
     }

@@ -9,6 +9,7 @@
 #endif
 
 #include "loop_functions.h"
+#include "display_clock_gate.h"   // sendDisplayTime() redraw decision
 #include "gfx_charmap.h"   // national characters on the GFXfont displays (E290, WP, E213)
 #include "text_fold.h"     // CHARS-01: fold what the display font lacks
 #include "ack_attribution.h"
@@ -380,6 +381,7 @@ char LogCallsign[10] = {0};
 
 bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
+bool bHeldFrameDrawn = false;   // CLK-PING-01: a held full-screen frame was drawn (DisplayPong, hold text)
 bool bDisplayTrack = false;
 bool bOneButton = false;
 bool bEnterDfu = false;   // --dfu: beim naechsten faelligen rebootAuto in den UF2-Bootloader statt Neustart
@@ -1929,6 +1931,8 @@ void sendDisplayHead(bool bInit)
     bSetDisplay=false;
 }
 
+static void sendDisplayClockLine();
+
 void sendDisplayTrack()
 {
     if(bSetDisplay)
@@ -1966,11 +1970,33 @@ void sendDisplayTrack()
         #endif
     }
 
-    iDisplayType=9;
-
-    // nur alle 15 sekunden
-    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty)
+    #if defined(BOARD_HELTEC_T114)
+    // In track mode a click opens the graphic GPS page and the next click closes it
+    // (onebutton_functions.cpp). Without this guard the per-second clock line below
+    // would re-send the track page buffer over the GPS page.
+    if(t114GpsPageActive())
     {
+        bSetDisplay=false;
+        t114GpsPageUpdate();
+        return;
+    }
+    #endif
+
+    // Seite nur alle 15 Sekunden neu aufbauen (Positions-/RATE-Daten). Dazwischen nur die Uhrzeile
+    // (CLK-01 W2, A1 "jede Seite"): sendDisplayClockLine() tauscht pageText[0] und uebertraegt den
+    // Seitenpuffer neu, ohne die Zeilen neu zu formatieren (auf E-Paper ohne Wirkung). iDisplayType
+    // wird erst beim Aufbau auf 9 gesetzt: eine geblaetterte Nachrichtenseite (Typ 0) behaelt so
+    // ihre Kopfzeile, die Uhr bleibt dort eingefroren (F1).
+    if(!(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty))
+    {
+        bSetDisplay=false;
+        sendDisplayClockLine();
+        return;
+    }
+
+    {
+        iDisplayType=9;
+
         bOneButton    = false;
         bDisplayDirty = false;
 
@@ -2134,24 +2160,38 @@ void sendDisplayTime()
     }
     #endif
 
+    sendDisplayClockLine();
+}
+
+// CLK-01 W2: draws the clock line of the current clock page (also called by sendDisplayTrack() on
+// the seconds between its 15 s page rebuilds). Own function so that the pageHold countdown of
+// sendDisplayTime() is not run a second time or from the track page.
+static void sendDisplayClockLine()
+{
+    // CLK-01: early returns as one pure decision (display_clock_gate.h): no display, off, message
+    // page (iDisplayType == 0: pageText[0] / TFT header bar hold the sender header, the clock stays
+    // frozen there, F1), a drawn held frame (ping/pong page, hold text, CLK-PING-01), draw in
+    // progress. No 15 s gate any more (F2). Board guards stay here as hasDisplay.
+    DispClkInputs dcIn;
+    dcIn.hasDisplay = true;
     #if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
         if(u8g2 == NULL)
-            return;
+            dcIn.hasDisplay = false;
     #endif
-
     #if defined (HAS_EPAPER) || defined (BOARD_T_DECK)  || defined (BOARD_T_DECK_PLUS) || defined (BOARD_T5_EPAPER)
-        return;
+        dcIn.hasDisplay = false;
     #endif
+    dcIn.displayIsOff = bDisplayIsOff;
+    dcIn.displayType  = iDisplayType;
+    dcIn.pageHold     = pageHold;
+    dcIn.setDisplay   = bSetDisplay;
+    dcIn.second       = meshcom_settings.node_date_second;
+    dcIn.oneButton    = bOneButton;
+    dcIn.displayDirty = bDisplayDirty;
+    dcIn.holdActive   = dispClkHeldFrame(DisplayOffWait, bHeldFrameDrawn);   // CLK-PING-01: drawn held frame, no clock line
 
-    //TEST ONLY printfdeb("Time bDisplayOff:%i iDisplayType:%i bSetDisplay:%i\n", bDisplayOff, iDisplayType, bSetDisplay);
-
-    if(bDisplayIsOff)
-        return;
-
-    if(iDisplayType == 0)
-        return;
-
-    if(bSetDisplay)
+    const DispClkDecision dcDecision = dispClkDecide(dcIn);
+    if(dcDecision != DispClkDecision::Draw)
         return;
 
     bSetDisplay = true;
@@ -2199,8 +2239,10 @@ void sendDisplayTime()
     if(!bGPSON && !bDisplayTrack)
         snprintf(cstatus, sizeof(cstatus),  "%-4.4s%-1.1s ", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
-    // nur alle 15 sekunden
-    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty)
+    // CLK-01 W2 (F2): Uhrzeile jede Sekunde auf Seiten mit Uhrzeile (Info/Position/Track/WX); nur
+    // pageText[0] wird getauscht und der Seitenpuffer neu uebertragen. Die Nachrichtenseite
+    // (iDisplayType 0) kommt nie bis hierher (SkipType0 oben): ihre Kopfzeile bleibt erhalten.
+    // Der Frame-CRC-Skip im OLED-Pfad bleibt.
     {
         bOneButton    = false;
         bDisplayDirty = false;
@@ -2220,7 +2262,10 @@ void sendDisplayTime()
         #elif defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT)
             displayTFT(msg_text);
         #else
-            sendDisplay1306(false, true, 3, dzeile[0], msg_text);
+            if(pageLineAnz > 0)
+                sendDisplay1306(false, true, 3, dzeile[0], (char*)"#N");   // pageText[0] ist aktualisiert: neu zeichnen, keine Zeile anhaengen
+            else
+                sendDisplay1306(false, true, 3, dzeile[0], msg_text);
         #endif
     }
 
@@ -2717,8 +2762,10 @@ void mainStartTimeLoop()
                     if(!bDisplayIsOff && meshcom_settings.node_date_second % 10 == 0)
                         wpRefreshClock();
                     #else
-                    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-                        sendDisplayTime(); // Time only
+                    // CLK-PING-01: immer aufrufen (Button-Seiten-Haltezaehler in sendDisplayTime());
+                    // eine gehaltene, wirklich gezeichnete Vollbild-Seite (bHeldFrameDrawn) sperrt nur die Uhrzeile
+                    // (dispClkDecide: SkipHold), ein konfigurierter Ping nicht.
+                    sendDisplayTime(); // Time only
                     #endif
                 }
 
@@ -3922,6 +3969,7 @@ void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20])
             u8g2->drawStr(5, 60, line4);
         #endif
     } while (u8g2->nextPage());
+    bHeldFrameDrawn = true;   // CLK-PING-01: the clock line keeps off this frame while DisplayOffWait runs
 
     #endif
 }
