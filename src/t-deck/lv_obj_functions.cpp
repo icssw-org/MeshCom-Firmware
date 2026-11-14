@@ -30,6 +30,8 @@
 #include <SPI.h>
 #include "tdeck_sdmap.h"
 #include "tdeck_theme.h"   // TD-THEME-01
+LV_IMG_DECLARE(mc_lock_img);
+LV_IMG_DECLARE(mc_logo_img);
 #include "tdeck_text_cover.h"
 #include "pos_persist.h"
 #include "msg_persist_policy.h"
@@ -260,6 +262,9 @@ static void update_header_sat_indicator(void);
 static void update_header_batt_indicator(float batt, int proz);
 static void update_header_wifi_indicator(void);
 static void update_header_bt_indicator(void);
+static void header_theme_cb(void);
+static lv_obj_t *header_lock_icon = NULL;   // keyboard-lock glyph (mc_lock_img)
+static int8_t save_node_keyboardlock = -1;  // -1 = not yet applied
 // static void update_header_locator_label(void);
 static bool compute_locator_from_settings(char *buffer, size_t len);
 static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
@@ -277,6 +282,7 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble);
 static void msg_tabs_clear_all(void);
 static void msg_render_active_tab(void);
 static void msg_list_show_hint(const char *text);
+static void boot_logo_sync(bool show);
 static void msg_list_append_bubble(const MsgBubble &bubble);
 static void msg_list_trim_view(size_t target = MSG_TAB_MAX_MESSAGES);
 
@@ -350,7 +356,7 @@ static lv_obj_t *get_tab_bar()
 
 // TD-THEME-01: the colours that cannot be shared styles. The three header icons take their colour from a state
 // (menu open, keyboard backlight lock, backlight lock); the setup/table styles are file-local lv_style_t.
-// ONE tdeck_theme_on_change slot (theme_recolor_cb) re-colours both after every theme apply.
+// theme_recolor_cb (one of this file's two tdeck_theme_on_change slots) re-colours both after every theme apply.
 static lv_style_t *s_th_ta = NULL, *s_th_tr = NULL, *s_th_input = NULL, *s_th_cursor = NULL;
 static lv_style_t *s_th_cell = NULL, *s_th_cell1 = NULL, *s_th_cell2 = NULL, *s_th_bg = NULL;
 
@@ -402,7 +408,7 @@ static void theme_fill_static_styles(void)
         }
 }
 
-// The single tdeck_theme_on_change slot of this file.
+// First tdeck_theme_on_change slot of this file (the second, header_theme_cb, re-colours the header indicators).
 static void theme_recolor_cb(void)
 {
     tab_icons_recolor();
@@ -571,6 +577,32 @@ String getCountryDropbox();
 /**
  * SET view new line
  */
+static lv_obj_t *setup_brightness_slider = NULL;
+static lv_obj_t *setup_theme_dropdown = NULL;
+
+static void setup_brightness_slider_cb(lv_event_t *e)
+{
+    // no commandAction: each call would write flash; brightnessSetActiveLevel debounces the save
+    brightnessSetActiveLevel((uint8_t)lv_slider_get_value(lv_event_get_target(e)));
+}
+
+// SYM+B (cycleBrightness) -> move the slider
+static void setup_brightness_changed_cb(uint8_t level)
+{
+    if(setup_brightness_slider != NULL)
+        lv_slider_set_value(setup_brightness_slider, level, LV_ANIM_OFF);
+}
+
+static void setup_theme_dropdown_cb(lv_event_t *e)
+{
+    const uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if(sel > THEME_LIGHT || meshcom_settings.node_tdeck_theme == sel)
+        return;
+    meshcom_settings.node_tdeck_theme = (uint8_t)sel;
+    save_settings();
+    tdeck_theme_reapply();
+}
+
 lv_obj_t * SET_new_line(lv_obj_t * parent, lv_obj_t * last_line, lv_coord_t distance)
 {
     lv_obj_t * new_line = lv_obj_create(parent);
@@ -693,6 +725,14 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_text_font(tab_standby_icon_label, &mc_font_latin_18, LV_PART_MAIN);
     lv_obj_center(tab_standby_icon_label);
     tab_icons_recolor();   // initial state colours of the three header icons
+
+    // keyboard-lock glyph: header content starts at x=4 (pad), the three 32 px buttons end at x=100; glyph at x=106 (14x16)
+    header_lock_icon = lv_img_create(tab_menu_header);
+    lv_img_set_src(header_lock_icon, &mc_lock_img);
+    lv_obj_align_to(header_lock_icon, tab_standby_button, LV_ALIGN_OUT_RIGHT_MID, 6, 0);
+    lv_obj_add_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+    save_node_keyboardlock = -1;
+    tdeck_update_header_standby();   // applies colour and visibility
 
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
@@ -838,6 +878,7 @@ void setDisplayLayout(lv_obj_t *parent)
     s_th_cursor = &ta_input_cursor;  s_th_cell = &cell_style;  s_th_cell1 = &cell_style1;  s_th_cell2 = &cell_style2;
     theme_fill_static_styles();
     tdeck_theme_on_change(theme_recolor_cb);
+    tdeck_theme_on_change(header_theme_cb);
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -1433,8 +1474,41 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_label_set_text(btn_blauto_label, "Auto Day/Night");
     lv_obj_center(btn_blauto_label);
 
+    // Brightness slider (TD-THEME-01): active level 1..BRIGHTNESS_STEPS, same level SYM+B cycles
+    lv_obj_t * setup_line_brightness = SET_new_line(t1, setup_line_backlight, 5);
+
+    lv_obj_t * setup_br_label = lv_label_create(setup_line_brightness);
+    lv_obj_align(setup_br_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_br_label, 75);
+    lv_label_set_text(setup_br_label, "Bright ");
+    lv_obj_set_style_text_align(setup_br_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_brightness_slider = lv_slider_create(setup_line_brightness);
+    lv_slider_set_range(setup_brightness_slider, 1, BRIGHTNESS_STEPS);
+    lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
+    lv_obj_set_width(setup_brightness_slider, 200);
+    lv_obj_align(setup_brightness_slider, LV_ALIGN_LEFT_MID, 90, 0);
+    lv_obj_add_event_cb(setup_brightness_slider, setup_brightness_slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    brightnessSetChangeCallback(setup_brightness_changed_cb);
+
+    // Theme (TD-THEME-01): Auto / Dark / Light
+    lv_obj_t * setup_line_theme = SET_new_line(t1, setup_line_brightness, 5);
+
+    lv_obj_t * setup_th_label = lv_label_create(setup_line_theme);
+    lv_obj_align(setup_th_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_th_label, 75);
+    lv_label_set_text(setup_th_label, "Theme ");
+    lv_obj_set_style_text_align(setup_th_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_theme_dropdown = lv_dropdown_create(setup_line_theme);
+    lv_dropdown_set_options(setup_theme_dropdown, "Auto\nDark\nLight");
+    lv_dropdown_set_selected(setup_theme_dropdown, (uint16_t)(meshcom_settings.node_tdeck_theme <= THEME_LIGHT ? meshcom_settings.node_tdeck_theme : 0));
+    lv_obj_align(setup_theme_dropdown, LV_ALIGN_LEFT_MID, 77, 0);
+    lv_obj_set_size(setup_theme_dropdown, 140, 35);
+    lv_obj_add_event_cb(setup_theme_dropdown, setup_theme_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
     // StartupTone
-    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_backlight, 5);
+    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_theme, 5);
 
     // StartupTone
     lv_obj_t * setup_stone_label = lv_label_create(setup_line_starttone);
@@ -2387,7 +2461,7 @@ static void update_header_sat_indicator(void)
     if(!bGPSON)
     {
         label_set_if_changed(header_sat_label, "0");
-        text_color_set_if_changed(header_sat_icon, lv_color_white());
+        text_color_set_if_changed(header_sat_icon, lv_color_hex(tdeck_theme_pal().hdr_off));
         lv_obj_add_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
         return;
@@ -2398,8 +2472,8 @@ static void update_header_sat_indicator(void)
     label_set_if_changed(header_sat_label, sat_text);
 
     // Show green when we have a fix OR at least some satellites visible, red when GPS on but no sats/fix
-    lv_color_t icon_color = (posinfo_fix || posinfo_satcount > 0) ? lv_palette_main(LV_PALETTE_GREEN)
-                                                                         : lv_palette_main(LV_PALETTE_RED);
+    const TdeckPalette &pal = tdeck_theme_pal();
+    lv_color_t icon_color = lv_color_hex((posinfo_fix || posinfo_satcount > 0) ? pal.hdr_on : pal.hdr_err);
     text_color_set_if_changed(header_sat_icon, icon_color);
     lv_obj_clear_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
@@ -2422,7 +2496,7 @@ static void update_header_batt_indicator(float batt, int proz)
     {
         label_set_if_changed(header_batt_label, "USB");
         label_set_if_changed(header_batt_icon, LV_SYMBOL_USB);
-        text_color_set_if_changed(header_batt_icon, lv_palette_main(LV_PALETTE_ORANGE));
+        text_color_set_if_changed(header_batt_icon, lv_color_hex(tdeck_theme_pal().hdr_on));
         return;
     }
 
@@ -2432,7 +2506,7 @@ static void update_header_batt_indicator(float batt, int proz)
     label_set_if_changed(header_batt_label, percent_text);
 
     const char *icon = LV_SYMBOL_BATTERY_EMPTY;
-    lv_color_t icon_color = lv_palette_main(LV_PALETTE_LIGHT_GREEN);
+    lv_color_t icon_color = lv_color_hex(tdeck_theme_pal().hdr_on);
 
     if(clamped_proz >= 80)
     {
@@ -2449,6 +2523,10 @@ static void update_header_batt_indicator(float batt, int proz)
     else if(clamped_proz >= 20)
     {
         icon = LV_SYMBOL_BATTERY_1;
+    }
+    else
+    {
+        icon_color = lv_color_hex(tdeck_theme_pal().warn);   // low battery
     }
 
     label_set_if_changed(header_batt_icon, icon);
@@ -2568,38 +2646,56 @@ void tdeck_update_header_bt(void)
 bool save_node_backlightlock=false;
 bool save_node_kbllightlock=false;
 
+// Keyboard-lock glyph (mc_lock_img) in the header, right of the three icon buttons; -1 = not yet applied.
+
+static void header_lock_apply(bool locked)
+{
+    if(header_lock_icon == NULL)
+        return;
+    lv_obj_set_style_img_recolor(header_lock_icon, lv_color_hex(tdeck_theme_pal().hdr_on), LV_PART_MAIN);
+    lv_obj_set_style_img_recolor_opa(header_lock_icon, LV_OPA_COVER, LV_PART_MAIN);
+    if(locked)
+        lv_obj_clear_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+}
+
+// TD-THEME-01: the header indicators compare against the cached state; after a theme change force the
+// next standby update to re-apply and recolour the token-coloured indicators right away.
+static void header_theme_cb(void)
+{
+    save_node_keyboardlock = -1;
+    header_lock_apply(meshcom_settings.node_keyboardlock);
+    save_node_keyboardlock = meshcom_settings.node_keyboardlock ? 1 : 0;
+    update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
+    update_header_sat_indicator();
+    update_header_wifi_indicator();
+    update_header_bt_indicator();
+}
+
 void tdeck_update_header_standby(void)
 {
     meshcom_settings.node_backlightlock = meshcom_settings.node_modus & 0x02;
 
     if(meshcom_settings.node_backlightlock != save_node_backlightlock)
     {
-        if (meshcom_settings.node_backlightlock)
-        {
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
-        }
-        else
-        {
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-        }
-
         save_node_backlightlock = meshcom_settings.node_backlightlock;
+        tab_icons_recolor();
     }
 
     meshcom_settings.node_kbllightlock = meshcom_settings.node_modus & 0x01;
 
     if(meshcom_settings.node_kbllightlock != save_node_kbllightlock)
     {
-        if (meshcom_settings.node_kbllightlock)
-        {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
-        }
-        else
-        {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
-        }
-
         save_node_kbllightlock = meshcom_settings.node_kbllightlock;
+        tab_icons_recolor();
+    }
+
+    const int8_t kbl = meshcom_settings.node_keyboardlock ? 1 : 0;
+    if(kbl != save_node_keyboardlock)
+    {
+        save_node_keyboardlock = kbl;
+        header_lock_apply(kbl != 0);
     }
 }
 
@@ -2820,6 +2916,7 @@ static void msg_tabs_select_index(int index)
     if(msg_tab_entries.empty())
     {
         msg_active_tab_index = -1;
+        boot_logo_sync(false);   // no "booting..." tab left: logo off, list geometry back
         msg_list_show_hint("No messages yet");
         return;
     }
@@ -3258,10 +3355,44 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
     msg_tabs_heap_trim();
 }
 
+// Boot logo above the version lines: only on the "booting..." tab. msg_list moves down by the logo
+// height and shrinks by it, so the logo never covers a bubble; any other tab restores the geometry.
+static lv_obj_t *s_boot_logo = NULL;
+
+static void boot_logo_sync(bool show)
+{
+    if(msg_list == NULL)
+        return;
+    const lv_coord_t full_h = LV_VER_RES * 0.6;
+    const lv_coord_t logo_h = 64;
+    if(show)
+    {
+        if(s_boot_logo == NULL)
+        {
+            s_boot_logo = lv_img_create(lv_obj_get_parent(msg_list));
+            lv_img_set_src(s_boot_logo, &mc_logo_img);
+            lv_obj_clear_flag(s_boot_logo, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_align(s_boot_logo, LV_ALIGN_TOP_MID, 0, 0);
+        }
+        lv_obj_clear_flag(s_boot_logo, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_height(msg_list, full_h - logo_h);
+        lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, logo_h);
+    }
+    else if(s_boot_logo != NULL && !lv_obj_has_flag(s_boot_logo, LV_OBJ_FLAG_HIDDEN))
+    {
+        lv_obj_add_flag(s_boot_logo, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_height(msg_list, full_h);
+        lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, 0);
+    }
+}
+
 static void msg_render_active_tab(void)
 {
     if(msg_list == NULL)
         return;
+
+    boot_logo_sync(msg_active_tab_index >= 0 && msg_active_tab_index < (int)msg_tab_entries.size() &&
+                   msg_tab_entries[msg_active_tab_index].group == "booting...");
 
     if(msg_active_tab_index < 0 || msg_active_tab_index >= (int)msg_tab_entries.size())
     {
@@ -3694,6 +3825,7 @@ static void msg_tabs_clear_all(void)
     msg_tab_entries.clear();
     msg_active_tab_index = -1;
     msg_tabs_update_hint();
+    boot_logo_sync(false);   // no "booting..." tab left: logo off, list geometry back
     msg_list_show_hint("No messages yet");
 }
 
@@ -4420,6 +4552,11 @@ void tdeck_refresh_SET_view()
 
     snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_power);
     lv_textarea_set_text(setup_txpower, vChar);
+
+    if(setup_brightness_slider != NULL)
+        lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
+    if(setup_theme_dropdown != NULL)
+        lv_dropdown_set_selected(setup_theme_dropdown, (uint16_t)(meshcom_settings.node_tdeck_theme <= THEME_LIGHT ? meshcom_settings.node_tdeck_theme : 0));
 
     lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start);
     lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg);
