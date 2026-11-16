@@ -3688,6 +3688,23 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     dir_to = d_dir_to;
     dist_to = gps.distanceBetween(lat, lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c))/1000.0;
 
+    #if defined(BOARD_HELTEC_T114)
+    (void)dist_to;   // the T114 shows cdist below instead of the whole-km value
+    // T114: meters below 1 km, one decimal below 10 km, "--" while the own position is unknown
+    char cdist[8];
+    {
+        double dist_m = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon);
+        if(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0)
+            snprintf(cdist, sizeof(cdist), "--");
+        else if(dist_m < 1000.0)
+            snprintf(cdist, sizeof(cdist), "%dm", (int)(dist_m + 0.5));
+        else if(dist_m < 10000.0)
+            snprintf(cdist, sizeof(cdist), "%.1fkm", dist_m / 1000.0);
+        else
+            snprintf(cdist, sizeof(cdist), "%dkm", (int)(dist_m / 1000.0 + 0.5));
+    }
+    #endif
+
     sendDisplayMainline();
 
     #ifdef HAS_EPAPER
@@ -3724,6 +3741,8 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             #if defined(BOARD_T_ECHO)
             snprintf(msg_text, sizeof(msg_text), "LAT: %s%c", scan_text, aprsmsg.msg_payload[itxt]);
+            #elif defined(BOARD_HELTEC_T114)
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%6s", scan_text, aprsmsg.msg_payload[itxt], cdist);
             #else
             snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", scan_text, aprsmsg.msg_payload[itxt], dist_to);
             #endif
@@ -3871,6 +3890,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                         msg_text[20]=0x00;
                         sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
                         izeile++;
+                    #elif defined(BOARD_HELTEC_T114)
+                        if(bat > 0)
+                            snprintf(msg_text, sizeof(msg_text), "ALT :%4im B%3i%%", alt, bat);
+                        else
+                            snprintf(msg_text, sizeof(msg_text), "ALT :%4im", alt);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+                        izeile++;
                     #else
                         snprintf(msg_text, sizeof(msg_text), "ALT :%4im", alt);
                         msg_text[20]=0x00;
@@ -3895,7 +3922,21 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     
     #if defined(BOARD_T3S3_V13)
     // done above
-    #elif defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)  or defined(BOARD_T_CONNECT_PRO)
+    #elif defined(BOARD_HELTEC_T114)
+    // last line: weather values of the sender, only those it sent (a sender without a
+    // weather sensor sends no /T= /H= /P=; 0 is taken as "not sent")
+    memset(msg_text, 0x00, sizeof(msg_text));
+    if(aprspos.temp != 0.0f || aprspos.hum > 0.0f || aprspos.press > 0.0f)
+    {
+        int nwx = snprintf(msg_text, sizeof(msg_text), "T%.1f", (double)aprspos.temp);
+        if(aprspos.hum > 0.0f && nwx > 0 && nwx < 20)
+            nwx += snprintf(msg_text + nwx, sizeof(msg_text) - nwx, " H%.0f%%", (double)aprspos.hum);
+        if(aprspos.press > 0.0f && nwx > 0 && nwx < 20)
+            nwx += snprintf(msg_text + nwx, sizeof(msg_text) - nwx, " P%.0f", (double)aprspos.press);
+        msg_text[20]=0x00;
+    }
+    sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    #elif defined(BOARD_TRACKER) or defined(BOARD_T_CONNECT_PRO)
     memset(msg_text, 0x00, sizeof(msg_text));
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
     #else
