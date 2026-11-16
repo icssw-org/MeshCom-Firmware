@@ -20,6 +20,7 @@
 
 #if defined(BOARD_HELTEC_T114)
 #include "t114_gps_page.h"
+#include "t114_pos_list.h"
 #endif
 
 #if defined(BOARD_T_ECHO)
@@ -67,6 +68,12 @@ void singleClick()
           t114GpsPageRedraw();   // the click only wakes the display
           return;
       }
+
+      if(t114PosPageActive())
+      {
+          t114PosPageRedraw();   // the click only wakes the display
+          return;
+      }
   }
   #endif
 
@@ -103,11 +110,32 @@ void singleClick()
       // Page order: stored messages -> status page -> GPS page -> status page (home) ...
       static unsigned long t114StatusAt = 0;   // millis() when the status page was shown by a click
 
+      if(t114PosPageActive())
+      {
+        // click on the position list: next sender; after the last one leave it, back to the status page
+        if(t114PosPageNext())
+          return;
+
+        t114PosPageClose();
+        t114StatusAt = 0;
+        pageHold = 0;
+        pagePointer = pageLastPointer - 1;
+        if(pagePointer < 0)
+          pagePointer = PAGE_MAX - 1;
+        sendDisplayHead(true);
+        return;
+      }
+
       if(t114GpsPageActive())
       {
-        // click on the GPS page: leave it, back to the status page; the next click starts again
+        // click on the GPS page: the heard positions if there are any, else back to the status page
         t114GpsPageClose();
         t114StatusAt = 0;
+        if(t114PosListCount() > 0)
+        {
+          t114PosPageOpen();
+          return;
+        }
         pageHold = 0;
         pagePointer = pageLastPointer - 1;
         if(pagePointer < 0)
@@ -303,6 +331,7 @@ void tripleClick()
   #if defined(BOARD_HELTEC_T114)
   digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON: sendDisplayHead() below can return early and leave the panel dark
   t114GpsPageClose();                    // the track page replaces the GPS page
+  t114PosPageClose();
   pageHold = 0;
   #endif
 
