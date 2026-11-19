@@ -114,6 +114,25 @@ void webAuthReset()
     g_blockStart = 0;
 }
 
+WebPwdResult webAuthSetPassword(char *dst, size_t dstSize, const char *pw)
+{
+    if (dst == nullptr || dstSize < (size_t)WEB_PWD_MAX + 1)
+        return WP_TOO_LONG;
+    if (pw == nullptr)
+        dst[0] = '\0';
+    else
+    {
+        const size_t n = strlen(pw);
+        const WebPwdResult r = webAuthPasswordProblemN(pw, n);
+        if (r != WP_OK)
+            return r;
+        memcpy(dst, pw, n);
+        dst[n] = '\0';
+    }
+    webAuthReset(); // WEB-PWD-01: every session and nonce goes, the browser must log in again
+    return WP_OK;
+}
+
 bool webAuthIssueNonce(uint32_t now_ms, WebAuthRng rng, char out_hex[33])
 {
     if (throttled(now_ms))

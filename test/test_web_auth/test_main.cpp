@@ -395,6 +395,58 @@ void test_rng_failure_issues_nothing(void)
     TEST_ASSERT_FALSE(valid("00000000000000000000000000000000", 4));
 }
 
+// WEB-PWD-01: set / change / clear the web login password from the GUI
+static void test_webpwd_set_change_clear(void)
+{
+    webAuthReset();
+    char dst[20] = {0};
+    TEST_ASSERT_EQUAL(WP_OK, webAuthSetPassword(dst, sizeof dst, "abc123"));
+    TEST_ASSERT_EQUAL_STRING("abc123", dst);
+    TEST_ASSERT_EQUAL(WP_OK, webAuthSetPassword(dst, sizeof dst, "new pw!"));
+    TEST_ASSERT_EQUAL_STRING("new pw!", dst);
+    TEST_ASSERT_EQUAL(WP_OK, webAuthSetPassword(dst, sizeof dst, "1234567890123456789")); // 19 = max
+    TEST_ASSERT_EQUAL(19, (int)strlen(dst));
+    TEST_ASSERT_EQUAL(WP_OK, webAuthSetPassword(dst, sizeof dst, nullptr));
+    TEST_ASSERT_EQUAL_STRING("", dst);
+}
+
+static void test_webpwd_rejects_leave_dst_untouched(void)
+{
+    char dst[20] = "keep";
+    TEST_ASSERT_EQUAL(WP_EMPTY, webAuthSetPassword(dst, sizeof dst, ""));
+    TEST_ASSERT_EQUAL(WP_TOO_LONG, webAuthSetPassword(dst, sizeof dst, "12345678901234567890")); // 20
+    TEST_ASSERT_EQUAL(WP_BAD_CHAR, webAuthSetPassword(dst, sizeof dst, "ab\x01" "cd"));
+    TEST_ASSERT_EQUAL(WP_BAD_CHAR, webAuthSetPassword(dst, sizeof dst, "ab\x7f"));
+    TEST_ASSERT_EQUAL(WP_BAD_CHAR, webAuthSetPassword(dst, sizeof dst, "k\xc3\xa4se"));
+    TEST_ASSERT_EQUAL(WP_SPACE, webAuthSetPassword(dst, sizeof dst, " lead"));
+    TEST_ASSERT_EQUAL(WP_SPACE, webAuthSetPassword(dst, sizeof dst, "trail "));
+    TEST_ASSERT_EQUAL(WP_RESERVED, webAuthSetPassword(dst, sizeof dst, "none"));
+    TEST_ASSERT_EQUAL_STRING("keep", dst);
+}
+
+static void test_webpwd_invalidates_sessions(void)
+{
+    webAuthReset();
+    char dst[20] = {0};
+    char tok[33];
+    TEST_ASSERT_EQUAL(WP_OK, webAuthSetPassword(dst, sizeof dst, "first"));
+    TEST_ASSERT_EQUAL(WA_OK, loginWith(nonceAt(1000), dst, "first", 1000, tok));
+    std::string s1 = tok;
+    TEST_ASSERT_TRUE(valid(s1.c_str(), 2000));
+    // change: the old session is gone, the new password logs in
+    TEST_ASSERT_EQUAL(WP_OK, webAuthSetPassword(dst, sizeof dst, "second"));
+    TEST_ASSERT_FALSE(valid(s1.c_str(), 3000));
+    TEST_ASSERT_EQUAL(WA_BADPW, loginWith(nonceAt(3500), dst, "first", 3500, tok));
+    TEST_ASSERT_EQUAL(WA_OK, loginWith(nonceAt(4000), dst, "second", 4000, tok));
+    std::string s2 = tok;
+    // a rejected change does not drop sessions
+    TEST_ASSERT_EQUAL(WP_BAD_CHAR, webAuthSetPassword(dst, sizeof dst, "\x01"));
+    TEST_ASSERT_TRUE(valid(s2.c_str(), 6000));
+    // clear: the session is gone as well
+    TEST_ASSERT_EQUAL(WP_OK, webAuthSetPassword(dst, sizeof dst, nullptr));
+    TEST_ASSERT_FALSE(valid(s2.c_str(), 7000));
+}
+
 int main(int, char **)
 {
     UNITY_BEGIN();
@@ -421,6 +473,9 @@ int main(int, char **)
     RUN_TEST(test_throttle_ignores_format_errors);
     RUN_TEST(test_empty_password_never_authenticates);
     RUN_TEST(test_err_codes);
+    RUN_TEST(test_webpwd_set_change_clear);
+    RUN_TEST(test_webpwd_rejects_leave_dst_untouched);
+    RUN_TEST(test_webpwd_invalidates_sessions);
     RUN_TEST(test_mac_last_char_matters);
     RUN_TEST(test_nonce_last_char_matters);
     RUN_TEST(test_token_last_char_matters);

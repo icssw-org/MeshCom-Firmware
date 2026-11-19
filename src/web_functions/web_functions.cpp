@@ -9,7 +9,12 @@
 
 #include <configuration.h>
 #include <debugconf.h>
+#include "pin_status_json.h" // GET /pinstatus: pure JSON formatter (test/test_pin_status)
+#include "pin_assign_json.h" // GET /pinassign: pure JSON formatter (test/test_pin_status)
+#include "gpio_status_json.h" // GET /gpiostatus: pure JSON formatter (test/test_pin_status)
+#include "gpio_control.h"      // GPIO-01 Part B: state of the free-GPIO control (glue calls ESP32 only)
 #include "web_functions.h"
+#include "web_txbuf.h"     // WEB-TX-01: webTxBeginChunked in send_http_header
 #include "esp32/netif_mtu.h" // NMTU-01 (lwIP part ESP32 only)
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
@@ -35,9 +40,20 @@
 #include <prod_lock.h>      // prodLockNormalise(): an imported file may hold values the setters now refuse
 #include <blocked_calls.h> // BLK-01: info row + setup card
 #include <instrument.h>     // INSTRUMENT_ENABLED
+#if INSTRUMENT_ENABLED && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS))
+#include <t-deck/tdeck_debug.h> // sub_screen_rgb565()
+#endif
 #include "web_server_gate.h" // WEB-STOP-01: stopWebserver() acts on a running server only
 #include "watchdog_feed.h"  // meshcom_wdt_feed(): neighbour matrix rows run in the WDT-guarded loop task
 #include "board_led.h"         // LED-08: ledFitted() for the setup controls and info rows
+#include "pin_board.h"         // GPIO-01: pin policy with the board context (GET /pinassign)
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include "t-deck/tdeck_palette.h" // TD-THEME-01 W3: tdeck_theme_parse/name (header only)
+#include "command_functions.h"   // commandAction() for setparam tdecktheme
+#include "t-deck/tdeck_helpers.h" // WEB-TD-01: brightnessMode/ActiveLevel/SetActiveLevel for the display controls
+#include "daylight.h"            // WEB-TD-01: brightness_mode_* (BlMode names and segments)
+#include <t-deck/lv_obj_functions.h> // WEB-TD-01: tdeck_refresh_SET_view() after setparam tdblbright
+#endif
 #include "charge_led_mode.h"   // LED-02: chargeLedModeName() for the info row
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 #include "esp32/esp32_pmu.h"    // LED-02: effective charge-LED mode (RM override)
@@ -48,8 +64,9 @@
 #include "web_rm_page.h"       // RM GUI W2b: sub_page_remote(), rmScaffoldJs()
 #include "web_rm_handlers.h"   // RM GUI W2a: /rmpasswd, /rmnodes, /rmheard, rmSendBySlot()
 #include "web_rm_parse.h"      // RM GUI W2a: rmParseSendBody()
-// RM GUI W1c: set per request by the guard in work_webpage(); send_http_header() and sub_config_download()
-// drop the CORS headers when it is false (state-changing paths, /config, /rmstatus).
+#include "web_assets.h"        // gzip blobs of the GUI's CSS/JS (tools/gen_web_assets.py); include here only
+// RM GUI W1c: set per request by the guard in work_webpage(). No CORS headers are emitted any more
+// (the GUI is same-origin and there is no documented cross-origin consumer); kept for the guard plumbing.
 static bool web_cors_ok = true;
 #if defined(ESP32)
 #include "esp32/fw_update_net.h" // AU-09 (#1187): FwNetStatus/fwNetGetStatus for the info row and the update banner
@@ -74,6 +91,7 @@ static void sub_au_status(); // GET /austatus (defined next to call_function)
 #endif
 #include <url_decode.h>         // #1173: decodeURLPercentCoding() -- full percent-decoding of WebUI parameters
 #include <charset_filter.h>     // #1173: UTF-8-safe cut of the 150-byte web message
+#include "cet_age.h"           // WEB-TD-01: cetEpochFromFields() for the ticking page time
 #include "clock.h"              // TZ-01: tzActiveAbbrev() -- flags an unparsable node_tz on the info page
 #if defined(ENABLE_MSGSTORE)
 #include <msgstore_api.h> // stage 3 store node: /?page=mailbox, mboxpurge/mboxdeliver, the setup card
@@ -106,6 +124,100 @@ void web_client_html(CommonWebClient web_client);
 // die anderen sub_page_*()-Deklarationen -- das ist ein Punkt fuer den
 // naechsten, der web_functions.h anfassen darf.
 void sub_page_neighbours();
+
+// Pins page + GET /pinstatus: local declarations, as above (web_functions.h is outside this change)
+void sub_page_pins();
+// noinline: an inlined copy puts the JSON buffer in work_webpage's frame, i.e. on every web request
+static void __attribute__((noinline)) sub_pin_status();
+static void __attribute__((noinline)) sub_pin_assign();
+static void __attribute__((noinline)) sub_gpio_status();
+
+// GPIO-01 Part B: the pins the board lists as free (PIN_FREE when no function claims anything), at most `max`. A pin that an
+// enabled function or the board LED claims right now gets that owner (pinFuncName() / "led") and no switch; the others come with
+// the gpio control state. ESP32 only: nRF52 has no gpio control, the count is 0 and the code compiles away.
+static size_t gpioStatusCollect(GpioStatusPin *out, size_t max)
+{
+#if defined(ESP32)
+    PinContext base = pinBoardContext(PIN_FN_COUNT);
+    const uint64_t claimedAll = pinBoardClaimed(PIN_FN_COUNT);
+    base.claimed = 0;
+    GpioPinRow rows[GPIO_STATUS_MAX_PINS];
+    const size_t nr = out ? gpioCtlSnapshot(rows, GPIO_STATUS_MAX_PINS) : 0;
+    size_t n = 0;
+    for (int p = 0; p <= pinChipMax(base.chip) && p < 64; p++)
+    {
+        if (pinClassify(base, p) != PIN_FREE) continue;
+        if (!out) return 1; // only asked whether there is any
+        if (n >= max) break;
+        GpioStatusPin &o = out[n++];
+        o.pin = p;
+        o.own = "";
+        o.dir = 0;
+        o.level = -1;
+        if (claimedAll & pinBit(p))
+        {
+            o.own = "fn"; // two functions on one pin
+            for (int f = 0; f < (int)PIN_FN_COUNT; f++)
+                if (!(pinBoardClaimed((PinFunc)f) & pinBit(p)))
+                {
+                    o.own = pinFuncName((PinFunc)f);
+                    break;
+                }
+#if defined(BOARD_LED)
+            if (p == (int)(BOARD_LED + 0) && o.own[0] == 'f') o.own = "led";
+#endif
+            continue;
+        }
+        for (size_t i = 0; i < nr; i++)
+            if (rows[i].pin == p)
+            {
+                o.dir = (int)rows[i].dir;
+                o.level = (int)rows[i].level;
+            }
+    }
+    return n;
+#else
+    (void)out;
+    (void)max;
+    return 0;
+#endif
+}
+
+// GPIO-01 W2: may the Pins page change this assignment on this build? The same guards as the wsParams rows of
+// web_setup.cpp (writable rows only). Used by GET /pinassign and by the nav button, so the page is reachable
+// whenever it has something to offer.
+static bool pinAssignAvail(PinFunc f)
+{
+    switch (f)
+    {
+    case PIN_FN_ONEWIRE:
+#if defined(OneWire_GPIO)
+        return true;
+#else
+        return false;
+#endif
+    case PIN_FN_BUTTON:
+#if !defined(BOARD_T_DECK_PRO)
+        return true;
+#else
+        return false;
+#endif
+    case PIN_FN_ANALOG:
+#if defined(ANALOG_PIN)
+        return true;
+#else
+        return false;
+#endif
+    case PIN_FN_WIND:
+#if defined(ENABLE_WIND) && defined(ESP32)
+        return true;
+#else
+        return false;
+#endif
+    default:
+        return false;
+    }
+}
 
 
 String web_header;
@@ -760,8 +872,6 @@ static void sub_config_download(void)
     web_client.println("Content-type:application/json");
     web_client.printf("Content-Disposition: attachment; filename=\"meshcom-%s.json\"\n", fname);
     web_client.printf("Content-Length: %u\n", (unsigned int)n);
-    if (web_cors_ok)
-        web_client.println("Access-Control-Allow-Origin: *");
     web_client.println("Connection: close");
     web_client.println("Cache-Control: no-cache, no-store, must-revalidate");
     web_client.println("Pragma: no-cache");
@@ -849,6 +959,57 @@ static void sub_config_upload(long content_length)
     #if defined NRF52_SERIES
         NVIC_SystemReset();     // resets the device
     #endif
+}
+
+/**
+ * ###########################################################################################################################
+ * Serves one of the static GUI assets (web_assets.h): gzip blob, own header (send_http_header() says no-cache and
+ * text/html). Needs no login: the login page is the scaffold and loads them too. The URL carries the content tag
+ * (?v=), so the browser may keep the file. The body goes out through write(): print()/printf() would stop at a 0 byte
+ * or, on the nRF, over-read the printf buffer. Returns false when the request line names no asset.
+ */
+static bool deliver_web_asset(const String &req)
+{
+    const uint8_t *blob = NULL;
+    size_t len = 0;
+    const char *type = "application/javascript";
+    if (req.startsWith("GET /mc.css"))
+    {
+        blob = web_mc_css_gz;
+        len = sizeof(web_mc_css_gz);
+        type = "text/css";
+    }
+    else if (req.startsWith("GET /mc.js"))
+    {
+        blob = web_mc_js_gz;
+        len = sizeof(web_mc_js_gz);
+    }
+    else if (req.startsWith("GET /mcrm.js"))
+    {
+        blob = web_mc_rm_js_gz;
+        len = sizeof(web_mc_rm_js_gz);
+    }
+#if defined(ESP32)
+    else if (req.startsWith("GET /mcau.js"))
+    {
+        blob = web_mc_au_js_gz;
+        len = sizeof(web_mc_au_js_gz);
+    }
+#endif
+    else
+        return false;
+
+    web_client.println("HTTP/1.1 200 OK");
+    web_client.print("Content-type:");
+    web_client.println(type);
+    web_client.println("Content-Encoding: gzip");
+    web_client.print("Content-Length: ");
+    web_client.println((unsigned)len);
+    web_client.println("Cache-Control: public, max-age=31536000, immutable");
+    web_client.println("Connection: close");
+    web_client.println();
+    web_client.write(blob, len);
+    return true;
 }
 
 /**
@@ -942,8 +1103,8 @@ void work_webpage(void)
                         if (wa >= 0 && wb > wa)
                             wg_path = web_header.substring(wa + 1, wb);
                     }
-                    // MC_WEB_GUARD=0 (default): only requests the router sends to an RM handler are
-                    // guarded; the rest behaves like upstream (no checks, CORS "*"). Decided on the
+                    // MC_WEB_GUARD=1 (default) guards every path; with 0 only requests the router sends to
+                    // an RM handler are guarded and the rest is unchecked. Decided on the
                     // header, the way the router matches (web_guard.h).
                     const bool wg_on = webGuardRequestApplies(web_header.c_str(), web_header.length(), wg_path.c_str());
                     const WebGuardVerdict wgv = wg_on ? webGuardCheck(web_header.c_str(), web_header.length(), wg_path.c_str()) : WG_OK;
@@ -957,6 +1118,13 @@ void work_webpage(void)
                         web_cors_ok = false;
                         send_http_header(403, RESPONSE_TYPE_JSON);
                         web_client.println("{\"ok\":false,\"err\":\"forbidden\"}");
+                        web_client.stop();
+                        continue;
+                    }
+
+                    // static CSS/JS of the GUI: before the login gate (the login page needs them), after the guard
+                    if (deliver_web_asset(web_header))
+                    {
                         web_client.stop();
                         continue;
                     }
@@ -1084,6 +1252,22 @@ void work_webpage(void)
                         { // RM GUI: set / clear node_passwd, the password is in the BODY
                             sub_rm_passwd(web_content_length);
                         }
+                        else if (web_header.startsWith("POST /rmwebpwd"))
+                        { // WEB-PWD-01: set / clear the web login password, the password is in the BODY
+                            sub_web_passwd(web_content_length);
+                        }
+                        else if (web_header.startsWith("GET /pinstatus"))
+                        { // Pins page: cached state of the board LED, charge LED and MCP23017 pins, read-only, GET only
+                            sub_pin_status();
+                        }
+                        else if (web_header.startsWith("GET /pinassign"))
+                        { // Pins page: the four pin assignments (1-Wire, button, analog, anemometer), read-only, GET only
+                            sub_pin_assign();
+                        }
+                        else if (web_header.startsWith("GET /gpiostatus"))
+                        { // Pins page: the free GPIOs and the gpio control state, read-only, GET only
+                            sub_gpio_status();
+                        }
                         else if (web_header.startsWith("GET /rmnodes"))
                         { // RM GUI: the three saved nodes (slot, used, call), never a key
                             sub_rm_nodes_get();
@@ -1205,6 +1389,11 @@ void work_webpage(void)
                             send_http_header(200, RESPONSE_TYPE_TEXT);
                             sub_page_mcp23017();
                         }
+                        else if (web_header.indexOf("/?page=pins") >= 0)
+                        { // user requested the pins page
+                            send_http_header(200, RESPONSE_TYPE_TEXT);
+                            sub_page_pins();
+                        }
                         else if (web_header.indexOf("/?page=info") >= 0)
                         { // user requested the info page
                             send_http_header(200, RESPONSE_TYPE_TEXT);
@@ -1262,7 +1451,18 @@ void work_webpage(void)
                 }
             }
             else if (c != '\r')
-            {                         // if you got anything else but a carriage return character,
+            {
+                if (web_currentLine.length() >= WEB_HEADER_MAX)
+                {
+                    rm_wipe_string(web_currentLine); // a GET /rmsend line may carry the password
+                    rm_wipe_string(web_header);
+                    web_cors_ok = false;
+                    send_http_header(431, RESPONSE_TYPE_JSON);
+                    web_client.println("{\"ok\":false,\"err\":\"header line too large\"}");
+                    web_client.stop();
+                    break;
+                }
+                // if you got anything else but a carriage return character,
                 web_currentLine += c; // add it to the end of the currentLine
             }
         }
@@ -1301,113 +1501,20 @@ String decodeURLPercentCoding(String input)
 #define AU_LP_INIT ""
 #endif
 
-#if defined(ESP32)
-/**
- * Scaffold JS of the Info page "Auto update" row (campaign-au-webgui-ux): one renderer driven by GET /austatus.
- * Lives in the scaffold because the sub-pages are injected with innerHTML (a <script> inside never runs);
- * loadPage() calls auPageLeave() / auPageInit(). The state selector and the error table mirror
- * au_ui_state.h (auUiState, auErrText); a host harness runs this code against its golden strings.
- */
-static void auScaffoldJs()
-{
-    web_client.println("var auS=null,auF=null,auBusy=false,auLoc='',auShown=false,auInfl=false,auFInfl=false,auFPct=0,auFMsg='',auFDead=false,auUpAt=0,auT={poll:0,tick:0};");
-    web_client.println("function auEl(i){return document.getElementById(i);}");
-    web_client.println("function auKey(){return 'auF:'+location.host;}");
-    web_client.println("function auFGet(){try{var v=sessionStorage.getItem(auKey());return v?JSON.parse(v):null;}catch(e){return null;}}");
-    web_client.println("function auFSet(o){try{if(o)sessionStorage.setItem(auKey(),JSON.stringify(o));else sessionStorage.removeItem(auKey());}catch(e){}}");
-    web_client.println("function auReload(){location.reload();}");
-    web_client.println("function auWord(e){return String(e||'').split(' ')[0];}");
-    web_client.println("function auIn(w,l){return l.indexOf(w)>=0;}");
-    web_client.println("function auErrText(job,err){var w=auWord(err),c=job=='check',d=job=='download'||job=='stagelan';");
-    web_client.println("if(auIn(w,['tls','conn','http','begin','timeout']))return 'No connection to GitHub';");
-    web_client.println("if(c&&auIn(w,['short','stall','toobig','chunk','feed','enc','json','noenv','badver']))return 'The release list could not be read';");
-    web_client.println("if(d&&auIn(w,['short','stall','digest','readback','crc','write','enc','feed','chunk']))return 'Download damaged, it was discarded -- try again';");
-    web_client.println("if(d&&auIn(w,['noasset','nodigest']))return 'This release has no image for this board';");
-    web_client.println("if(d&&auIn(w,['notota0','imglen','size','overlap','small','inflate','layout']))return 'This node'+String.fromCharCode(39)+'s partition layout cannot take the image -- use the Webflasher';");
-    web_client.println("if(d&&auIn(w,['erase','noflash','nvs']))return 'Could not write the image to flash';");
-    web_client.println("if(w=='nomem')return 'Not enough free memory for the update';");
-    web_client.println("return 'Update failed';}");
-    web_client.println("function auLowHeap(e){var w=auWord(e);return w=='lowheap'||w=='lowheap_phone'||w=='lowheap_ble_off'||w=='lowheap_tls';}");
-    web_client.println("function auState(s,f){if(!s.sbok)return 'S';if(f)return 'F';");
-    web_client.println("if(s.st=='busy'){if(s.job=='check')return 'B';return s.pct>=100?'d':'D';}");
-    web_client.println("if(s.staged)return 'E';var w=auWord(s.err);");
-    web_client.println("if(w=='lowheap_phone')return s.phone?'G':'g';");
-    web_client.println("if(w=='lowheap_ble_off'||w=='lowheap'||w=='lowheap_tls')return 'H';");
-    web_client.println("if(s.newer&&s.inst)return 'C';return 'A';}");
-    web_client.println("function auDraw(g,m,e,h,lab,act,dis,red){var t=auEl('au_tr'),b=auEl('au_btn');if(!t||!b)return;");
-    web_client.println("t.className=g?'au-green':'';auEl('au_msg').textContent=m;auEl('au_err').textContent=e;auEl('au_hint').textContent=h;");
-    web_client.println("b.textContent=lab;b.className=red?'au-red':'';b.disabled=!!(dis||auBusy);b.setAttribute('data-act',act);}");
-    web_client.println("function auRender(){var s=auS;if(!s)return;var L=auState(s,0),g=0,m='',lab='Check now',act='check',dis=0,red=0,e='',h='';");
-    web_client.println("if(L=='S'){m=s.sbwhy=='dio'?'! Bootloader (DIO) cannot start the Safeboot: renew bootloader and Safeboot with the Webflasher':'! Use Webflasher to renew Auto Update aware Safeboot';dis=1;}");
-    web_client.println("else if(L=='B'){lab='Checking now ...';dis=1;}");
-    web_client.println("else if(L=='D'){g=1;m='Firmware '+s.avail+' available';lab='Downloading now ... '+s.pct+' %';dis=1;}");
-    web_client.println("else if(L=='d'){g=1;lab='Verifying download ...';dis=1;}");
-    web_client.println("else if(L=='E'){g=1;m='Firmware '+s.staged+' downloaded and verified';lab='Install now';act='apply';red=1;}");
-    web_client.println("else if(L=='G'){m='! A connected phone uses the memory the update needs';lab='Pause Bluetooth and check';act='ble';}");
-    web_client.println("else if(L=='g'){m='The phone has disconnected -- check again';}");
-    web_client.println("else if(L=='H'){m='! Not enough free memory for the update. Reboot the node and try again.';}");
-    web_client.println("else if(L=='C'){g=1;m='Firmware '+s.avail+' available';lab='Install';act='install';}");
-    web_client.println("else{m=s.newer&&!s.inst?'Firmware '+s.avail+' exists, but has no image for this board':(s.avail?'up to date':'available none');}");
-    web_client.println("if((L=='A'||L=='C'||L=='E')&&(auLoc||(s.err&&!auLowHeap(s.err))))e=auLoc||auErrText(s.job,s.err)+' ['+s.err+']';");
-    web_client.println("var r=auEl('au_row');if(s.phone&&(L=='A'||L=='C')&&!e&&r&&r.getAttribute('data-blepause')=='1')h='(i) A connected phone may block the update on this board';");
-    // BLE guard (section 7): the phone link is dropped for the job; the row says so until the guard is released
-    web_client.println("if(s.guard&&L!='S'&&L!='E'){m='Bluetooth paused for the update';e='';h='';dis=1;act='none';if(L!='B'&&L!='D'&&L!='d')lab='Checking now ...';}");
-    web_client.println("auDraw(g,m,e,h,lab,act,dis,red);}");
-    web_client.println("function auSched(){clearTimeout(auT.poll);auT.poll=0;if(!auShown||!auS||auF)return;var L=auState(auS,0),ms=0;");
-    web_client.println("if(auS.st=='busy'||auS.guard)ms=1000;else if(L=='G')ms=10000;");
-    web_client.println("if(ms)auT.poll=setTimeout(auFetch,ms);}");
-    web_client.println("function auFetch(){if(!auShown)return;if(cpage!='info'||!auEl('au_row')){auPageLeave();return;}if(auInfl)return;auInfl=true;");
-    web_client.println("fetch('/austatus').then(function(r){if(r.status==404){var t=auEl('au_tr');if(t)t.style.display='none';return null;}if(!r.ok)throw 0;return r.json();}).then(function(j){auInfl=false;");
-    web_client.println("if(!auShown||!j)return;if(cpage!='info'||!auEl('au_row')){auPageLeave();return;}auApply(j);}).catch(function(){auInfl=false;auBusy=false;auRender();auSched();if(auShown&&!auF&&!auT.poll)auT.poll=setTimeout(auFetch,5000);});}");
-    web_client.println("function auApply(s){auS=s;auUpAt=Date.now();auBusy=false;auRender();auSched();}");
-    web_client.println("function auClick(){if(auBusy||auF||!auS)return;var b=auEl('au_btn'),a=b?b.getAttribute('data-act'):'';if(!a||b.disabled)return;");
-    web_client.println("auBusy=true;b.disabled=true;auLoc='';var fn=a=='apply'?'updapply':(a=='install'?'updinstall':'updcheck'),p=a=='ble'?'ble':'',tag=auS.staged;");
-    web_client.println("fetch('/callfunction/?'+fn+'='+p).then(function(r){return r.json();}).then(function(j){");
-    web_client.println("if(a=='apply'&&j[fn]=='ok'){auFBegin({tag:tag,t0:Date.now(),etaS:auS.etaS||35,upBase:typeof auS.up=='number'?auS.up:undefined,upAt:auUpAt,img:typeof auS.img=='string'?auS.img:undefined});return;}");
-    web_client.println("if(j[fn]!='ok')auLoc=a=='apply'?'Install of '+tag+' failed':'The node did not start the job, try again in a minute';");
-    web_client.println("auInfl=false;auFetch();}).catch(function(){auBusy=false;auLoc='No answer from the node';auRender();});}");
-    web_client.println("function auFBegin(o){auF=o;auFDead=false;auFSet(o);auBusy=false;clearTimeout(auT.poll);clearInterval(auT.tick);auFPct=0;auFMsg='';auFDraw();auT.tick=setInterval(auFTick,1000);}");
-    web_client.println("function auFDraw(){if(!auF)return;var el=(Date.now()-auF.t0)/1000,m=auFMsg||('Installing '+auF.tag+', the node restarts ...');");
-    web_client.println("if(!auFMsg&&el>180+auF.etaS)m='The node is not back yet. Check its display and power; reload this page when it is up.';");
-    web_client.println("auDraw(1,m,'','',auFDead?'Install failed':'Installing now ... '+auFPct+' %','none',1,0);}");
-    web_client.println("function auFTick(){if(!auF)return;if(cpage!='info'||!auEl('au_row')){auPageLeave();return;}");
-    web_client.println("var el=(Date.now()-auF.t0)/1000,p=Math.min(95,Math.floor(el/auF.etaS*100));if(p>auFPct)auFPct=p;auFDraw();");
-    web_client.println("if(el>=Math.max(auF.etaS-10,8)&&Math.floor(el)%2==0)auFProbe();}");
-    web_client.println("function auFProbe(){if(auFInfl)return;auFInfl=true;");
-    // a firmware without the /austatus route answers the Info scaffold (2xx HTML with "cpage=") on /austatus and /ota/state:
-    // the node is demonstrably up, so that counts as back. Safeboot answers /ota/state with JSON; a redirect page has no "cpage=".
-    web_client.println("var auSc=false;");
-    web_client.println("fetch('/austatus').then(function(r){if(!r.ok)throw 0;return r.text();}).then(function(t){var j=null;try{j=JSON.parse(t);}catch(e){}");
-    web_client.println("if(j&&typeof j.run=='string'){auFInfl=false;auFJson(j);return;}auSc=t.indexOf('cpage=')>=0;throw 0;}).catch(function(){");
-    web_client.println("fetch('/ota/state').then(function(r){if(!r.ok)throw 0;return r.text();}).then(function(t){var o=null;try{o=JSON.parse(t);}catch(e){}");
-    web_client.println("auFInfl=false;if(o){auFOta(o);return;}if(auSc&&auF){auFDone();return;}throw 0;}).catch(function(){auFInfl=false;});});}");
-    web_client.println("function auFDone(){auFPct=100;auFDraw();auFSet(null);clearInterval(auT.tick);auF=null;auReload();}");
-    web_client.println("function auFRestarted(j){return typeof j.up=='number'&&typeof auF.upBase=='number'&&j.up+10<auF.upBase+(Date.now()-auF.upAt)/1000;}");
-    // run "local": a Safeboot fallback also restarts the node, so with "img" on both sides only a changed image id is success
-    web_client.println("function auFNewImg(j){if(typeof j.img=='string'&&typeof auF.img=='string')return j.img!=auF.img;return auFRestarted(j);}");
-    web_client.println("function auFJson(j){if(!auF)return;if(j.run==auF.tag||(j.run=='local'&&auFNewImg(j))){auFDone();return;}");
-    web_client.println("auFSet(null);clearInterval(auT.tick);auT.tick=0;auF=null;auFMsg='';");
-    web_client.println("if(j.sbok){auLoc='Install failed, the old firmware is running';}");
-    web_client.println("auApply(j);}");
-    // apply_failed: with fallback_in_ms >= 0 Safeboot counts down to the old firmware; with a negative value or app_valid false it has
-    // no app to fall back to and waits for an upload (dead end, the line stays; probing goes on so the page recovers by itself)
-    web_client.println("function auFOta(o){if(!auF||!o)return;auFMsg='';auFDead=false;if(o.reason=='apply_failed'||o.state=='aborted'){");
-    web_client.println("var fb=typeof o.fallback_in_ms=='number'?o.fallback_in_ms:-1;");
-    web_client.println("if(o.app_valid===false||fb<0){auFDead=true;auFMsg='Install failed -- the node stays in Safeboot. Upload a firmware at http://'+location.host+'/update or use the Webflasher';}");
-    web_client.println("else auFMsg='Install failed -- the node returns to the old firmware in '+Math.max(0,Math.ceil(fb/1000))+' s';}");
-    web_client.println("else if(o.state=='applying'&&o.total>0){var p=Math.min(99,Math.floor(o.received*100/o.total));if(p>auFPct)auFPct=p;}");
-    web_client.println("auFDraw();}");
-    // a remembered click counts only for the tag the node still has staged (or already runs); anything else, or a record past its
-    // time budget while the node answers idle, is dropped and the plain base state is drawn
-    web_client.println("function auFStale(f,j){if(j.run==f.tag)return false;if(j.staged!=f.tag)return true;");
-    web_client.println("return j.st!='busy'&&(Date.now()-f.t0)/1000>180+(f.etaS||35)+60;}");
-    web_client.println("function auFInit(f){fetch('/austatus').then(function(r){if(!r.ok)throw 0;return r.text();}).then(function(t){var j=null;try{j=JSON.parse(t);}catch(e){}");
-    web_client.println("if(!auShown||auF)return;if(j&&typeof j.run=='string'&&auFStale(f,j)){auFSet(null);auApply(j);return;}auFBegin(f);}).catch(function(){if(auShown&&!auF)auFBegin(f);});}");
-    web_client.println("function auPageLeave(){clearTimeout(auT.poll);clearInterval(auT.tick);auT.poll=0;auT.tick=0;auShown=false;auInfl=false;auFInfl=false;auBusy=false;auS=null;auF=null;auLoc='';auFMsg='';auFDead=false;auFPct=0;}");
-    web_client.println("function auPageInit(){auPageLeave();var b=auEl('au_btn');if(!b)return;auShown=true;b.onclick=auClick;");
-    web_client.println("var f=auFGet();if(f&&f.tag&&f.t0){auFInit(f);return;}auFetch();}");
-}
-#endif
+// WEB-LOAD-01: the RAK4631 (W5100S, 4 sockets, some held by the gateway UDP and NTP) refuses part of the parallel
+// asset requests a browser makes for the scaffold head; a refused script left the page without mc.js (no theme
+// switch, no card toggles, no queue chart). Every asset tag calls mcRe(this) on error: the element is replaced by a
+// fresh copy after 250 ms x attempt, at most 8 attempts. mcLate() catches up what ran while the script was missing
+// (the clock tick of DOMContentLoaded, the Auto Update row of the info page; auPageInit() starts with auPageLeave(),
+// so a second call is harmless). The scripts may arrive in any order, so every late load runs both catch-ups.
+// WEBLOAD-JS-BEGIN
+static const char WEB_LOAD_JS[] =
+    "function mcRe(e){var n=(e.mcN||0)+1;if(n>8)return;var c=e.tagName=='LINK',x=document.createElement(c?'link':'script');x.mcN=n;"
+    "x.onerror=function(){mcRe(x);};if(c){x.rel='stylesheet';x.href=e.href;}else{x.src=e.src;x.onload=mcLate;}"
+    "setTimeout(function(){if(e.parentNode)e.parentNode.replaceChild(x,e);else document.head.appendChild(x);},250*n);}"
+    "function mcLate(){if(typeof mcClockTick=='function')mcClockTick();"
+    "if(typeof cpage!='undefined'&&cpage=='info'&&typeof auPageInit=='function')auPageInit();}";
+// WEBLOAD-JS-END
 
 /**
  * ###########################################################################################################################
@@ -1423,389 +1530,30 @@ void deliver_scaffold(bool bget_password)
     web_client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
     web_client.printf("<title>%s - Meshcom</title>\n",  meshcom_settings.node_call);
 
-    // ECMA-Script/Javascript
+    // The static CSS/JS are gzip blobs served as /mc.css, /mc.js, /mcau.js, /mcrm.js (web_assets.h, made by
+    // tools/gen_web_assets.py from src/web_functions/web/). The ?v= tag is their content hash. mc.js comes first:
+    // it wraps fetch() with the X-MC header. Sub-pages are injected with innerHTML, their <script> never runs,
+    // so every script a sub-page needs is loaded here, in the head.
+    web_client.print("<script>");
+    web_client.print(WEB_LOAD_JS);   // WEB-LOAD-01: before the first asset tag
+    web_client.println("</script>");
+    web_client.println("<link rel=\"stylesheet\" href=\"/mc.css?v=" WEB_MC_CSS_TAG "\" onerror=\"mcRe(this)\">");
+    web_client.println("<script src=\"/mc.js?v=" WEB_MC_JS_TAG "\" onerror=\"mcRe(this)\"></script>");
+    // Inline: what depends on the build or on the headers (rmLen, the AU hook in loadPage, the mailbox refresh)
     web_client.println("<script type=\"text/javascript\">\n");
-    // RM GUI: every request of the page carries `X-MC: 1`. The node refuses state-changing requests
-    // (setparam, callfunction, sendmessage, every POST) without it or without a same-host Origin: a foreign
-    // web page cannot set a custom header without a CORS preflight, which the node does not answer.
-    web_client.println("(function(){var f=window.fetch;if(f){window.fetch=function(u,o){o=o||{};var h=new Headers(o.headers||{});h.set('X-MC','1');o.headers=h;return f.call(window,u,o);};}"
-                       "var s=window.XMLHttpRequest&&XMLHttpRequest.prototype.send;if(s){XMLHttpRequest.prototype.send=function(b){try{this.setRequestHeader('X-MC','1');}catch(e){}return s.call(this,b);};}})();");
-    // these variables will hold the last loaded page name and sender in order to force a refresh
-    web_client.println("cpage=\"info\";csender=undefined;\nsetInterval(autorefresh,30000);");
-    // This function will be called in intervalls - can be used to auto-refresh content depending on what page is loaded
-    web_client.println("function autorefresh() {if(cpage=='messages')updateMessages();if(cpage=='wx')loadPage('wx',csender,false);if(cpage=='position')loadPage('position',csender,false);if(cpage=='mheard')loadPage('mheard',csender,false);if(cpage=='path')loadPage('path',csender,false);if(cpage=='rxlog')loadPage('rxlog',csender,false);};");
+    rmScaffoldJs(); // var rmLen=...: mcrm.js reads it while it loads
 #if defined(ENABLE_MSGSTORE)
     web_client.println("function autorefreshMbox(){if(cpage=='mailbox')loadPage('mailbox',csender,false);}setInterval(autorefreshMbox,10000);");
 #endif
-    // WEB-AUTH-01: login(), logout(), mcLoginFocus() -- challenge-response, must stay after the X-MC wrapper above
+    // WEB-AUTH-01: login(), logout(), mcLoginFocus() -- challenge-response, must stay after the X-MC wrapper (mc.js above)
     webLoginScaffoldJs();
     // this function is used to load content depending on the navigation button pressed
-    web_client.println("function loadPage(page,sender,useSpinner) {" AU_LP_LEAVE "if(typeof rmPageLeave=='function')rmPageLeave();cpage=page;csender=sender;if(useSpinner){document.getElementById(\"content_layer\").innerHTML=\"<span class=\\\"loader\\\"></span>\"};var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"content_layer\").innerHTML=this.responseText;if(typeof mcLoginFocus=='function')mcLoginFocus();mcRenderQueue();if(page=='messages' && document.getElementById('messages_panel'))mcRenderHistory();if(page=='remote'&&cpage=='remote')rmPageInit();" AU_LP_INIT "if(page=='setup'&&typeof raSt=='function')raSt();}};xhttp.open(\"GET\",\"?page=\"+page,true);xhttp.send();Array.from(document.querySelectorAll('.nav_button.nbactive ')).forEach((el) => el.classList.remove('nbactive')); sender.classList.add('nbactive');}\n");
-    // this function is used to send a message from the browser via node to the mesh
-    //
-    // BP-09: the input fields used to be cleared unconditionally, right after
-    // xhttp.send() and without ever looking at the answer -- so a message the
-    // node refused (QRT) or dropped (QTA) took the operator's typed text with
-    // it, exactly the loss BP-09 fixes on the T-Deck and T-Deck Pro. The clear
-    // now waits for the response and only fires on "sendmessage ok"; every
-    // other outcome (refused / dropped / invalid / failed) leaves the text in
-    // place so it can be resent after the QRV. updateCharsLeft() is called
-    // from the handler because the onclick chain has long since run its own
-    // call by the time the answer arrives.
-    //
-    // The destination survives the send when it is a group number: the tab
-    // bar puts the selected group into #sendcall, and clearing it after every
-    // send silently turned the next quick message into a broadcast to '*'
-    // (DJ8MEH, 2026-09-11). A DM call sign is still cleared as before.
-    web_client.println("function sendMessage() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200 && this.responseText.indexOf(\"sendmessage ok\")>=0){var sc=document.getElementById(\"sendcall\");if(!/^[0-9]+$/.test(sc.value))sc.value=\"\"; document.getElementById(\"messagetext\").value=\"\"; updateCharsLeft();}};xhttp.open(\"GET\",\"/?sendmessage&tocall=\"+encodeURIComponent(document.getElementById(\"sendcall\").value)+\"&message=\"+encodeURIComponent(document.getElementById(\"messagetext\").value),true);xhttp.send();}\n");
-    // counts what is left of the node's 150-byte message limit (send_message() adds ":" or ":{call}").
-    // #1173: count UTF-8 bytes, not characters -- "ą" costs 2, an emoji 4 -- and cut an over-long
-    // text between characters (for..of walks code points, so no surrogate pair is split).
-    web_client.println("var mcEnc=new TextEncoder();function updateCharsLeft() {let maxlength=149;let call=document.getElementById(\"sendcall\").value;if(call.length>0) {maxlength-=mcEnc.encode(call).length+2;}let t=document.getElementById(\"messagetext\");let msglength=mcEnc.encode(t.value).length;if(msglength>maxlength){let out=\"\";msglength=0;for(const ch of t.value){let b=mcEnc.encode(ch).length;if(msglength+b>maxlength)break;out+=ch;msglength+=b;}t.value=out;}document.getElementById(\"indicator_charsleft\").innerHTML=maxlength-msglength;}\n");
-    // MC-msg-history: BLEtoPhoneBuff/MAX_RING is only 20 slots and is shared
-    // with positions and acks, so a handful of new messages can push an old
-    // message out of the node's own ring within minutes. The browser tab
-    // keeps every message it has seen for the life of the page in
-    // mcHistory/mcSeen (capped at MC_HIST_MAX, oldest dropped first) so
-    // switching Info -> Messages -> Info -> Messages does not lose messages
-    // that scrolled out of the node's ring. This is browser memory only --
-    // node RAM is unchanged, and persisting the history to localStorage is
-    // deferred (not implemented in this round).
-    web_client.println("var mcSeen={};");
-    web_client.println("var mcHistory=[];");
-    web_client.println("var MC_HIST_MAX=200;");
-    // MC-msg-tabs: this and the rest of the mcTab* functions live in the
-    // scaffold rather than sub_page_messages() because sub-pages are
-    // injected via innerHTML and their own <script> tags never run.
-    web_client.println("var mcTabSel='all';");
-    web_client.println("try{var mcTabStored=localStorage.getItem('mcTab');if(mcTabStored!=null)mcTabSel=mcTabStored;}catch(e){}");
-    // MC-msg-badges: unread-state model. mcReadIds is a session-only set of
-    // message ids the operator has definitely seen -- it survives while
-    // mcHistory holds the entry, but not a browser restart. mcWm holds, per
-    // tab key, a unix-time watermark below which everything on that tab
-    // counts as read; it is the only read-state that is persisted
-    // (localStorage 'mcWm'), because persisting the exact id set across days
-    // of ring turnover would grow without bound. A message is unread for a
-    // tab key when it is inbound (an own message-send is never unread), it
-    // matches that key's dst filter, its id has not been marked read this
-    // session, and its ts is strictly greater than that key's watermark --
-    // equal timestamps fall back to the id set, since an unsynced node clock
-    // can hand two independent messages the same second. Viewing "All"
-    // raises every tab's watermark to the newest message seen, because
-    // looking at the merged stream is defined as having read everything in
-    // it, not only the "all" tab itself.
-    web_client.println("var mcReadIds={};");
-    web_client.println("var mcWm={};");
-    web_client.println("try{var mcWmStored=localStorage.getItem('mcWm');if(mcWmStored!=null)mcWm=JSON.parse(mcWmStored);}catch(e){}if(typeof mcWm!=='object' || mcWm===null)mcWm={};");
-    web_client.println("function mcSaveWm(){try{localStorage.setItem('mcWm',JSON.stringify(mcWm));}catch(e){}}");
-    web_client.println("function mcTabMatchKey(key,dst){if(key=='all')return true;if(key=='*')return dst=='*';if(key=='dm')return dst!='*' && !/^[0-9]+$/.test(dst);return dst==key;}");
-    web_client.println("function mcTabMatch(dst){return mcTabMatchKey(mcTabSel,dst);}");
-    web_client.println("function mcUnreadCount(key){var wm=mcWm[key]||0;var n=0;for(var i=0;i<mcHistory.length;i++){var m=mcHistory[i];if(m.rx && mcTabMatchKey(key,m.dst) && !mcReadIds[m.id] && m.ts>wm)n++;}return n;}");
-    // seeds the watermark of any tab key that has never had one (first visit
-    // to this browser, or a group number just added in setup) to the newest
-    // ts already known, so first load never shows a wall of unread badges
-    web_client.println("function mcSeedWm(){var btns=document.querySelectorAll('#mctabs .mctab');if(btns.length==0)return;var maxTs=0;for(var i=0;i<mcHistory.length;i++){if(mcHistory[i].ts>maxTs)maxTs=mcHistory[i].ts;}var changed=false;for(var j=0;j<btns.length;j++){var key=btns[j].getAttribute('data-tab');if(!(key in mcWm)){mcWm[key]=maxTs;changed=true;}}if(changed)mcSaveWm();}");
-    // marks every history entry on the currently selected tab as read; viewing
-    // 'all' counts as having read every tab, so its watermark propagates to
-    // every configured tab key, not only 'all' itself
-    web_client.println("function mcMarkRead(){if(document.visibilityState==='hidden')return;var maxTs=0;var changed=false;for(var i=0;i<mcHistory.length;i++){var m=mcHistory[i];if(mcTabMatchKey(mcTabSel,m.dst)){if(!mcReadIds[m.id]){mcReadIds[m.id]=true;changed=true;}if(m.ts>maxTs)maxTs=m.ts;}}if(maxTs>(mcWm[mcTabSel]||0)){mcWm[mcTabSel]=maxTs;changed=true;}if(mcTabSel=='all'){var btns=document.querySelectorAll('#mctabs .mctab');for(var j=0;j<btns.length;j++){var key=btns[j].getAttribute('data-tab');if(maxTs>(mcWm[key]||0)){mcWm[key]=maxTs;changed=true;}}}if(changed)mcSaveWm();}");
-    // the tab bar is re-rendered by the server on every loadPage('messages'),
-    // so badges are painted here on every call, never once at page load
-    web_client.println("function mcApplyTab(){var panel=document.getElementById('messages_panel');if(!panel)return;var els=panel.querySelectorAll('.message[data-dst]');for(var i=0;i<els.length;i++){els[i].hidden=!mcTabMatch(els[i].getAttribute('data-dst'));}mcSeedWm();mcMarkRead();var btns=document.querySelectorAll('#mctabs .mctab');for(var j=0;j<btns.length;j++){var key=btns[j].getAttribute('data-tab');btns[j].classList.toggle('mctab-on',key==mcTabSel);var label=key=='all'?'All':(key=='dm'?'DM':key);var cnt=mcUnreadCount(key);btns[j].innerHTML=label+(cnt>0?' <span class=\"mcbadge\">'+cnt+'</span>':'');btns[j].classList.toggle('mctab-new',cnt>0);}}");
-    web_client.println("function mcTab(btn){mcTabSel=btn.getAttribute('data-tab');try{localStorage.setItem('mcTab',mcTabSel);}catch(e){}var sc=document.getElementById('sendcall');if(sc){if(/^[0-9]+$/.test(mcTabSel))sc.value=mcTabSel;else if(mcTabSel=='*')sc.value='';}if(typeof updateCharsLeft==='function' && sc)updateCharsLeft();mcApplyTab();}");
-    // messages that arrive while the tab is hidden must not count as read
-    // until the operator actually comes back to look at them
-    web_client.println("document.addEventListener('visibilitychange',function(){if(cpage=='messages')mcApplyTab();});");
-    web_client.println("function mcHistIndex(id){for(var i=0;i<mcHistory.length;i++){if(mcHistory[i].id==id)return i;}return -1;}");
-    // a tick is rank-monotone: the server's status ring is shared and churned and drops the tick of an old message, so a ranked-higher tick of the remembered entry survives (rank = index 0,1,4,3,2: heard < held < failed < ACK)
-    web_client.println("function mcTickKeep(h,el){if(!el.classList.contains('message-send'))return;var t=document.createElement('template');t.innerHTML=h;var o=t.content.querySelector('.mctick');if(!o)return;var n=el.querySelector('.mctick');var R=[0,1,4,3,2];if(n&&R[n.getAttribute('data-st')]>=R[o.getAttribute('data-st')])return;if(n)n.replaceWith(o);else{var p=el.querySelector('p');if(p)p.insertBefore(o,p.firstChild);}}");
-    web_client.println("function mcMergeEntry(el){var id=el.getAttribute('data-id');var idx=mcHistIndex(id);if(idx>=0)mcTickKeep(mcHistory[idx].html,el);var html=el.outerHTML;var dst=el.getAttribute('data-dst')||'';var ts=parseInt(el.getAttribute('data-ts'))||0;var rx=el.classList.contains('message-received');if(idx<0){mcHistory.push({id:id,html:html,dst:dst,ts:ts,rx:rx});mcSeen[id]=true;if(mcHistory.length>MC_HIST_MAX){var dropped=mcHistory.shift();delete mcSeen[dropped.id];}}else{mcHistory[idx].html=html;mcHistory[idx].dst=dst;mcHistory[idx].ts=ts;mcHistory[idx].rx=rx;}}");
-    web_client.println("function mcRemovePlaceholder(panel){var kids=panel.children;for(var i=kids.length-1;i>=0;i--){if(kids[i].tagName=='P')panel.removeChild(kids[i]);}}");
-    // this function is an ayncronous loader that is used to update the received messages without re-loading the whole page, it will re-call itself after a timeout as long as the message-page is displayed
-    // it merges the response into mcHistory/mcSeen instead of overwriting the panel outright, so a message already on screen keeps its DOM position when only its ack mark changed
-    web_client.println("function mcProcessMessages(text,panel){var tmpl=document.createElement('template');tmpl.innerHTML=text;var els=tmpl.content.querySelectorAll('.message[data-id]');for(var i=0;i<els.length;i++){var el=els[i];var id=el.getAttribute('data-id');var existed=mcSeen.hasOwnProperty(id);mcMergeEntry(el);if(existed){var old=panel.querySelector('.message[data-id=\"'+id+'\"]');if(old)old.replaceWith(el);}else{panel.appendChild(el);}}mcRemovePlaceholder(panel);if(mcHistory.length==0)panel.innerHTML='<p>No messages available.</p>';if(typeof mcApplyTab==='function')mcApplyTab();}");
-    web_client.println("function updateMessages() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){var panel=document.getElementById('messages_panel');if(panel!=null)mcProcessMessages(this.responseText,panel);}};setTimeout(function(){xhttp.open('GET','/?getmessages',true);xhttp.send();},1000);}\n");
-    // rebuilds #messages_panel from mcHistory when the messages page is (re-)injected by loadPage(); first merges the server-rendered entries already sitting in the panel into mcHistory (same dedupe as mcProcessMessages) so nothing the server just sent is lost, then renders the full remembered history in order
-    web_client.println("function mcRenderHistory(){var panel=document.getElementById('messages_panel');if(!panel)return;var els=panel.querySelectorAll('.message[data-id]');for(var i=0;i<els.length;i++){mcMergeEntry(els[i]);}var html='';for(var j=0;j<mcHistory.length;j++){html+=mcHistory[j].html;}panel.innerHTML=html.length>0?html:'<p>No messages available.</p>';if(typeof mcApplyTab==='function')mcApplyTab();}");
-    //  this function sends a parameter:value request to the backend
-    // TRK-01: bei Erfolg (returncode==0, die Seite wird hier NICHT neu geladen) den Warnhinweis
-    // "<id>_warn" live ein-/ausblenden -- generisch ueber param, damit kuenftige Switches denselben Mechanismus erben
-    web_client.println("function setvalue(param,value,refresh) {fetch(\"/setparam/?\"+param+\"=\"+encodeURIComponent(value)).then(function(response){return response.json();}).then(function(jsonResponse){if(jsonResponse['returncode']==1)alert(\"Value could not be set.\");if(jsonResponse['returncode']==2)alert(\"Parameter unknown to node.\");if(jsonResponse['returncode']==0){var w=document.getElementById(param+\"_warn\");if(w)w.style.display=(value==\"on\")?\"\":\"none\";}if(jsonResponse['returncode']>0){loadPage(cpage,csender,false)}if(refresh)loadPage(cpage,csender,false);});}\n");
-    // this function invokes a function call to the backend passing the function name and an optional parameter (e.g. sendpos)
-    web_client.println("function callfunction(functionname,functionparameter){fetch(\"/callfunction/?\"+functionname+\"=\"+functionparameter).then(function(response){return response.json();}).then(function (jsonResponse) {/*Nothing todo yet.*/})}\n");
+    web_client.println("function loadPage(page,sender,useSpinner) {" AU_LP_LEAVE "if(typeof rmPageLeave=='function')rmPageLeave();if(typeof pinsLeave=='function')pinsLeave();cpage=page;csender=sender;if(useSpinner){document.getElementById(\"content_layer\").innerHTML=\"<span class=\\\"loader\\\"></span>\"};var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"content_layer\").innerHTML=this.responseText;if(typeof mcLoginFocus=='function')mcLoginFocus();if(typeof mcClockTick=='function')mcClockTick();mcRenderQueue();if(page=='messages' && document.getElementById('messages_panel'))mcRenderHistory();if(page=='remote'&&cpage=='remote')rmPageInit();if(page=='pins'&&cpage=='pins'&&typeof pinsInit=='function')pinsInit();" AU_LP_INIT "if(page=='setup'&&typeof raSt=='function')raSt();if(page=='setup'&&typeof mcLookMark=='function')mcLookMark();}else if(this.readyState==4&&useSpinner)document.getElementById('content_layer').innerHTML='Node did not answer completely. Please reload.';};xhttp.open(\"GET\",\"?page=\"+page,true);xhttp.send();Array.from(document.querySelectorAll('.nav_button.nbactive ')).forEach((el) => el.classList.remove('nbactive')); sender.classList.add('nbactive');}\n");
+    web_client.println("</script>\n");
 #if defined(ESP32)
-    auScaffoldJs(); // AU web GUI: Info page Auto update row
+    web_client.println("<script src=\"/mcau.js?v=" WEB_MC_AU_JS_TAG "\" onerror=\"mcRe(this)\"></script>"); // AU web GUI: Info page Auto update row
 #endif
-    // CS-03: config restore. Lives here and not in the setup page, because the
-    // sub-pages are injected with innerHTML -- a <script> inside them never runs.
-    web_client.println("function uploadconfig(){var e=document.getElementById(\"cfgfile\");if(!e||e.files.length==0){alert(\"choose a config file first\");return;}if(!confirm(\"Restore this configuration and reboot the node?\"))return;var r=new FileReader();r.onload=function(){fetch(\"/config\",{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:r.result}).then(function(x){return x.text().then(function(t){var m=t.replace(/<[^>]*>/g,\" \").trim();if(x.ok){alert(\"config imported: \"+m);}else{alert(\"import failed: \"+m);}});}).catch(function(err){alert(\"upload failed: \"+err);});};r.readAsText(e.files[0]);}\n");
-
-    // This function is used to toggle a css class so setup cars can collapse / expand
-    web_client.println("function togglecard(element){element.parentElement.classList.toggle(\"cardopen\");}");
-
-    // RM GUI W2b: Remote page scripts (state tiles, saved nodes, password, polling). Lives here because
-    // sub-pages are injected with innerHTML and their <script> never runs.
-    rmScaffoldJs();
-
-    // Remote Admin card of the Settings page (sub_page_setup()): scripts of sub-pages never run, so the logic lives here;
-    // loadPage() calls raSt() after the setup fragment is in. Password only in the POST body, never in a URL.
-    // RA-JS-BEGIN
-    web_client.println("var raA=0,raT=0;\n"
-                       "function raM(t,b){var e=rmEl('ra_msg');if(e){e.textContent=t;e.style.color=b?'var(--mcred)':'';}}\n"
-                       "function raX(e,t){raM(e===0?'Log in again to change these settings.':t,1);}\n"
-                       "function raDis(m){clearTimeout(raT);raA=0;var b=rmEl('ra_clr');if(b)b.textContent='Clear';if(m)raM('');}");
-    web_client.println("function raSt(){fetch('/rmstatus').then(rmJson).then(function(j){var o=rmEl('ra_on');if(!o)return;o.checked=!!j.on;o.disabled=!j.pw&&!j.on;\n"
-                       "rmEl('ra_hint').textContent=j.pw?'':'Set a password first, then switch remote management on.';\n"
-                       "rmEl('ra_st').textContent='password: '+(j.pw?'set':'not set')+(j.lock?', a sender is blocked for '+(j.lockS||1)+' s after wrong attempts':'');})\n"
-                       ".catch(function(e){raX(e,'Could not read the state of this node. Reload the page.');});}");
-    web_client.println("function raP(b,t){rmPost('/rmpasswd',b).then(rmJson).then(function(j){if(j&&j.ok)raM(t);else raM(rmErrText(j),1);raSt();})\n"
-                       ".catch(function(e){raX(e,'The node did not answer. Try again.');});}");
-    web_client.println("function raSet(){var i=rmEl('ra_pw'),p=i.value,e=rmPwProblem(p);raDis();\n"
-                       "if(e){raM(e,1);return;}i.value='';raP('act=set&pw='+rmEnc(p),'Password set.');}\n"
-                       "function raClr(){if(!raA){raA=1;rmEl('ra_clr').textContent='Really? tap again';raM('Clear the password? Remote management will be switched off.');raT=setTimeout(function(){raDis(1);},4000);return;}\n"
-                       "raDis();raP('act=clear','Password cleared. Remote management is off.');}");
-    web_client.println("function raOn(){var o=rmEl('ra_on'),v=o.checked?'on':'off';o.disabled=true;fetch('/setparam/?rm='+v).then(rmJson).then(function(j){var k=j&&j.returncode==0;\n"
-                       "raM(k?'Remote management is '+v+'.':'Could not change it. Is a password set?',!k);raSt();})\n"
-                       ".catch(function(e){raX(e,'The node did not answer. Try again.');raSt();});}");
-    // RA-JS-END
-
-    // WQ-01: LoRa Queue panel on the rxlog page. rxlog is fetched by loadPage()
-    // and injected with innerHTML, which never runs a <script> tag it carries,
-    // so the rendering logic has to live here in the scaffold instead and be
-    // invoked from loadPage() after each fragment swap (that covers both the
-    // initial page load and the 30s autorefresh). The fragment itself only
-    // emits an empty #mcq div carrying data-* attributes; all markup below is
-    // built from those. JS strings use single quotes and HTML attribute
-    // values are written unquoted (none of them ever contain a space) so
-    // nothing here needs quote-escaping in the C string literals.
-    web_client.println("var mcQueueOpen=true;");
-    web_client.println("function mcQueueToggle(btn){mcQueueOpen=!mcQueueOpen;var b=document.getElementById('mcq');if(b)b.hidden=!mcQueueOpen;if(btn)btn.textContent=mcQueueOpen?'hide':'show';}");
-    web_client.println("function mcRenderQueue(){");
-    web_client.println("var d=document.getElementById('mcq');");
-    web_client.println("if(!d)return;");
-    web_client.println("var p=[0,0,0,0,0,0];");
-    web_client.println("var w=[0,0,0,0,0,0];");
-    web_client.println("for(var i=1;i<=5;i++){p[i]=parseInt(d.getAttribute('data-p'+i))||0;w[i]=parseInt(d.getAttribute('data-w'+i))||0;}");
-    web_client.println("var w0=parseInt(d.getAttribute('data-w0'))||0;");
-    web_client.println("var ring=parseInt(d.getAttribute('data-ring'))||0;");
-    web_client.println("var used=parseInt(d.getAttribute('data-p0'))||0;");
-    web_client.println("var bp=parseInt(d.getAttribute('data-bp'))||0;");
-    web_client.println("var bpname=d.getAttribute('data-bpname')||'';");
-    web_client.println("var qrs=parseInt(d.getAttribute('data-qrs'))||0;");
-    web_client.println("var qrsf=parseInt(d.getAttribute('data-qrsf'))||qrs;");
-    web_client.println("var qrt=parseInt(d.getAttribute('data-qrt'))||0;");
-    web_client.println("var win=parseInt(d.getAttribute('data-win'))||0;");
-    web_client.println("var rx=parseInt(d.getAttribute('data-rx'))||0;");
-    web_client.println("var tx=parseInt(d.getAttribute('data-tx'))||0;");
-    web_client.println("var intv=parseInt(d.getAttribute('data-int'))||300;");
-    web_client.println("var newid=parseInt(d.getAttribute('data-newid'))||0;");
-    web_client.println("var dup=parseInt(d.getAttribute('data-dup'))||0;");
-    web_client.println("var dwin=parseInt(d.getAttribute('data-dwin'))||0;");
-    web_client.println("var age=parseInt(d.getAttribute('data-age'))||0;");
-    web_client.println("var empty=ring-used;");
-    web_client.println("if(empty<0)empty=0;");
-    web_client.println("var qrsPct=ring>0?(qrs/ring*100):0;");
-    web_client.println("var qrsfPct=ring>0?(qrsf/ring*100):0;");
-    web_client.println("var qrtPct=ring>0?(qrt/ring*100):0;");
-    web_client.println("var colors=['#A2182F','#E07B39','#3B7DD8','#6FA96F','#9E9E9E'];");
-    web_client.println("var names=['crit','high','normal','low','bg'];");
-    web_client.println("var html='';");
-    web_client.println("html+='<div class=font-bold>TX queue</div>';");
-    web_client.println("html+='<div class=mcq-barwrap><div class=mcq-bar>';");
-    web_client.println("for(var pr=1;pr<=5;pr++){var wn=Math.min(w[pr],p[pr]);for(var c=0;c<p[pr]-wn;c++){html+='<div class=mcq-cell style=background:'+colors[pr-1]+'></div>';}for(var cw=0;cw<wn;cw++){html+='<div class=mcq-cell-wait style=border-color:'+colors[pr-1]+'></div>';}}");
-    web_client.println("for(var c2=0;c2<empty;c2++){html+='<div class=mcq-cell-empty></div>';}");
-    web_client.println("html+='</div>';");
-    web_client.println("html+='<div class=mcq-tick-faint style=left:'+qrsPct+'%></div>';");
-    web_client.println("html+='<div class=mcq-tick style=left:'+qrsfPct+'%></div>';");
-    web_client.println("html+='<div class=mcq-tick style=left:'+qrtPct+'%></div>';");
-    web_client.println("html+='</div>';");
-    web_client.println("html+='<div class=mcq-ticklabels>';");
-    web_client.println("html+='<span class=font-small style=position:absolute;left:'+qrsfPct+'%;transform:translateX(-50%)>QRS</span>';");
-    web_client.println("html+='<span class=font-small style=position:absolute;left:'+qrtPct+'%;transform:translateX(-50%)>QRT</span>';");
-    web_client.println("html+='</div>';");
-    web_client.println("html+='<div class=mcq-legend>'+used+'/'+ring+' queued&nbsp;|&nbsp;';");
-    web_client.println("for(var pr2=1;pr2<=5;pr2++){html+='<span class=mcq-swatch style=background:'+colors[pr2-1]+'></span>'+names[pr2-1]+' '+p[pr2]+' ';}");
-    web_client.println("if(w0>0){html=html.replace(/ +$/,'')+', '+w0+' waiting for ACK';}");
-    web_client.println("html+='</div>';");
-    web_client.println("var bpcolor=(bp==0)?'#3B9E4F':((bp==1)?'#E07B39':'#A2182F');");
-    web_client.println("var bptxt=(bp==0)?'accepted':((bp==1)?'slow down':'refused');");
-    web_client.println("html+='<div class=font-bold>Your messages: <span style=color:'+bpcolor+'>'+bptxt+'</span></div>';");
-    web_client.println("var drop=parseInt(d.getAttribute('data-drop'))||0;");
-    web_client.println("var iv=intv*1000;");
-    web_client.println("html+='<div class=font-bold>Queue: '+used+'/'+ring+' queued'+(win?', '+drop+' dropped in the last '+Math.round(intv/60)+' min, TX '+(tx/iv*100).toFixed(1)+' % / RX '+(rx/iv*100).toFixed(1)+' %':'')+'</div>';");
-    web_client.println("html+='<div class=font-small>(QRS forecast at&nbsp;'+qrsf+' for your next msgs, line&nbsp;&ge;'+qrs+', QRT at&nbsp;&ge;'+qrt+' of '+ring+')</div>';");
-    web_client.println("if(win==0){");
-    web_client.println("html+='<div class=font-bold>Dedup window: n/a (no completed 5-min window yet)</div>';");
-    web_client.println("}else if(dwin==0){");
-    web_client.println("html+='<div class=font-bold>Dedup window: n/a (no new ids in the last window)</div>';");
-    web_client.println("}else{");
-    web_client.println("var dwc=(dwin<40||dwin>48)?'#E07B39':'inherit';");
-    web_client.println("html+='<div class=font-bold>Dedup window:&nbsp;&asymp;<span style=color:'+dwc+'>'+dwin+'</span> min</div>';");
-    web_client.println("html+='<div class=font-small>('+newid+' new ids, '+dup+' dups in last '+Math.round(intv/60)+' min; safe corridor 40-48 min)</div>';");
-    web_client.println("}");
-    web_client.println("html+='<div class=font-bold>Channel utilisation (last 5 min)</div>';");
-    web_client.println("if(win==0){");
-    web_client.println("html+='<div class=font-small>n/a</div>';");
-    web_client.println("}else{");
-    web_client.println("var rxPct=rx/(intv*1000)*100;if(rxPct>100)rxPct=100;");
-    web_client.println("var txPct=tx/(intv*1000)*100;if(txPct>100)txPct=100;");
-    web_client.println("var totPct=(rx+tx)/(intv*1000)*100;if(totPct>100)totPct=100;");
-    web_client.println("html+='<div class=mcq-util-row><span class=mcq-util-label>rx '+rxPct.toFixed(1)+'%</span><div class=mcq-util-track><div style=height:100%;width:'+rxPct+'%;background:#3B7DD8></div></div></div>';");
-    web_client.println("html+='<div class=mcq-util-row><span class=mcq-util-label>tx '+txPct.toFixed(1)+'%</span><div class=mcq-util-track><div style=height:100%;width:'+txPct+'%;background:#A2182F></div></div></div>';");
-    web_client.println("html+='<div class=font-small>total '+totPct.toFixed(1)+'% ('+age+' s ago)</div>';");
-    web_client.println("}");
-    web_client.println("d.innerHTML=html;");
-    web_client.println("var btn=document.getElementById('mcqtogglebtn');");
-    web_client.println("d.hidden=!mcQueueOpen;");
-    web_client.println("if(btn)btn.textContent=mcQueueOpen?'hide':'show';");
-    web_client.println("}");
-
-    web_client.println("</script>\n\n");
-
-    // css style definitions
-    web_client.println("<style>\n");
-
-    // basic definitions
-    web_client.println(":root {--fs-s:.85rem;--fs-m:1rem;--fs-l:1.25rem;--fs-xl:1.6rem;--mcbg:#FFFFFF;--mcgray:#252323;--mcred:#A2182F;--mclightred:#FCEDF0;--mcmidred:#FFA5B4;--mclightblue:#CADFEA;--mclightgreen:#CBFBD4;--widthfactor:1.0;}\n");
-    web_client.println("@media screen and (max-width:600px) {html {font-size:12px;} :root{--widthfactor:0.7;}}\n");
-    web_client.println("@media screen and (min-width:601px) {html {font-size:14px;} :root{--widthfactor:0.7;}}\n");
-    web_client.println("@media screen and (min-width:801px) {html {font-size:14px;} :root{--widthfactor:1.0;}}\n");
-    web_client.println("h1,h2,h3,h4,h5,h6,small,code,pre,kbd,samp,button,input,select,textarea {font-size:inherit;}\n");
-    web_client.println("body {font-size:var(--fs-m);background:var(--mcbg);padding:0px;margin:0px 0px;height:100%;width:100%;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;color:var(--mcgray);font-family:sans-serif;}\n");
-    web_client.println(".font-small {font-size:var(--fs-s);}\n");
-    web_client.println(".font-large {font-size:var(--fs-l);}\n");
-    web_client.println(".font-xlarge {font-size:var(--fs-xl);}\n");
-    web_client.println(".font-bold {font-weight:bold;}\n");
-    web_client.println(".no-wrap {white-space:nowrap;}\n");
-    web_client.println(".mw-600 {max-width:600px;}");
-
-    // nav-bar definitions
-    web_client.println("#nav_layer {height:100%;width:calc(60px*var(--widthfactor));background-color:var(--mcgray);position:fixed !important;overflow:auto;top:0px;}\n");
-    web_client.println("#mc_logo {width:100%;aspect-ratio:1/1;margin:0px auto 75px auto;padding:5px 0px;display:block;background-color:#000;}\n");
-    web_client.println(".nav_button {background-color:var(--mcgray);border:solid 6px var(--mcgray);box-shadow:none;border-radius:10px 0px 0px 10px;cursor:pointer; width:100%; aspect-ratio:1/1; margin:calc(20px*var(--widthfactor)) auto; display:block;}\n");
-    web_client.println(".nav_button>svg {display:block;width:90%;height:90%;margin:auto auto;}\n");
-    web_client.println(".nav_button.nbactive {background-color:var(--mcbg);-webkit-transition:0.5s;transition:0.5s; border-right-color:var(--mcbg);}\n");
-    web_client.println(".nav_button.nbactive>svg, .nav_button.nbactive>img {filter:invert(1);}\n");
-    web_client.println(".nav_button.extra_space {margin-top:40px !important;}\n");
-    web_client.println("select,input,textarea {font-family:monospace;border-radius:7px;padding:3px 5px;box-sizing:border-box;border:solid 1px #7c7c7c;-webkit-transition:0.5s;transition:0.5s;}\n");
-    web_client.println("select:focus,input:focus,textarea:focus {border:solid 1px var(--mcred);background-color:var(--mclightred);outline:none;}\n");
-
-    // header (red bar with Call, Time, Date, etc) definitions
-    web_client.println("#head_layer {margin:0px 0px 0px calc(60px*var(--widthfactor)); padding:10px 30px 10px 0px;text-align:right;top:0px;overflow:hidden;background-color:#a2182f;color:#ffffff;width:auto;height:39px;}\n");
-    web_client.println("#head_layer>p {margin:0px 0px;}\n");
-
-    // loader animation (the circling animation when content is loaded)
-    web_client.println(".loader {display:block;margin:150px auto 50px auto;width:100px;height:100px;border:5px solid #FFF;border-bottom-color:#FF3D00;border-radius:50%;box-sizing:border-box;animation:rotation 1s linear infinite;}\n");
-    web_client.println("@keyframes rotation{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}\n");
-
-    // content definitions
-    web_client.println("#content_title {padding:0px 30px 0px 0px;margin:0px 0px 10px 0px;text-align:right;top:0px;overflow:hidden;background-color:#FCEDF0;}\n");
-    web_client.println("#content_layer {margin-left:calc(60px*var(--widthfactor));top:0px;overflow:hidden;}");
-    web_client.println("#content_inner {margin:20px 10px 30px 4%;}\n");
-
-    // content definitions -> tables
-    web_client.println("#content_inner > table {border-collapse:separate;overflow:hidden;border-spacing:0;border:solid 1px #7c7c7c;border-radius:10px;width:100%;background:#f9f9f9;}\n");
-    web_client.println("#content_inner > table thead {background-color:var(--mcgray);color:#ffffff;border-radius:10px;}\n");
-    web_client.println("#content_inner > table tr:nth-child(even) {background-color:#f0f0f0;}\n");
-    web_client.println("#content_inner > table td {vertical-align:top;padding:0.5em 0.5em 0.5em 0.5em;border-bottom:solid 1px #e0e0e0;}\n");
-
-    // content definitions -> anchors
-    web_client.println("#content_inner a {color:var(--mcred);}\n");
-
-    // content definitions -> buttons
-    web_client.println("#content_inner button {background-color:var(--mclightred);border:solid 1px var(--mcgray);padding:3px 10px;text-align:center;cursor:pointer;display:inline-flex;align-items:center;border-radius:5px;}\n");
-    web_client.println("#content_inner button:hover {background-color:var(--mcmidred);}\n");
-    web_client.println(".btncheckmark {width:20px;height:20px;margin:auto;background:center no-repeat url(\"data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNDggNDgiIHZlcnNpb249IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgZW5hYmxlLWJhY2tncm91bmQ9Im5ldyAwIDAgNDggNDgiIGZpbGw9IiMwMDAwMDAiPjxnIHN0cm9rZS13aWR0aD0iMCI+PC9nPjxnIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PC9nPjxnPjxwb2x5Z29uIGZpbGw9IiM0M0EwNDciIHBvaW50cz0iNDAuNiwxMi4xIDE3LDM1LjcgNy40LDI2LjEgNC42LDI5IDE3LDQxLjMgNDMuNCwxNC45Ij48L3BvbHlnb24+PC9nPjwvc3ZnPg==\");}\n");
-    web_client.println(".btnrefresh {width:20px;height:20px;margin:auto;background:center no-repeat url(\"data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGcgc3Ryb2tlLXdpZHRoPSIwIj48L2c+PGcgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L2c+PGc+PHBhdGggZD0iTTIxIDNWOE0yMSA4SDE2TTIxIDhMMTggNS4yOTE2OEMxNi40MDc3IDMuODY2NTYgMTQuMzA1MSAzIDEyIDNDNy4wMjk0NCAzIDMgNy4wMjk0NCAzIDEyQzMgMTYuOTcwNiA3LjAyOTQ0IDIxIDEyIDIxQzE2LjI4MzIgMjEgMTkuODY3NSAxOC4wMDggMjAuNzc3IDE0IiBzdHJva2U9IiM0M0EwNDciIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L3BhdGg+IDwvZz48L3N2Zz4=\");}\n");
-
-    // content definitions -> message-page
-    web_client.println("#messagetext {width:100%;}\n");
-    web_client.println("#sendcall {min-width:8em;}\n");
-
-    web_client.println(".message {--r:1em;--t:1.5em;max-width:300px;padding:15px;margin-bottom:20px;border-inline:var(--t) solid #0000; border-radius:calc(var(--r) + var(--t))/var(--r);mask:radial-gradient(100% 100% at var(--_p) 0,#0000 99%,#000 102%) var(--_p) 100%/var(--t) var(--t) no-repeat, linear-gradient(#000 0 0) padding-box;color:#000;}\n");
-    web_client.println(".message>div>p {padding:0px;margin:0px;}\n");
-    web_client.println(".message-received{--_p:0;border-bottom-left-radius:0 0;place-self:start;background-color:var(--mclightgreen);border-color:var(--mclightgreen);}\n");
-    web_client.println(".message-send{--_p:100%;border-bottom-right-radius:0 0;place-self:end;background-color:var(--mclightblue);border-color:var(--mclightblue);}\n");
-
-    // content definitions -> commonly used cards
-    web_client.println(".cardlayout {min-height:20px;border:solid 1px var(--mcgray);border-radius:7px;padding:7px;padding-top:16px;margin:30px 0px;position:relative;max-width:600px;}\n");
-    web_client.println(".cardlabel {position:absolute;font-weight:bold;margin:0 5px;left:6px;top:-1px;transform:translateY(-50%);z-index:10;background-color:#fff;padding:0 2px;}\n");
-
-    web_client.println(".grid {display:grid;align-items:center;grid-column-gap:8px;grid-row-gap:7px;margin:7px;}\n");
-    web_client.println(".grid3{grid-template-columns:minmax(min-content,400px) minmax(min-content,150px) minmax(min-content,50px)}\n");
-    web_client.println(".grid2 {grid-template-columns:minmax(min-content,550px) minmax(min-content,50px)}\n");
-    web_client.println(".flex-auto-wrap {display:flex;flex-direction:row;flex-wrap:wrap;gap:10px;}\n");
-    web_client.println(".flex-auto-wrap>* {flex:1;}\n");
-
-    // content definitions -> commonly used inputs
-    web_client.println("input:where([type=\"checkbox\"][role=\"switch\"]) {-webkit-appearance:none;-moz-appearance:none;appearance:none;position:relative;font-size:inherit;width:2.5em;height:1.2em;box-sizing:content-box;border-radius:1em;vertical-align:text-bottom;margin:auto;color:inherit;background-color:rgb(212, 212, 212);}\n");
-    web_client.println("input:where([type=\"checkbox\"][role=\"switch\"]):checked {background-color:rgb(102, 214, 102);}\n");
-    web_client.println("input:where([type=\"checkbox\"][role=\"switch\"])::before {content:\"\";position:absolute;top:50%;left:0;transform:translate(0,-50%);box-sizing:border-box;width:1.1em;height:1.1em;margin:0 0.15em;border-radius:50%;background:var(--mcbg);-webkit-transition:0.5s;transition:0.5s;}\n");
-    web_client.println("input:where([type=\"checkbox\"][role=\"switch\"]):checked::before {left:1.8em;}\n");
-
-    // content definitions -> setup collapsable cards
-
-    web_client.println(".collapsablecard>.cardtoggle {position:absolute;right:8px;top:-1px;transform:translateY(-50%);z-index:10;width:36px;height:36px;border-radius:50% !important;disjplay:none;}\n");
-    web_client.println(".collapsablecard>.cardtoggle>i {padding:4px;margin:auto;border:solid black;border-width:2px 0 0 2px;display:block;-webkit-transform:rotate(-135deg);transform:rotate(-135deg);-webkit-transition:0.5s;transition:0.5s;}\n");
-    web_client.println(".cardopen>.cardtoggle>i {-webkit-transform: rotate(45deg);transform: rotate(45deg);}\n");
-    web_client.println(".collapsablecard>div {max-height:0px;-webkit-transition:opacity .15s .0s,max-height .25s .10s;transition:opacity .15s .0s,max-height .25s .10s,margin .0s .50s;	opacity:0.0;overflow:hidden;margin:0px;}\n");
-    web_client.println(".cardopen>div {-webkit-transition:opacity .15s .10s,max-height .25s .0s;transition:opacity .15s .10s,max-height .25s .0s;max-height:none;opacity:1;margin:7px;}\n");
-    web_client.println(".cardopen>span:first-of-type {display:none;}\n");
-
-    // content definitions -> WQ-01 LoRa Queue panel (rxlog page)
-    web_client.println(".mcq-toggle {position:absolute;right:8px;top:-1px;transform:translateY(-50%);z-index:10;border:solid 1px var(--mcgray);background:#fff;border-radius:5px;padding:1px 8px;cursor:pointer;}\n");
-    web_client.println(".mcq-barwrap {position:relative;}\n");
-    web_client.println(".mcq-bar {display:flex;flex-direction:row;gap:1px;height:14px;margin:4px 0 2px 0;}\n");
-    web_client.println(".mcq-cell {flex:1;height:14px;}\n");
-    web_client.println(".mcq-cell-wait {flex:1;height:14px;background:#fff;border:2px solid #888;box-sizing:border-box;}\n");
-    web_client.println(".mcq-cell-empty {flex:1;height:14px;background:#ECECEC;border:1px solid #d0d0d0;box-sizing:border-box;}\n");
-    web_client.println(".mcq-tick {position:absolute;top:0;bottom:0;width:1px;background:#000;opacity:0.5;}\n");
-    web_client.println(".mcq-tick-faint {position:absolute;top:0;bottom:0;width:1px;background:#000;opacity:0.15;}\n");
-    web_client.println(".mcq-ticklabels {position:relative;height:12px;font-size:var(--fs-s);margin:0 0 8px 0;}\n");
-    web_client.println(".mcq-legend {font-size:var(--fs-s);margin:0 0 8px 0;}\n");
-    web_client.println(".mcq-swatch {display:inline-block;width:8px;height:8px;margin:0 3px 0 6px;border-radius:2px;vertical-align:middle;}\n");
-    web_client.println(".mcq-util-row {display:flex;align-items:center;gap:6px;margin:2px 0;}\n");
-    web_client.println(".mcq-util-label {display:inline-block;min-width:60px;}\n");
-    web_client.println(".mcq-util-track {flex:1;height:10px;background:#ECECEC;border-radius:4px;overflow:hidden;}\n");
-
-    // content definitions -> message-page tab bar
-    web_client.println("#mctabs {margin:6px 0;}\n");
-    web_client.println("#content_inner .mctab {display:inline-flex;align-items:center;border:solid 1px var(--mcgray);background-color:var(--mcbg);border-radius:5px;padding:2px 8px;margin-right:4px;cursor:pointer;}\n");
-    web_client.println("#content_inner .mctab-new {background-color:var(--mclightgreen);}\n");
-    web_client.println("#content_inner .mctab-on {background-color:var(--mclightblue);}\n");
-    web_client.println(".mcbadge {font-size:var(--fs-s);font-weight:bold;margin-left:4px;}\n");
-
-    // stage 3 mailbox card below: "before you switch this on" warning box.
-    web_client.println(".cardbody>.grid,.cardbody>.mbx-warn {margin:0 0 7px 0;}\n"); // Store node card: sub-grids inside the single collapsible body
-    web_client.println(".mbx-warn {background:var(--mclightred);border:solid 1px var(--mcred);border-radius:5px;padding:6px 8px;margin:7px;}\n");
-#if defined(ESP32)
-    // AU web GUI: Auto update row of the info page: green row, disabled and red (Install now) buttons.
-    web_client.println("#content_inner tr.au-green td {background-color:var(--mclightgreen);}\n");
-    web_client.println("#content_inner button:disabled {opacity:.45;cursor:not-allowed;}\n");
-    web_client.println("#content_inner button.au-red {background-color:var(--mcred);color:#fff;}\n");
-    web_client.println("#au_msg,#au_err {margin:4px 0;}\n#au_hint {color:var(--mcgray);font-size:var(--fs-s);}\n");
-#endif
-
-    // content definitions -> mailbox page (stage 3, docs/design/mailbox-page-mockup.html).
-    // Kept unconditional (not #if ENABLE_MSGSTORE) because this is a string literal inside
-    // one big <style> block: the rules never match anything on a board without the page.
-    web_client.println("#content_inner > table td.num {white-space:nowrap;font-variant-numeric:tabular-nums;}\n");
-    web_client.println(".mbx-actions button {padding:3px 7px;}\n");
-    web_client.println(".mbx-counters {display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px 10px;margin:7px;font-variant-numeric:tabular-nums;}\n");
-    web_client.println(".mbx-counters>div {display:flex;justify-content:space-between;gap:6px;border-bottom:1px dotted #c8c8c8;padding:2px 0;}\n");
-    web_client.println(".mbx-counters b {font-weight:bold;}\n");
-    web_client.println(".mbx-state {display:inline-block;border:solid 1px var(--mcgray);border-radius:5px;padding:0 6px;font-size:var(--fs-s);font-weight:bold;white-space:nowrap;}\n");
-    web_client.println(".mbx-held {background:var(--mclightblue);}\n");
-    web_client.println(".mbx-armed, .mbx-ladder {background:var(--mclightgreen);}\n");
-    web_client.println(".mbx-cooldown {background:#F6E7B8;}\n");
-    web_client.println(".mbx-stale {color:var(--mcred);}\n");
-    web_client.println(".mbx-actions {display:flex;gap:6px;white-space:nowrap;}\n");
-    web_client.println(".mbx-toolbar {display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 10px 0;}\n");
-    web_client.println(".mbx-toolbar .spacer {flex:1;}\n");
-    web_client.println(".mbx-legend {font-size:var(--fs-s);margin:8px 0 0 0;color:#555;}\n");
-    web_client.println(".mbx-legend .mbx-state {margin-right:8px;}\n");
-
-    web_client.println("</style>\n\n");
+    web_client.println("<script src=\"/mcrm.js?v=" WEB_MC_RM_JS_TAG "\" onerror=\"mcRe(this)\"></script>\n"); // RM GUI W2b: Remote page scripts
 
     // scaffold body
     web_client.println("</head>\n<body>\n");
@@ -1822,28 +1570,37 @@ void deliver_scaffold(bool bget_password)
     web_client.print("31.46907,46.766605 29.524067,29.524067 0 0 1 60.993137,76.290672 Z\"/><circle style=\"fill:#ff0000;fill-opacity:1;stroke:none;stroke-width:6.35477;stroke-dasharray:none\" id=\"mclogo_circle\" cx=\"108.51074\" ");
     web_client.print("cy=\"139.66409\" r=\"52.916668\"/><text xml:space=\"preserve\" style=\"font-size:63.5px;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;display:inline;fill:#ffffff;fill-opacity:1;");
     web_client.print("stroke:#ffffff;stroke-width:6.00001;stroke-dasharray:none\" x=\"63.16748\" y=\"161.0486\"><tspan style=\"font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:63px;");
-    web_client.println("font-family:sans-serif;stroke:none;stroke-width:6\" x=\"63.16748\" y=\"161.0486\">4.0</tspan></text></g></svg>");
+    web_client.println("font-family:sans-serif;stroke:none;stroke-width:6\" x=\"63.16748\" y=\"161.0486\">" MESHCOM_VERSION_SHORT "</tspan></text></g></svg>");
     
     
 
-    web_client.println("<Button class=\"nav_button nbactive\" onclick=\"loadPage('info',this,true)\"><svg viewBox=\"-0.5 0 25 25\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M12 21.5C17.1086 21.5 21.25 17.3586 21.25 12.25C21.25 7.14137 17.1086 3 12 3C6.89137 3 2.75 7.14137 2.75 12.25C2.75 17.3586 6.89137 21.5 12 21.5Z\" stroke=\"#ffffff\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> <path d=\"M12.9309 8.15005C12.9256 8.39231 12.825 8.62272 12.6509 8.79123C12.4767 8.95974 12.2431 9.05271 12.0008 9.05002C11.8242 9.04413 11.6533 8.98641 11.5093 8.884C11.3652 8.7816 11.2546 8.63903 11.1911 8.47415C11.1275 8.30927 11.1139 8.12932 11.152 7.95675C11.19 7.78419 11.278 7.6267 11.405 7.50381C11.532 7.38093 11.6923 7.29814 11.866 7.26578C12.0397 7.23341 12.2192 7.25289 12.3819 7.32181C12.5446 7.39072 12.6834 7.506 12.781 7.65329C12.8787 7.80057 12.9308 7.97335 12.9309 8.15005ZM11.2909 16.5301V11.1501C11.2882 11.0556 11.3046 10.9615 11.3392 10.8736C11.3738 10.7857 11.4258 10.7057 11.4922 10.6385C11.5585 10.5712 11.6378 10.518 11.7252 10.4822C11.8126 10.4464 11.9064 10.4286 12.0008 10.43C12.094 10.4299 12.1863 10.4487 12.272 10.4853C12.3577 10.5218 12.4352 10.5753 12.4997 10.6426C12.5642 10.7099 12.6143 10.7895 12.6472 10.8767C12.6801 10.9639 12.6949 11.0569 12.6908 11.1501V16.5301C12.6908 16.622 12.6727 16.713 12.6376 16.7979C12.6024 16.8828 12.5508 16.96 12.4858 17.025C12.4208 17.09 12.3437 17.1415 12.2588 17.1767C12.1738 17.2119 12.0828 17.23 11.9909 17.23C11.899 17.23 11.8079 17.2119 11.723 17.1767C11.6381 17.1415 11.5609 17.09 11.4959 17.025C11.4309 16.96 11.3793 16.8828 11.3442 16.7979C11.309 16.713 11.2909 16.622 11.2909 16.5301Z\" fill=\"#ffffff\"></path> </g></svg></Button>\n");
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('messages',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M7 9H17M7 13H17M21 20L17.6757 18.3378C17.4237 18.2118 17.2977 18.1488 17.1656 18.1044C17.0484 18.065 16.9277 18.0365 16.8052 18.0193C16.6672 18 16.5263 18 16.2446 18H6.2C5.07989 18 4.51984 18 4.09202 17.782C3.71569 17.5903 3.40973 17.2843 3.21799 16.908C3 16.4802 3 15.9201 3 14.8V7.2C3 6.07989 3 5.51984 3.21799 5.09202C3.40973 4.71569 3.71569 4.40973 4.09202 4.21799C4.51984 4 5.0799 4 6.2 4H17.8C18.9201 4 19.4802 4 19.908 4.21799C20.2843 4.40973 20.5903 4.71569 20.782 5.09202C21 5.51984 21 6.0799 21 7.2V20Z\" stroke=\"#ffffff\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> </g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button nbactive\" onclick=\"loadPage('info',this,true)\"><svg viewBox=\"-0.5 0 25 25\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M12 21.5C17.1086 21.5 21.25 17.3586 21.25 12.25C21.25 7.14137 17.1086 3 12 3C6.89137 3 2.75 7.14137 2.75 12.25C2.75 17.3586 6.89137 21.5 12 21.5Z\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> <path d=\"M12.9309 8.15005C12.9256 8.39231 12.825 8.62272 12.6509 8.79123C12.4767 8.95974 12.2431 9.05271 12.0008 9.05002C11.8242 9.04413 11.6533 8.98641 11.5093 8.884C11.3652 8.7816 11.2546 8.63903 11.1911 8.47415C11.1275 8.30927 11.1139 8.12932 11.152 7.95675C11.19 7.78419 11.278 7.6267 11.405 7.50381C11.532 7.38093 11.6923 7.29814 11.866 7.26578C12.0397 7.23341 12.2192 7.25289 12.3819 7.32181C12.5446 7.39072 12.6834 7.506 12.781 7.65329C12.8787 7.80057 12.9308 7.97335 12.9309 8.15005ZM11.2909 16.5301V11.1501C11.2882 11.0556 11.3046 10.9615 11.3392 10.8736C11.3738 10.7857 11.4258 10.7057 11.4922 10.6385C11.5585 10.5712 11.6378 10.518 11.7252 10.4822C11.8126 10.4464 11.9064 10.4286 12.0008 10.43C12.094 10.4299 12.1863 10.4487 12.272 10.4853C12.3577 10.5218 12.4352 10.5753 12.4997 10.6426C12.5642 10.7099 12.6143 10.7895 12.6472 10.8767C12.6801 10.9639 12.6949 11.0569 12.6908 11.1501V16.5301C12.6908 16.622 12.6727 16.713 12.6376 16.7979C12.6024 16.8828 12.5508 16.96 12.4858 17.025C12.4208 17.09 12.3437 17.1415 12.2588 17.1767C12.1738 17.2119 12.0828 17.23 11.9909 17.23C11.899 17.23 11.8079 17.2119 11.723 17.1767C11.6381 17.1415 11.5609 17.09 11.4959 17.025C11.4309 16.96 11.3793 16.8828 11.3442 16.7979C11.309 16.713 11.2909 16.622 11.2909 16.5301Z\" fill=\"currentColor\"></path> </g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('messages',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M7 9H17M7 13H17M21 20L17.6757 18.3378C17.4237 18.2118 17.2977 18.1488 17.1656 18.1044C17.0484 18.065 16.9277 18.0365 16.8052 18.0193C16.6672 18 16.5263 18 16.2446 18H6.2C5.07989 18 4.51984 18 4.09202 17.782C3.71569 17.5903 3.40973 17.2843 3.21799 16.908C3 16.4802 3 15.9201 3 14.8V7.2C3 6.07989 3 5.51984 3.21799 5.09202C3.40973 4.71569 3.71569 4.40973 4.09202 4.21799C4.51984 4 5.0799 4 6.2 4H17.8C18.9201 4 19.4802 4 19.908 4.21799C20.2843 4.40973 20.5903 4.71569 20.782 5.09202C21 5.51984 21 6.0799 21 7.2V20Z\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> </g></svg></Button>\n");
 #if defined(ENABLE_MSGSTORE)
     // Stage 3 store node: envelope icon from docs/design/mailbox-page-mockup.html, placed
     // right after Messages. Non-eligible boards never emit this button, so a stray click
     // would 404 anyway, but there is no click to have.
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mailbox',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M3 8l9 6 9-6\" stroke=\"#ffffff\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> <rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\" stroke=\"#ffffff\" stroke-width=\"1.6\"></rect> </g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mailbox',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M3 8l9 6 9-6\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> <rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\" stroke=\"currentColor\" stroke-width=\"1.6\"></rect> </g></svg></Button>\n");
 #endif
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('wx',this,true)\"><svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 512 512\" xml:space=\"preserve\" fill=\"#000000\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g > <style type=\"text/css\"> .st0{fill:#ffffff;} </style> <g> <path class=\"st0\" d=\"M115.958,269.922c16.999-10.12,36.842-15.916,58.04-15.916c2.556,0,5.127,0.078,7.682,0.234 c7.199-24.681,20.957-46.355,39.203-63.12c-3.49-39.437-36.562-70.32-76.879-70.32c-42.647,0-77.207,34.56-77.207,77.199 C66.798,230.766,87.194,258.719,115.958,269.922z\"></path> <rect x=\"135.652\" y=\"54.002\" class=\"st0\" width=\"16.696\" height=\"45.911\"></rect> <polygon class=\"st0\" points=\"102.184,108.88 79.232,69.116 64.772,77.467 87.724,117.232 \"></polygon> <polygon class=\"st0\" points=\"15.114,133.233 54.878,156.185 63.23,141.726 23.466,118.774 \"></polygon> <polygon class=\"st0\" points=\"45.919,189.654 0,189.654 0,206.35 45.919,206.342 \"></polygon> <polygon class=\"st0\" points=\"15.114,262.77 23.466,277.23 63.23,254.27 54.878,239.811 \"></polygon> <rect x=\"240.478\" y=\"114.523\" transform=\"matrix(0.4998 0.8661 -0.8661 0.4998 243.5358 -146.7501)\" class=\"st0\" width=\"16.694\" height=\"45.913\"></rect> <polygon class=\"st0\" points=\"223.228,77.467 208.776,69.116 185.817,108.88 200.269,117.232 \"></polygon> <path class=\"st0\" d=\"M431.997,298c-0.031,0-0.062,0.008-0.101,0.008c0.054-1.332,0.101-2.665,0.101-4.004 C431.997,229.932,380.064,178,316,178c-60.012,0-109.382,45.575-115.388,104.006c-8.414-2.602-17.342-4.005-26.614-4.005 C124.294,278.001,84,318.295,84,368c0,49.704,40.294,89.998,89.998,89.998h257.999c44.182,0,80.003-35.814,80.003-79.995 C512,333.814,476.178,298,431.997,298z\"></path> </g> </g></svg></Button>\n");
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('position',this,true)\"><svg viewBox=\"0 0 512 512\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"#ffffff\" stroke=\"#ffffff\"><g stroke-width=\"0\"></g><g istroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path fill=\"#ffffff\" d=\"M256 17.108c-75.73 0-137.122 61.392-137.122 137.122.055 23.25 6.022 46.107 11.58 56.262L256 494.892l119.982-274.244h-.063c11.27-20.324 17.188-43.18 17.202-66.418C393.122 78.5 331.73 17.108 256 17.108zm0 68.56a68.56 68.56 0 0 1 68.56 68.562A68.56 68.56 0 0 1 256 222.79a68.56 68.56 0 0 1-68.56-68.56A68.56 68.56 0 0 1 256 85.67z\"></path></g></svg></Button>\n");
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mheard',this,true)\"><svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 32 32\" xml:space=\"preserve\" fill=\"#000000\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <style type=\"text/css\"> .linesandangles_een{fill:#ffffff;} </style> <path class=\"linesandangles_een\" d=\"M25,13c0,3.348-2.208,7.455-4.286,9.618c-0.527,0.549-0.902,1.188-1.299,1.863 C18.447,26.131,17.35,28,14,28c-3.616,0-5.077-2.068-6.043-3.437c-0.238-0.337-0.464-0.657-0.664-0.856l1.414-1.414 C9.028,22.614,9.301,23,9.59,23.41C10.49,24.683,11.42,26,14,26c2.205,0,2.796-1.007,3.69-2.531 c0.417-0.711,0.891-1.517,1.581-2.236C21.064,19.366,23,15.687,23,13c0-3.86-3.14-7-7-7s-7,3.14-7,7H7c0-4.962,4.038-9,9-9 S25,8.038,25,13z M12,17h-1v2h1c1.206,0,3-0.799,3-3c0-1.639-0.994-2.5-2-2.833v-0.161C13.006,12.503,13.177,10,16,10 s2.994,2.503,3,3.005L20,13h1c0-1.729-1.045-5-5-5s-5,3.271-5,5l0.014,1.975L11.988,15C12.45,15.012,13,15.195,13,16 S12.45,16.988,12,17z\"></path> </g></svg></Button>\n");
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('path',this,true)\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path fill=\"#ffffff\" fill-rule=\"evenodd\" d=\"M13 0a3 3 0 00-1.65 5.506 7.338 7.338 0 01-.78 1.493c-.22.32-.472.635-.8 1.025a1.509 1.509 0 00-.832.085 12.722 12.722 0 00-1.773-1.124c-.66-.34-1.366-.616-2.215-.871a1.5 1.5 0 10-2.708 1.204c-.9 1.935-1.236 3.607-1.409 5.838a1.5 1.5 0 101.497.095c.162-2.07.464-3.55 1.25-5.253.381-.02.725-.183.979-.435.763.23 1.367.471 1.919.756a11.13 11.13 0 011.536.973 1.5 1.5 0 102.899-.296c.348-.415.64-.779.894-1.148.375-.548.665-1.103.964-1.857A3 3 0 1013 0zm-1.5 3a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z\" clip-rule=\"evenodd\"></path></g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('wx',this,true)\"><svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 512 512\" xml:space=\"preserve\" fill=\"#000000\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g > <style type=\"text/css\"> .st0{fill:currentColor;} </style> <g> <path class=\"st0\" d=\"M115.958,269.922c16.999-10.12,36.842-15.916,58.04-15.916c2.556,0,5.127,0.078,7.682,0.234 c7.199-24.681,20.957-46.355,39.203-63.12c-3.49-39.437-36.562-70.32-76.879-70.32c-42.647,0-77.207,34.56-77.207,77.199 C66.798,230.766,87.194,258.719,115.958,269.922z\"></path> <rect x=\"135.652\" y=\"54.002\" class=\"st0\" width=\"16.696\" height=\"45.911\"></rect> <polygon class=\"st0\" points=\"102.184,108.88 79.232,69.116 64.772,77.467 87.724,117.232 \"></polygon> <polygon class=\"st0\" points=\"15.114,133.233 54.878,156.185 63.23,141.726 23.466,118.774 \"></polygon> <polygon class=\"st0\" points=\"45.919,189.654 0,189.654 0,206.35 45.919,206.342 \"></polygon> <polygon class=\"st0\" points=\"15.114,262.77 23.466,277.23 63.23,254.27 54.878,239.811 \"></polygon> <rect x=\"240.478\" y=\"114.523\" transform=\"matrix(0.4998 0.8661 -0.8661 0.4998 243.5358 -146.7501)\" class=\"st0\" width=\"16.694\" height=\"45.913\"></rect> <polygon class=\"st0\" points=\"223.228,77.467 208.776,69.116 185.817,108.88 200.269,117.232 \"></polygon> <path class=\"st0\" d=\"M431.997,298c-0.031,0-0.062,0.008-0.101,0.008c0.054-1.332,0.101-2.665,0.101-4.004 C431.997,229.932,380.064,178,316,178c-60.012,0-109.382,45.575-115.388,104.006c-8.414-2.602-17.342-4.005-26.614-4.005 C124.294,278.001,84,318.295,84,368c0,49.704,40.294,89.998,89.998,89.998h257.999c44.182,0,80.003-35.814,80.003-79.995 C512,333.814,476.178,298,431.997,298z\"></path> </g> </g></svg></Button>\n");
+    { // Pins page: any switchable pin (board LED, charge LED, MCP23017) or a pin assignment; the page, /pinstatus and /pinassign show what exists
+        const LedFitted pinHw = ledFittedNow();
+        bool pinAsg = false;
+        for (int i = 0; i < (int)PIN_FN_COUNT; i++)
+            pinAsg = pinAsg || pinAssignAvail((PinFunc)i);
+        if (pinHw.board || pinHw.charge || bMCP23017 || pinAsg || gpioStatusCollect(NULL, 0))
+            web_client.println("<Button class=\"nav_button\" title=\"Pins\" aria-label=\"Pins\" onclick=\"loadPage('pins',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><circle cx=\"7\" cy=\"7\" r=\"2.5\"></circle><circle cx=\"17\" cy=\"7\" r=\"2.5\" fill=\"currentColor\"></circle><circle cx=\"7\" cy=\"17\" r=\"2.5\" fill=\"currentColor\"></circle><circle cx=\"17\" cy=\"17\" r=\"2.5\"></circle></g></svg></Button>\n");
+    }
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('position',this,true)\"><svg viewBox=\"0 0 512 512\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"currentColor\" stroke=\"currentColor\"><g stroke-width=\"0\"></g><g istroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path fill=\"currentColor\" d=\"M256 17.108c-75.73 0-137.122 61.392-137.122 137.122.055 23.25 6.022 46.107 11.58 56.262L256 494.892l119.982-274.244h-.063c11.27-20.324 17.188-43.18 17.202-66.418C393.122 78.5 331.73 17.108 256 17.108zm0 68.56a68.56 68.56 0 0 1 68.56 68.562A68.56 68.56 0 0 1 256 222.79a68.56 68.56 0 0 1-68.56-68.56A68.56 68.56 0 0 1 256 85.67z\"></path></g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('remote',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"11\" r=\"2\"></circle><path d=\"M8.5 7.5a5 5 0 0 0 0 7M15.5 7.5a5 5 0 0 1 0 7M5.5 4.5a9 9 0 0 0 0 13M18.5 4.5a9 9 0 0 1 0 13M12 13v8M9 21h6\"></path></g></svg></Button>\n");   // RM GUI W2b: Remote
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mheard',this,true)\"><svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 32 32\" xml:space=\"preserve\" fill=\"#000000\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <style type=\"text/css\"> .linesandangles_een{fill:currentColor;} </style> <path class=\"linesandangles_een\" d=\"M25,13c0,3.348-2.208,7.455-4.286,9.618c-0.527,0.549-0.902,1.188-1.299,1.863 C18.447,26.131,17.35,28,14,28c-3.616,0-5.077-2.068-6.043-3.437c-0.238-0.337-0.464-0.657-0.664-0.856l1.414-1.414 C9.028,22.614,9.301,23,9.59,23.41C10.49,24.683,11.42,26,14,26c2.205,0,2.796-1.007,3.69-2.531 c0.417-0.711,0.891-1.517,1.581-2.236C21.064,19.366,23,15.687,23,13c0-3.86-3.14-7-7-7s-7,3.14-7,7H7c0-4.962,4.038-9,9-9 S25,8.038,25,13z M12,17h-1v2h1c1.206,0,3-0.799,3-3c0-1.639-0.994-2.5-2-2.833v-0.161C13.006,12.503,13.177,10,16,10 s2.994,2.503,3,3.005L20,13h1c0-1.729-1.045-5-5-5s-5,3.271-5,5l0.014,1.975L11.988,15C12.45,15.012,13,15.195,13,16 S12.45,16.988,12,17z\"></path> </g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('path',this,true)\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M13 0a3 3 0 00-1.65 5.506 7.338 7.338 0 01-.78 1.493c-.22.32-.472.635-.8 1.025a1.509 1.509 0 00-.832.085 12.722 12.722 0 00-1.773-1.124c-.66-.34-1.366-.616-2.215-.871a1.5 1.5 0 10-2.708 1.204c-.9 1.935-1.236 3.607-1.409 5.838a1.5 1.5 0 101.497.095c.162-2.07.464-3.55 1.25-5.253.381-.02.725-.183.979-.435.763.23 1.367.471 1.919.756a11.13 11.13 0 011.536.973 1.5 1.5 0 102.899-.296c.348-.415.64-.779.894-1.148.375-.548.665-1.103.964-1.857A3 3 0 1013 0zm-1.5 3a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z\" clip-rule=\"evenodd\"></path></g></svg></Button>\n");
     // NBR-W2: Menueknopf fuer die Nachbarschaftsmatrix -- 3x3-Raster als Icon, Konzept 4.5.
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('neighbours',this,true)\"><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\"><g stroke=\"#ffffff\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"3\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"3\" y=\"16\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"16\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"16\" width=\"5\" height=\"5\"></rect></g></svg></Button>\n");
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('rxlog',this,true)\"><svg viewBox=\"0 0 32 32\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:sketch=\"http://www.bohemiancoding.com/sketch/ns\" fill=\"#ffffff\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <title>book-album</title> <desc>Created with Sketch Beta.</desc><defs></defs><g stroke=\"none\" stroke-width=\"1\" fill=\"none\" fill-rule=\"evenodd\" sketch:type=\"MSPage\"> <g sketch:type=\"MSLayerGroup\" transform=\"translate(-412.000000, -99.000000)\" fill=\"#ffffff\"> <path d=\"M442,124 C442,125.104 441.073,125.656 440,126 C440,126 434.557,127.515 429,128.977 L429,104 L440,101 C441.104,101 442,101.896 442,103 L442,124 L442,124 Z M427,128.998 C421.538,127.53 416,126 416,126 C414.864,125.688 414,125.104 414,124 L414,103 C414,101.896 414.896,101 416,101 L427,104 L427,128.998 L427,128.998 Z M440,99 C440,99 434.211,100.594 428.95,102 C428.291,102.025 427.627,102 426.967,102 C421.955,100.656 416,99 416,99 C413.791,99 412,100.791 412,103 L412,124 C412,126.209 413.885,127.313 416,128 C416,128 421.393,129.5 426.967,131 L428.992,131 C434.612,129.5 440,128 440,128 C442.053,127.469 444,126.209 444,124 L444,103 C444,100.791 442.209,99 440,99 L440,99 Z\" sketch:type=\"MSShapeGroup\"> </path> </g> </g> </g></svg></Button>\n");
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('spectrum',this,true)\"><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g><path d=\"M13,11v4M9,7v8m8-6v6\" style=\"fill:none;stroke:#ffffff;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;\"></path><path d=\"M3,19H21M5,3V21\" style=\"fill:none;stroke:#ffffff;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;\"></path></g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('neighbours',this,true)\"><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\"><g stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"3\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"3\" y=\"16\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"16\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"16\" width=\"5\" height=\"5\"></rect></g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('rxlog',this,true)\"><svg viewBox=\"0 0 32 32\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:sketch=\"http://www.bohemiancoding.com/sketch/ns\" fill=\"currentColor\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <title>book-album</title> <desc>Created with Sketch Beta.</desc><defs></defs><g stroke=\"none\" stroke-width=\"1\" fill=\"none\" fill-rule=\"evenodd\" sketch:type=\"MSPage\"> <g sketch:type=\"MSLayerGroup\" transform=\"translate(-412.000000, -99.000000)\" fill=\"currentColor\"> <path d=\"M442,124 C442,125.104 441.073,125.656 440,126 C440,126 434.557,127.515 429,128.977 L429,104 L440,101 C441.104,101 442,101.896 442,103 L442,124 L442,124 Z M427,128.998 C421.538,127.53 416,126 416,126 C414.864,125.688 414,125.104 414,124 L414,103 C414,101.896 414.896,101 416,101 L427,104 L427,128.998 L427,128.998 Z M440,99 C440,99 434.211,100.594 428.95,102 C428.291,102.025 427.627,102 426.967,102 C421.955,100.656 416,99 416,99 C413.791,99 412,100.791 412,103 L412,124 C412,126.209 413.885,127.313 416,128 C416,128 421.393,129.5 426.967,131 L428.992,131 C434.612,129.5 440,128 440,128 C442.053,127.469 444,126.209 444,124 L444,103 C444,100.791 442.209,99 440,99 L440,99 Z\" sketch:type=\"MSShapeGroup\"> </path> </g> </g> </g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('spectrum',this,true)\"><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g><path d=\"M13,11v4M9,7v8m8-6v6\" style=\"fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;\"></path><path d=\"M3,19H21M5,3V21\" style=\"fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;\"></path></g></svg></Button>\n");
     if(bMCP23017) {
-        web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mcp23017',this,true)\"><svg width=\"48\" height=\"48\" version=\"1.1\" viewBox=\"0 0 12.7 12.7\" xmlns=\"http://www.w3.org/2000/svg\"><g fill=\"none\" stroke=\"#ffffff\" stroke-linejoin=\"round\"><rect x=\".78644\" y=\".78644\" width=\"11.127\" height=\"5.4354\" stroke-width=\"1.0\"/><g stroke-linecap=\"round\" stroke-width=\"1.0\"><path d=\"m0.79071 8.2113h11.119\"/><path d=\"m0.79679 9.7926h11.119\"/><path d=\"m0.79679 11.38h11.119\"/></g></g></svg></Button>\n");
+        web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mcp23017',this,true)\"><svg width=\"48\" height=\"48\" version=\"1.1\" viewBox=\"0 0 12.7 12.7\" xmlns=\"http://www.w3.org/2000/svg\"><g fill=\"none\" stroke=\"currentColor\" stroke-linejoin=\"round\"><rect x=\".78644\" y=\".78644\" width=\"11.127\" height=\"5.4354\" stroke-width=\"1.0\"/><g stroke-linecap=\"round\" stroke-width=\"1.0\"><path d=\"m0.79071 8.2113h11.119\"/><path d=\"m0.79679 9.7926h11.119\"/><path d=\"m0.79679 11.38h11.119\"/></g></g></svg></Button>\n");
     }
 
     // Setup Button (Image as base64 and split t0 several print() so RAK can handle it)
@@ -1851,14 +1608,13 @@ void deliver_scaffold(bool bget_password)
     web_client.print("IuNTE5NzYgOS4xMzA4IDIuNjYyMjcgOS42NjI2NiAyLjk4NTE4IDEwLjA4MzVDMy4xMzI1NiAxMC4yNzU2IDMuMzM5NyAxMC40MzcgMy42NjExOSAxMC42MzlDNC4xMzM4IDEwLjkzNiA0LjQzNzg5IDExLjQ0MTkgNC40Mzc4NiAxMkM0LjQzNzgzIDEyLjU1ODEgNC4xMzM3NSAxMy4wNjM5IDMuNjYxMTggMTMuMzYwOEMzLjMzOTY1IDEzLjU2MjkgMy4xMzI0OCAxMy43MjQ0IDIuOTg1MDggMTMuOTE2NUMyLjY2MjE3IDE0LjMzNzMgMi41MTk2NiAxNC44NjkxIDIuNTg4OSAxNS4zOTVDMi42NDA4MiAxNS43ODk0IDIuODczNzkgMTYuMTkzIDMuMzM5NzMgMTdDMy44MDU2OCAxNy44MDcgNC4wMzg2NSAxOC4yMTA2IDQuMzU0MjYgMTguNDUyN0M0Ljc3NTA4IDE4Ljc3NTYgNS4zMDY5NCAxOC45MTgxIDUuODMyODQgMTguODQ4OUM2LjA3Mjg5IDE4LjgxNzMgNi4zMTYzMiAxOC43MTg2IDYuNjUyMDQgMTguNTQxMkM3LjE0NTQ3IDE4LjI4MDQgNy43MzU1NiAxOC4yNyA4LjIxODkgMTguNTQ5QzguNzAyMjQgMTguODI4MSA4Ljk4ODI2IDE5LjM0NDMgOS4wMDkxMSAxOS45MDIxQzkuMDIzMzEgMjAuMjgxNSA5LjA1OTU3IDIwLjU0MTcgOS4xNTIyMyAyMC43NjU0QzkuMzU1MjIgMjEuMjU1NCA5Ljc0NDU3IDIxLjY0NDggMTAuMjM0NiAyMS44NDc4QzEwLjYwMjIgMjIgMTEuMDY4MSAyMiAxMiAyMkMxMi45MzE5IDIyIDEzLjM5NzggMjIgMTMuNzY1NCAyMS44NDc4QzE0LjI1NTQgMjEuNjQ0OCAxNC42NDQ4IDIxLjI1NTQgMTQuODQ3NyAyMC43NjU0QzE0Ljk0MDQgM");
     web_client.print("jAuNTQxNyAxNC45NzY3IDIwLjI4MTUgMTQuOTkwOSAxOS45MDJDMTUuMDExNyAxOS4zNDQzIDE1LjI5NzcgMTguODI4MSAxNS43ODEgMTguNTQ5QzE2LjI2NDMgMTguMjY5OSAxNi44NTQ0IDE4LjI4MDQgMTcuMzQ3OSAxOC41NDEyQzE3LjY4MzYgMTguNzE4NiAxNy45MjcgMTguODE3MiAxOC4xNjcgMTguODQ4OEMxOC42OTI5IDE4LjkxODEgMTkuMjI0OCAxOC43NzU2IDE5LjY0NTYgMTguNDUyN0MxOS45NjEyIDE4LjIxMDUgMjAuMTk0MiAxNy44MDcgMjAuNjYwMSAxNi45OTk5QzIxLjEyNjEgMTYuMTkyOSAyMS4zNTkxIDE1Ljc4OTQgMjEuNDExIDE1LjM5NUMyMS40ODAyIDE0Ljg2OTEgMjEuMzM3NyAxNC4zMzcyIDIxLjAxNDggMTMuOTE2NEMyMC44Njc0IDEzLjcyNDMgMjAuNjYwMiAxMy41NjI4IDIwLjMzODcgMTMuMzYwOEMxOS44NjYyIDEzLjA2MzkgMTkuNTYyMSAxMi41NTggMTkuNTYyMSAxMS45OTk5QzE5LjU2MjEgMTEuNDQxOCAxOS44NjYyIDEwLjkzNjEgMjAuMzM4NyAxMC42MzkyQzIwLjY2MDMgMTAuNDM3MSAyMC44Njc1IDEwLjI3NTcgMjEuMDE0OSAxMC4wODM1QzIxLjMzNzggOS42NjI3MyAyMS40ODAzIDkuMTMwODcgMjEuNDExMSA4LjYwNDk3QzIxLjM1OTIgOC4yMTA1NSAyMS4xMjYyIDcuODA3MDMgMjAuNjYwMiA3QzIwLjE5NDMgNi4xOTI5NyAxOS45NjEzIDUuNzg5NDUgMTkuNjQ1NyA1LjU0NzI3QzE5LjIyNDkgNS4yMjQzNiAxOC42OTMgNS4wODE4NSAxOC4xNjcxIDUuMTUxMDlDMTcuOTI3MSA1LjE4MjY5IDE3LjY4MzcgNS4y");
     web_client.println("ODEzNiAxNy4zNDc5IDUuNDU4OEMxNi44NTQ1IDUuNzE5NTkgMTYuMjY0NCA1LjczMDAyIDE1Ljc4MTEgNS40NTA5NkMxNS4yOTc3IDUuMTcxOTEgMTUuMDExNyA0LjY1NTY2IDE0Ljk5MDkgNC4wOTc5NEMxNC45NzY3IDMuNzE4NDggMTQuOTQwNCAzLjQ1ODMzIDE0Ljg0NzcgMy4yMzQ2M0MxNC42NDQ4IDIuNzQ0NTggMTQuMjU1NCAyLjM1NTIzIDEzLjc2NTQgMi4xNTIyNFoiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiPjwvcGF0aD48L2c+PC9zdmc+\"></Button>\n");
-    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('remote',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke=\"#ffffff\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"11\" r=\"2\"></circle><path d=\"M8.5 7.5a5 5 0 0 0 0 7M15.5 7.5a5 5 0 0 1 0 7M5.5 4.5a9 9 0 0 0 0 13M18.5 4.5a9 9 0 0 1 0 13M12 13v8M9 21h6\"></path></g></svg></Button>\n");   // RM GUI W2b: Remote
 
-    web_client.println("<Button class=\"nav_button extra_space\" onclick=\"if(confirm('Node will reboot, are you sure?')){callfunction('reboot','');}\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke=\"#FFFFFF\" stroke-width=\"0.032\"></g><g><path d=\"m 8 0 c -0.550781 0 -1 0.449219 -1 1 v 5 c 0 0.550781 0.449219 1 1 1 s 1 -0.449219 1 -1 v -5 c 0 -0.550781 -0.449219 -1 -1 -1 z m -7 1 l 2.050781 2.050781 c -2.117187 2.117188 -2.652343 5.355469 -1.332031 8.039063 c 1.324219 2.683594 4.214844 4.238281 7.179688 3.851562 c 2.96875 -0.386718 5.367187 -2.625 5.960937 -5.554687 c 0.59375 -2.933594 -0.75 -5.929688 -3.335937 -7.433594 c -0.476563 -0.28125 -1.089844 -0.117187 -1.367188 0.359375 s -0.117188 1.089844 0.359375 1.367188 c 1.851563 1.078124 2.808594 3.207031 2.382813 5.3125 c -0.421876 2.101562 -2.128907 3.691406 -4.253907 3.96875 c -2.128906 0.273437 -4.183593 -0.828126 -5.128906 -2.753907 s -0.566406 -4.226562 0.949219 -5.742187 l 1.535156 1.535156 v -4.003906 c 0 -0.519532 -0.449219 -0.996094 -1 -0.996094 z m 0 0 \" fill=\"#FFFFFF\"></path></g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button extra_space\" onclick=\"if(confirm('Node will reboot, are you sure?')){callfunction('reboot','');}\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke=\"currentColor\" stroke-width=\"0.032\"></g><g><path d=\"m 8 0 c -0.550781 0 -1 0.449219 -1 1 v 5 c 0 0.550781 0.449219 1 1 1 s 1 -0.449219 1 -1 v -5 c 0 -0.550781 -0.449219 -1 -1 -1 z m -7 1 l 2.050781 2.050781 c -2.117187 2.117188 -2.652343 5.355469 -1.332031 8.039063 c 1.324219 2.683594 4.214844 4.238281 7.179688 3.851562 c 2.96875 -0.386718 5.367187 -2.625 5.960937 -5.554687 c 0.59375 -2.933594 -0.75 -5.929688 -3.335937 -7.433594 c -0.476563 -0.28125 -1.089844 -0.117187 -1.367188 0.359375 s -0.117188 1.089844 0.359375 1.367188 c 1.851563 1.078124 2.808594 3.207031 2.382813 5.3125 c -0.421876 2.101562 -2.128907 3.691406 -4.253907 3.96875 c -2.128906 0.273437 -4.183593 -0.828126 -5.128906 -2.753907 s -0.566406 -4.226562 0.949219 -5.742187 l 1.535156 1.535156 v -4.003906 c 0 -0.519532 -0.449219 -0.996094 -1 -0.996094 z m 0 0 \" fill=\"currentColor\"></path></g></svg></Button>\n");
 
     // if the suer has set a password, we deliver a logout button
     if (strlen(meshcom_settings.node_webpwd) > 0)
     {
-        web_client.println("<Button class=\"nav_button\" onclick=\"if(confirm('Logging out, are you sure?')){logout()};\"><svg fill=\"#ffffff\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path d=\"M7.707,8.707,5.414,11H17a1,1,0,0,1,0,2H5.414l2.293,2.293a1,1,0,1,1-1.414,1.414l-4-4a1,1,0,0,1,0-1.414l4-4A1,1,0,1,1,7.707,8.707ZM21,1H13a1,1,0,0,0,0,2h7V21H13a1,1,0,0,0,0,2h8a1,1,0,0,0,1-1V2A1,1,0,0,0,21,1Z\"></path></g></svg></Button>\n");
+        web_client.println("<Button class=\"nav_button\" onclick=\"if(confirm('Logging out, are you sure?')){logout()};\"><svg fill=\"currentColor\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path d=\"M7.707,8.707,5.414,11H17a1,1,0,0,1,0,2H5.414l2.293,2.293a1,1,0,1,1-1.414,1.414l-4-4a1,1,0,0,1,0-1.414l4-4A1,1,0,1,1,7.707,8.707ZM21,1H13a1,1,0,0,0,0,2h7V21H13a1,1,0,0,0,0,2h8a1,1,0,0,0,1-1V2A1,1,0,0,0,21,1Z\"></path></g></svg></Button>\n");
     }
     web_client.printf("</div>\n<div id=\"head_layer\"><p class=\"font-small\">Meshcom %s%s</p><p class=\"font-bold\">%s</p></div>\n</div>\n", SOURCE_VERSION, SOURCE_VERSION_WEB_SUB, meshcom_settings.node_call);
     if(gwRegBlocked())
@@ -2120,7 +1876,7 @@ void sub_page_wx()
     web_client.printf("<tr><td>BME680</td><td>%s %s</td></tr>\n", (bBME680ON ? "on" : "off"), c680);
     web_client.printf("<tr><td>MCU811</td><td>%s %s</td></tr>\n", (bMCU811ON ? "on" : "off"), c811);
     web_client.printf("<tr><td>LPS33</td><td>%s (RAK)</td></tr>\n", (bLPS33 ? "on" : "off"));
-    web_client.printf("<tr><td>1-Wire</td><td>%s (GPIO %i)</td></tr>\n", (bONEWIRE ? "on" : "off"), meshcom_settings.node_owgpio);
+    web_client.printf("<tr><td>1-Wire</td><td>%s (GPIO %i, DHT%i)</td></tr>\n", (bONEWIRE ? "on" : "off"), meshcom_settings.node_owgpio, meshcom_settings.node_dht_type); // SENS-05(c): DHT11 or DHT22 (--dht)
     web_client.printf("<tr><td>Temperature</td><td>%.1f &deg;C</td></tr>\n", meshcom_settings.node_temp);
     web_client.printf("<tr><td>Tout</td><td>%.1f &deg;C</td></tr>\n", meshcom_settings.node_temp2);
     web_client.printf("<tr><td>Humidity</td><td>%.1f%% rH</td></tr>\n", meshcom_settings.node_hum);
@@ -2213,7 +1969,7 @@ void sub_page_mheard()
     web_client.println("<div id=\"content_inner\">");
     // W4d: Legende fuer die zweite Kaertchenzeile (title= wirkt auf dem
     // Telefon nicht, deshalb als Text).
-    web_client.print("<p style=\"font-size:var(--fs-s);color:#555;max-width:900px;\">"
+    web_client.print("<p style=\"font-size:var(--fs-s);color:var(--mcmute);max-width:900px;\">"
                      "Stations I heard directly in the last 3 h, newest first. "
                      "Last heard: minutes since I last received it directly. "
                      "Hears me: its own reports say it hears me, at this SNR. "
@@ -2681,7 +2437,7 @@ void sub_page_path()
 
     // Legende, wie bei sub_page_neighbours() unten: title= wirkt auf dem
     // Telefon nicht, deshalb stehen dieselben Erklaerungen hier als Text.
-    web_client.print("<p style=\"font-size:var(--fs-s);color:#555;\">"
+    web_client.print("<p style=\"font-size:var(--fs-s);color:var(--mcmute);\">"
                       "Hops: 0 = me, 1 = direct neighbour, 2+ = reached via other nodes."
                       " | Firmware: the version the station puts into its own frames, '-' until one arrives or beyond 2 hops."
                       " | Hears me: SNR at which that neighbour last reported hearing me, '-' if unknown or not a direct/2-hop row."
@@ -2979,11 +2735,11 @@ void sub_page_neighbours()
         // Zeilenfarbe nach Rolle, nicht mehr nach <verdict> (6.1, Regel 2):
         // Zeile 0 blau, der Super-Node gruen, E_self weiterhin rot.
         if (X == 0)
-            web_client.print("<tr style=\"background-color:#d9ecff;\">");
+            web_client.print("<tr class=\"nbr-me\">");
         else if ((int)i == superI)
-            web_client.print("<tr style=\"background-color:#d9f5d9;\">");
+            web_client.print("<tr class=\"nbr-super\">");
         else if (rowESelf)
-            web_client.print("<tr style=\"background-color:#ffd9d9;\">");
+            web_client.print("<tr class=\"nbr-eself\">");
         else
             web_client.print("<tr>");
         web_client.printf("<td class=\"font-bold\">%u ", (unsigned)(i + 1));
@@ -3137,7 +2893,7 @@ void sub_page_neighbours()
     // Legende (6.1, Kopf): title= wirkt auf dem Telefon nicht, deshalb
     // stehen dieselben Erklaerungen hier zusaetzlich als Text (W4c: Cov dazu,
     // die "Covered by"-Spalte der geloeschten Zeilentabelle).
-    web_client.print("<p style=\"font-size:var(--fs-s);color:#555;\">"
+    web_client.print("<p style=\"font-size:var(--fs-s);color:var(--mcmute);\">"
                       "D/I: Direct: heard by me over the air. Indirect: only via a neighbour."
                       " | G: Gateway: a HEY addressed to HG was seen from this node. 'no' means not observed."
                       " | M: Mesh: relays foreign frames, from its last position frame."
@@ -3188,18 +2944,6 @@ void sub_page_neighbours()
     // calls nbrRelayNeed()/nbrCoverMask() itself, so there is no sym-aware
     // call to thread the flag through, only this status line.
     web_client.printf("<p>Symmetry: %s (SNR &gt;= %d dB)</p>", (bNBRSYM ? "on" : "off"), (int)NBR_SYM_MIN_SNR);
-
-    // Stufe 3 (--nbrreport): eigener HN-Bericht, unabhaengig vom Trickle-HEY
-    // oben. "auto" sendet nur, wenn weder Mesh-Relay noch Gateway-Betrieb an
-    // sind (nbrReportTick() in loop_functions.cpp) -- die dritte Zeile sagt
-    // fuer den aktuell konfigurierten Modus dazu, ob das gerade zutrifft.
-    {
-        const char *nbrreport_mode = bNBRRPTOFF ? "off" : (bNBRRPTON ? "on" : "auto");
-        bool nbrreport_sends_now = bNBRRPTON || (!bNBRRPTOFF && !bMESH && !bGATEWAY);
-        web_client.printf("<p>HN report: %s (every %d min, SNR &gt;= %d dB)%s</p>",
-                           nbrreport_mode, (int)(NBR_REPORT_INTERVAL_S / 60), (int)LORA_SNR_STABLE_MIN_DB,
-                           (bNBRRPTOFF ? "" : (nbrreport_sends_now ? " -- sending" : " -- not sending (mesh/gateway on)")));
-    }
 
     web_client.println("</div>");
     web_client.println(); // The HTTP response ends with another blank line
@@ -3469,6 +3213,7 @@ static const char *webChargeLedText()
  * delivers the setup-page to be injected into the scaffold
  *
  */
+__attribute__((unused)) static void _create_setup_led_mode_element(const char id[], const char labelText[], const char descriptionText[], int mode);   // WEB-LED-01, below
 void sub_page_setup()
 {
     _create_meshcom_subheader("Node Setup");
@@ -3529,7 +3274,7 @@ void sub_page_setup()
     _create_setup_textinput_element("utcoffset", "UTC Offset", String(meshcom_settings.node_utcoff, 1).c_str(), "1.0", "utcoffset", 4, false, false); // create Textinput-Element including Label and Button
     // TZ-01: a set POSIX TZ rule overrides the fixed offset above; the offset then shows the derived value
     // node_tz is HTML-escaped: tzParse() accepts any alnum name inside <...>
-    // (e.g. "<plaintext>-1"), and a config import does not run tzParse() at all.
+    // (e.g. "<plaintext>-1"); a config import refuses a value tzParse() rejects (TZ-02).
     _create_setup_textinput_element("tz", "Timezone (POSIX TZ)", String(meshcom_settings.node_tz), "CET-1CEST,M3.5.0,M10.5.0/3", "tz", 39, false, false);
     web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">A set POSIX TZ rule overrides the fixed UTC offset (DST handled automatically); the UTC offset field then shows the derived value. Empty or &quot;none&quot; = fixed offset only.</p>");
     _create_setup_textinput_element("maxv", "max. Voltage", String(meshcom_settings.node_maxv, 3), "4.125", "maxv", 5, false, false);                 // create Textinput-Element including Label and Button
@@ -3541,15 +3286,67 @@ void sub_page_setup()
     _create_setup_switch_element("volt", "Voltage", "show batt. voltage, not percent", bDisplayVolt);           // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("via", "Via", "enable via", bVIA);    // create Switch-Element inclucing Label and Description
-    { // LED-08: only on a node that has the LED (the info page says "not fitted" otherwise); same console rows as --board led / --charge led
+    { // LED-08: only on a node that has the LED (the info page says "not fitted" otherwise); same console row as --charge led.
+      // The Board LED control lives on the Pins page only (operator 2026-11-07); its /setparam boardled handler stays.
         const LedFitted ledHw = ledFittedNow();
-#if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)   // same guard as the webSetup_setParam handler and the --board led console row
-        if (ledHw.board)
-            _create_setup_switch_element("boardled", "Board LED", "short heartbeat flash every 2 s", bUSER_BOARD_LED);
-#endif
         if (ledHw.charge)
             _create_setup_switch_element("chargeled", "Charge LED", "on = follows charging, off = dark", bCHARGE_LED);
     }
+    { // WEB-LOOK-01: look of this web page only (per browser, localStorage); buttons are marked by mcLookMark() after the page loads
+        // WEBLOOK-HTML-BEGIN
+        static const char *const themeNames[3] = {"auto", "light", "dark"};
+        static const char *const fontNames[3] = {"s", "m", "l"};
+        web_client.println("<div class=\"mcsegrow\"><label id=\"weblook_theme_lbl\">Web page theme <span class=\"font-small\">(this page, this browser)</span></label>");
+        web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"weblook_theme_lbl\">");
+        for (int i = 0; i < 3; i++)
+            web_client.printf("<button type=\"button\" class=\"mctab mcledbtn\" id=\"weblook_theme_%s\" aria-pressed=\"false\" onclick=\"mcLookSet('mcTheme','%s')\">%s</button>\n", themeNames[i], themeNames[i], themeNames[i]);
+        web_client.println("</div></div>");
+        web_client.println("<div class=\"mcsegrow\"><label id=\"weblook_font_lbl\">Web page font size <span class=\"font-small\">(this page, this browser)</span></label>");
+        web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"weblook_font_lbl\">");
+        for (int i = 0; i < 3; i++)
+            web_client.printf("<button type=\"button\" class=\"mctab mcledbtn\" id=\"weblook_font_%s\" aria-pressed=\"false\" onclick=\"mcLookSet('mcFont','%s')\">%s</button>\n", fontNames[i], fontNames[i], fontNames[i]);
+        web_client.println("</div></div>");
+        // WEBLOOK-HTML-END
+    }
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    { // TD-THEME-01 W3: T-Deck DISPLAY theme (not the web page theme); stored value 0 auto, 1 dark, 2 light; setparam tdecktheme -> --theme
+        // TD-HTML-BEGIN
+        web_client.println("<div class=\"mcsegrow\"><label id=\"tdtheme_lbl\">T-Deck display theme</label>");
+        web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"tdtheme_lbl\">");
+        static const int themeOrder[3] = {0, 2, 1}; // stored 0 auto, 1 dark, 2 light; shown auto - light - dark
+        for (int k = 0; k < 3; k++)
+        {
+            const int i = themeOrder[k];
+            const bool on = (meshcom_settings.node_tdeck_theme == i) || (i == 0 && meshcom_settings.node_tdeck_theme > 2);
+            web_client.printf("<button type=\"button\" class=\"mctab mcledbtn%s\" id=\"tdtheme_%s\" aria-pressed=\"%s\" onclick=\"tdSet('%s')\">%s</button>\n",
+                              on ? " mctab-on" : "", tdeck_theme_name(i), on ? "true" : "false", tdeck_theme_name(i), tdeck_theme_name(i));
+        }
+        web_client.println("</div></div>");
+        // TD-HTML-END
+    }
+    { // WEB-TD-01: T-Deck font size, display (backlight mode) and brightness, same order as the T-Deck setup page
+        // TD2-HTML-BEGIN
+        static const char *const fontNames[3] = {"s", "m", "l"};
+        static const char *const dispNames[3] = {"auto", "light", "dark"};
+        const int fontCur = meshcom_settings.node_tdeck_chatfont > 2 ? 0 : meshcom_settings.node_tdeck_chatfont;
+        const int dispCur = (int)brightness_mode_to_seg(brightnessMode());
+        web_client.println("<div class=\"mcsegrow\"><label id=\"tdfont_lbl\">T-Deck font size</label>");
+        web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"tdfont_lbl\">");
+        for (int i = 0; i < 3; i++)
+            web_client.printf("<button type=\"button\" class=\"mctab mcledbtn%s\" id=\"tdfont_%s\" aria-pressed=\"%s\" onclick=\"tdFont('%s')\">%s</button>\n",
+                              fontCur == i ? " mctab-on" : "", fontNames[i], fontCur == i ? "true" : "false", fontNames[i], fontNames[i]);
+        web_client.println("</div></div>");
+        web_client.println("<div class=\"mcsegrow\"><label id=\"tddisp_lbl\">T-Deck display backlight</label>");
+        web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"tddisp_lbl\">");
+        for (int i = 0; i < 3; i++)
+            web_client.printf("<button type=\"button\" class=\"mctab mcledbtn%s\" id=\"tddisp_%s\" aria-pressed=\"%s\" onclick=\"tdDisp('%s')\">%s</button>\n",
+                              dispCur == i ? " mctab-on" : "", dispNames[i], dispCur == i ? "true" : "false", dispNames[i], dispNames[i]);
+        web_client.println("</div></div>");
+        web_client.printf("<div class=\"mcsegrow\"><label for=\"tdbright\">T-Deck brightness</label><div class=\"mcsegval\"><input type=\"range\" id=\"tdbright\" min=\"1\" max=\"16\" value=\"%d\" oninput=\"document.getElementById('tdbright_val').textContent=this.value\" onchange=\"tdBright(this.value)\"> <span id=\"tdbright_val\">%d</span></div></div>\n",
+                          (int)brightnessActiveLevel(), (int)brightnessActiveLevel());
+        // TD2-HTML-END
+    }
+#endif
 
 // We support OTA only for ESP based devices, not RAK
 #ifdef ESP32
@@ -3585,6 +3382,7 @@ void sub_page_setup()
         web_client.printf("\t<option value=\"auto\" disabled %s>auto (coming soon)</option>\n", (au_mode == 2) ? "selected" : "");
         web_client.println("</select>");
         web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">auto: coming soon -- for now the node notifies only. Install new firmware from the Info page.</p>");
+
         if (!au_sb_ok && !fwNetBootloaderQio())
         {
             // AU-16: a DIO bootloader cannot start the Safeboot; the web flasher renews both
@@ -3651,6 +3449,30 @@ void sub_page_setup()
     web_client.println("</div></div>");
     // RA-HTML-END
 
+    // Web login password card (WEB-PWD-01): the login of this web page, not the RM/KISS password of the card above.
+    // WP-HTML-BEGIN
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
+    web_client.println("<label class=\"cardlabel\">Web login password</label>");
+    web_client.println("<span>Open this for the password that protects this web page.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
+    web_client.println("<div class=\"grid grid3\">");
+    web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">This is the login of this web page. It is not the Remote Admin password (RM, net console, KISS) above.</p>"
+                       "<style>#wp_msg:empty{display:none}</style>");
+    web_client.println("<label for=\"wp_pw\">New password :</label>"
+                       "<input type=\"password\" id=\"wp_pw\" maxlength=\"19\" size=\"10\" autocomplete=\"new-password\" placeholder=\"New web password\"><span></span>"
+                       "<label for=\"wp_pw2\">Repeat :</label>"
+                       "<input type=\"password\" id=\"wp_pw2\" maxlength=\"19\" size=\"10\" autocomplete=\"new-password\" placeholder=\"Repeat\">"
+                       "<button id=\"wp_set\" onclick=\"wpSet()\">Set</button>");
+    web_client.print("<span id=\"wp_st\" class=\"font-small\" style=\"grid-column:1/3\">");
+#define WP_ST_SET "web login password: set"
+#define WP_ST_NOT "web login password: not set"
+    web_client.print(strlen(meshcom_settings.node_webpwd) > 0 ? WP_ST_SET : WP_ST_NOT);   // only set / not set, never the password
+    web_client.println("</span><button id=\"wp_clr\" onclick=\"wpClr()\">Clear</button>"
+                       "<p id=\"wp_msg\" class=\"font-small\" style=\"grid-column:1/-1\"></p>"
+                       "<p class=\"font-small\" style=\"grid-column:1/-1\">1 to 19 plain characters. After setting or changing it you are logged out and log in again.</p>");
+    web_client.println("</div></div>");
+    // WP-HTML-END
+
     // IP Network Settings Section
     web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">IP Network Settings</label>");
@@ -3669,7 +3491,7 @@ void sub_page_setup()
     _create_setup_textinput_element("owndns", "DNS", String(meshcom_settings.node_dns), "192.168.2.1", "setowndns", 50, false, true);             // create Textinput-Element including Label and Button
     _create_setup_textinput_element("ownntp", "NTP", String(meshcom_settings.node_ownntp), "192.168.2.1", "setownntp", 50, false, true);          // create Textinput-Element including Label and Button
 
-    _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("extudpip", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
     #if defined(HAS_ETHERNET)
@@ -4088,7 +3910,7 @@ void sub_page_spectrum()
 #if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290) || defined(USING_SX1262)
 
     // Local values only: the page used to overwrite (and persist) the node_spec* settings, which
-    // broke the production-locked 432/434/0.025/2048.
+    // broke the production-locked 432/434/0.025/2048 (docs/production-locked-settings.md).
     float spec_start = 432.0;
     float spec_end = 434.0;
     float spec_step = 0.025;
@@ -4239,7 +4061,7 @@ void sub_page_info()
         web_client.printf("<tr id=\"au_tr\"><td>Auto update</td><td id=\"au_row\" data-blepause=\"%d\">mode %s, channel %s<br>env %s, running %s",
             AU_BLE_PAUSE, meshcom_settings.node_autoupd == 2 ? "auto (notify only)" : "notify", auChan,
             MC_ENV_NAME[0] ? MC_ENV_NAME : "(unknown)", MC_BUILD_TAG[0] ? MC_BUILD_TAG : "local");
-        web_client.print("<div id=\"au_msg\"></div><div id=\"au_err\"></div><div id=\"au_hint\"></div><button type=\"button\" id=\"au_btn\" disabled>Check now</button></td></tr>\n");
+        web_client.print("<div id=\"au_msg\"></div><div id=\"au_sched\"></div><div id=\"au_err\"></div><div id=\"au_hint\"></div><button type=\"button\" id=\"au_btn\" disabled>Check now</button></td></tr>\n");
     }
 #endif
     // WEB-SW: grouped switch overview, one <tr> per group, labels matching
@@ -4260,7 +4082,7 @@ void sub_page_info()
     web_client.printf("Userbutton: %s<br>", (bButtonCheck ? "on" : "off"));
     { // LED-08: outside the battery branch (USB-powered nodes too); labels equal the setup switch labels (info_switch_lint)
         const LedFitted ledHw = ledFittedNow();
-        web_client.printf("Board LED: %s<br>", !ledHw.board ? "not fitted" : !bUSER_BOARD_LED ? "off" : boardLedPinUsable() ? "on" : "on (pin busy)");   // as --info
+        web_client.printf("Board LED: %s<br>", !ledHw.board ? "not fitted" : !bUSER_BOARD_LED ? "off" : boardLedPinUsable() ? boardLedModeName(boardLedModeGet()) : (boardLedModeGet() == BOARD_LED_MODE_STEADY ? "steady (pin busy)" : "flash (pin busy)"));   // as --info, WEB-LED-01
         web_client.printf("Charge LED: %s<br>", ledHw.charge ? webChargeLedText() : "not fitted");
     }
     #if defined(ANALOG_PIN)
@@ -4373,7 +4195,6 @@ void sub_page_info()
     web_client.printf("NBR debug: %s<br>", (bNBRDEBUG ? "on" : "off"));
     web_client.printf("NBR relay: %s<br>", (bNBRCANCEL ? "on" : (bNBRRELAY ? "count" : "off")));
     web_client.printf("NBR sym: %s<br>", (bNBRSYM ? "on" : "off"));
-    web_client.printf("NBR report: %s<br>", (bNBRRPTOFF ? "off" : (bNBRRPTON ? "on" : "auto")));
     web_client.printf("</td></tr>\n");
 
     #if defined(ESP32) && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO))
@@ -4596,6 +4417,183 @@ void sub_page_mcp23017()
 
 /**
  * ###########################################################################################################################
+ * Pins page: only the frame. The rows are made by pinsInit()/pnRender() in web/mc.js from GET /pinstatus (scripts of
+ * sub-pages never run). PINS-HTML-BEGIN is read by tools/webgui_pins_test.js.
+ * Switches: board LED through setparam boardled, MCP pins through mcpout/mcpio/mcpname, the same handlers as the
+ * MCP23017 page (kept as it is: server-rendered, no polling). Everything is hidden until the first answer says what exists.
+ */
+void sub_page_pins()
+{
+    _create_meshcom_subheader("Pins");
+    // PINS-HTML-BEGIN
+    web_client.println("<div id=\"content_inner\">");
+    web_client.println("<div id=\"pn_led\" hidden><label id=\"pn_led_lbl\">Board LED</label>");
+    web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"pn_led_lbl\">");
+    web_client.println("<button type=\"button\" class=\"mctab mcledbtn\" id=\"pn_led_off\" aria-pressed=\"false\" onclick=\"pinsLed('off')\">off</button>");
+    web_client.println("<button type=\"button\" class=\"mctab mcledbtn\" id=\"pn_led_flash\" aria-pressed=\"false\" onclick=\"pinsLed('flash')\">flash</button>");
+    web_client.println("<button type=\"button\" class=\"mctab mcledbtn\" id=\"pn_led_steady\" aria-pressed=\"false\" onclick=\"pinsLed('steady')\">steady</button>");
+    web_client.println("</div><p class=\"font-small\" id=\"pn_led_st\"></p></div>");
+    web_client.println("<div id=\"pn_chg\" hidden><label id=\"pn_chg_lbl\">Charge LED</label>");
+    web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"pn_chg_lbl\">");
+    web_client.println("<button type=\"button\" class=\"mctab mcledbtn\" id=\"pn_chg_off\" aria-pressed=\"false\" onclick=\"pinsChg('off')\">off</button>");
+    web_client.println("<button type=\"button\" class=\"mctab mcledbtn\" id=\"pn_chg_auto\" aria-pressed=\"false\" onclick=\"pinsChg('auto')\">auto</button>");
+    web_client.println("</div><p class=\"font-small\">auto = follows charging, off = dark. Now: <span id=\"pn_chg_st\"></span></p></div>");
+    web_client.println("<table class=\"table mw-600\" id=\"pn_asg\" hidden><caption class=\"font-small\">Pin assignments</caption>");
+    web_client.println("<thead><tr class=\"font-bold\"><th scope=\"col\">Function</th><th scope=\"col\">Pin</th><th scope=\"col\">Default</th><th scope=\"col\">In use</th><th scope=\"col\">Note</th></tr></thead>");
+    web_client.println("<tbody id=\"pn_asg_body\"></tbody></table>");
+    web_client.println("<p class=\"font-small\" id=\"pn_asg_hint\" hidden>A pin the board uses itself is refused.</p>");
+    web_client.println("<div id=\"pn_gpioctl\" hidden><label id=\"pn_gpioctl_lbl\">GPIO control</label>");
+    web_client.println("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"pn_gpioctl_lbl\">");
+    web_client.println("<button type=\"button\" class=\"mctab mcledbtn\" id=\"pn_gpioctl_off\" aria-pressed=\"false\" onclick=\"pinsGpioCtl('off')\">off</button>");
+    web_client.println("<button type=\"button\" class=\"mctab mcledbtn\" id=\"pn_gpioctl_on\" aria-pressed=\"false\" onclick=\"pinsGpioCtl('on')\">on</button>");
+    web_client.println("</div></div>");
+    web_client.println("<table class=\"table mw-600\" id=\"pn_gpio\" hidden><caption class=\"font-small\">Free GPIO</caption>");
+    web_client.println("<thead><tr class=\"font-bold\"><th scope=\"col\">Pin</th><th scope=\"col\">Owner</th><th scope=\"col\">Direction</th><th scope=\"col\">Level</th><th scope=\"col\">Switch</th></tr></thead>");
+    web_client.println("<tbody id=\"pn_gpio_body\"></tbody></table>");
+    web_client.println("<p class=\"font-small\" id=\"pn_gpio_off\" hidden>GPIO control is off. Turn it on above to switch the pins; every pin returns to input after a restart.</p>");
+    web_client.println("<p id=\"pn_none\" hidden>No switchable outputs on this node.</p>");
+    web_client.println("<table class=\"table mw-600\" id=\"pn_mcp\" hidden><caption class=\"font-small\">MCP23017 pins</caption>");
+    web_client.println("<thead><tr class=\"font-bold\"><th scope=\"col\">Pin</th><th scope=\"col\">Name</th><th scope=\"col\">In/Out</th><th scope=\"col\">Level</th></tr></thead>");
+    web_client.println("<tbody id=\"pn_body\"></tbody></table>");
+    web_client.println("<p class=\"font-small pn-note\" id=\"pn_note\" role=\"status\"></p>");
+    web_client.println("<p class=\"font-small pn-note\" id=\"pn_msg\" role=\"status\"></p>");
+    web_client.println("<p class=\"font-small\">Refreshed every 5 s while this page is open. Output levels are what the node was told to set; input levels are sampled by the node every 5 s.</p>");
+    web_client.println("</div>");
+    // PINS-HTML-END
+}
+
+/**
+ * ###########################################################################################################################
+ * GET /pinassign -- the four user pin assignments with board default, pin in use and the pins the policy accepts
+ * (src/pin_assign_json.h documents the shape). Read-only and GET only; behind the WEB-AUTH gate like the pages.
+ * Writes go through /setparam/ (onewiregpio, buttongpio, angpio, windpin) -> console setters -> pinCanAssign().
+ */
+static void __attribute__((noinline)) sub_pin_assign()
+{
+    PinAssignIn in;
+    memset(&in, 0, sizeof(in));
+    in.chip = pinBoardChip();
+
+    for (int i = 0; i < (int)PIN_FN_COUNT; i++)
+    {
+        const PinFunc f = (PinFunc)i;
+        PinAssignFn &o = in.fn[i];
+        o.def = pinBoardDefault(f);
+        o.eff = pinBoardInUse(f);   // the button: the pin read at boot (a new setting needs a restart)
+        o.ok = pinAssignMask(pinBoardContext(f), f, o.def < 0 ? 0 : o.def, pinBoardSetterRefused(f));   // policy: 0 = no default
+    }
+    for (int i = 0; i < (int)PIN_FN_COUNT; i++)
+        in.fn[i].avail = pinAssignAvail((PinFunc)i);
+    in.fn[PIN_FN_ONEWIRE].pin = meshcom_settings.node_owgpio;
+    in.fn[PIN_FN_ONEWIRE].on = bONEWIRE;
+    in.fn[PIN_FN_BUTTON].pin = meshcom_settings.node_button_pin;
+    in.fn[PIN_FN_BUTTON].on = bButtonCheck;
+    in.fn[PIN_FN_BUTTON].restart = true;     // GPIO-01 W0: the button pin is read at boot
+    in.fn[PIN_FN_ANALOG].pin = meshcom_settings.node_analog_pin >= 99 ? 0 : meshcom_settings.node_analog_pin;   // 99 = unset
+    in.fn[PIN_FN_ANALOG].on = bAnalogCheck;
+#if defined(ESP32)
+    in.fn[PIN_FN_WIND].pin = meshcom_settings.node_wind_pin;
+    in.fn[PIN_FN_WIND].on = bWINDON;
+#endif
+
+#if defined(NRF52_SERIES)
+    static char body[PIN_ASSIGN_JSON_MAX];   // the 8 KB loop stack is tight; the web server runs in this one task only
+#else
+    char body[PIN_ASSIGN_JSON_MAX];
+#endif
+    const size_t n = pinAssignJson(in, body, sizeof(body));
+    web_cors_ok = false; // node-local read, as /pinstatus
+    send_http_header(n ? 200 : 500, RESPONSE_TYPE_JSON);
+    if (n)
+        web_client.println(body);
+    else
+        web_client.println("{\"ok\":false}");
+}
+
+/**
+ * ###########################################################################################################################
+ * GET /gpiostatus -- the free GPIOs with owner, direction and level (src/gpio_status_json.h documents the shape). Read-only,
+ * GET only, node-local. Switching goes through /setparam/?gpio<N>=on|off|in|release (web_setup.cpp, needs X-MC); the master
+ * switch has one web path, /setparam/?gpioctl=on|off (X-MC), besides the console --gpiocontrol. nRF52: always the empty document.
+ */
+static void __attribute__((noinline)) sub_gpio_status()
+{
+#if defined(ESP32)
+    GpioStatusPin pins[GPIO_STATUS_MAX_PINS];
+    GpioStatusIn in = {false, false, pins, 0};
+    in.n = gpioStatusCollect(pins, GPIO_STATUS_MAX_PINS);
+    in.avail = in.n > 0;
+    in.master = gpioCtlMaster();
+    char body[GPIO_STATUS_JSON_MAX];
+    const size_t n = gpioStatusJson(in, body, sizeof(body));
+    web_cors_ok = false; // node-local read, as /pinassign
+    send_http_header(n ? 200 : 500, RESPONSE_TYPE_JSON);
+    if (n)
+        web_client.println(body);
+    else
+        web_client.println("{\"ok\":false}");
+#else
+    // nRF52: constant empty document, no buffers on the 8 KB loop stack
+    web_cors_ok = false;
+    send_http_header(200, RESPONSE_TYPE_JSON);
+    web_client.println("{\"avail\":0,\"master\":0,\"pins\":[]}");
+#endif
+}
+
+/**
+ * ###########################################################################################################################
+ * GET /pinstatus -- cached state of the switched pins as one JSON document (src/pin_status_json.h documents the shape).
+ * Read-only and GET only; behind the WEB-AUTH gate like the pages. No I2C access here: the MCP levels are the settings
+ * fields as loopMCP23017() (scheduler, every 5 s, and right after --setout / --setio) last left them.
+ */
+static void __attribute__((noinline)) sub_pin_status()
+{
+    PinStatusIn in;
+    memset(&in, 0, sizeof(in));
+
+    const LedFitted ledHw = ledFittedNow();
+    in.ledFitted = ledHw.board;
+#if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
+    if (ledHw.board)
+    {
+        in.ledMode = bUSER_BOARD_LED ? (boardLedModeGet() == BOARD_LED_MODE_STEADY ? PIN_LED_STEADY : PIN_LED_FLASH) : PIN_LED_OFF;
+        in.ledBusy = !boardLedPinUsable();
+    }
+#endif
+#if defined(REMOTE_LED_PIN)
+    in.ledRm = bRemoteLedFlash ? PIN_RM_FLASH : (bRemoteLed ? PIN_RM_ON : PIN_RM_NONE);
+#endif
+
+    in.chgMode = "off";
+#if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+    in.chgFitted = ledHw.charge;
+    in.chgMode = bCHARGE_LED ? "auto" : "off";
+    in.chgEff = chargeLedModeName(chargeLedEffective());
+    in.chgRm = chargeLedOverrideActive();
+#endif
+
+    in.mcpPresent = bMCP23017;
+    in.mcpIo = (uint16_t)meshcom_settings.node_mcp17io;
+    in.mcpOut = (uint16_t)meshcom_settings.node_mcp17out;
+    in.mcpIn = (uint16_t)meshcom_settings.node_mcp17in;
+    in.names = meshcom_settings.node_mcp17t;   // not copied; pinJsonEscape reads at most PIN_NAME_MAX - 1 bytes
+
+#if defined(NRF52_SERIES)
+    static char body[PIN_STATUS_JSON_MAX];   // the 8 KB loop stack is tight; the web server runs in this one task only
+#else
+    char body[PIN_STATUS_JSON_MAX];
+#endif
+    const size_t n = pinStatusJson(in, body, sizeof(body));
+    web_cors_ok = false; // node-local read, as /austatus
+    send_http_header(n ? 200 : 500, RESPONSE_TYPE_JSON);
+    if (n)
+        web_client.println(body);
+    else
+        web_client.println("{\"ok\":false}");
+}
+
+/**
+ * ###########################################################################################################################
  * Sends a valid HTTP header. Takes care of the status code.
  * We may need to set more status_text cases once we need them.
  */
@@ -4610,6 +4608,9 @@ void send_http_header(uint16_t http_status_code, uint8_t content_type, const cha
     case 400:
         status_text = "Bad Request";
         break; // use this when a request body was rejected (CS-03 config upload)
+    case 431:
+        status_text = "Request Header Fields Too Large";
+        break;
     case 401:
         status_text = "Unauthorized";
         break; // use this when ever a request was successful
@@ -4635,19 +4636,16 @@ void send_http_header(uint16_t http_status_code, uint8_t content_type, const cha
         web_client.println("Content-type:application/json");
     else
         web_client.println("Content-type:text/html; charset=utf-8");
-    if (web_cors_ok) // RM GUI W1c: no CORS on state-changing paths, /config and /rmstatus
-    {
-        web_client.println("Access-Control-Allow-Origin: *"); // tell modern browsers that CORS is okay for us
-        web_client.println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-        web_client.println("Access-Control-Allow-Headers: access-control-allow-headers,access-control-allow-methods,access-control-allow-origin, Origin, Content-Type, Accept");
-    }
+    // No Access-Control-Allow-* headers: the GUI is same-origin and no cross-origin consumer is documented
     if (extra_header && extra_header[0])
         web_client.println(extra_header); // WEB-AUTH-01: Set-Cookie of the login / logout answers
+    web_client.println("Transfer-Encoding: chunked");                         // WEB-TX-01: a cut page is visibly incomplete
     web_client.println("Connection: close");                                  // tell broser that the connection will be closed (in opposite to keep-alive)
     web_client.println("Cache-Control: no-cache, no-store, must-revalidate"); // set caching policy
     web_client.println("Pragma: no-cache");                                   // Disable caching or request/respinse
     web_client.println("Expires: 0");                                         // set cache expiring time to 0
     web_client.println();                                                     // two CR-LF marks the end of the header
+    webTxBeginChunked(web_client);                                            // WEB-TX-01: every flush from here on is one chunk
 }
 
 /**
@@ -4655,7 +4653,15 @@ void send_http_header(uint16_t http_status_code, uint8_t content_type, const cha
  */
 void _create_meshcom_subheader(String title)
 {
-    web_client.printf("<div id=\"content_title\"><p class=\"font-small\">%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;%s&nbsp;[%s]</p><h1 class=\"font-bold\">%s</h1></div>", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource, title.c_str());
+    // WEB-TD-01 item 6: mc.js advances the time every second (mcClockTick). data-epoch is the shown local date/time read as UTC seconds
+    // (so JS needs no tz maths); without a valid node time no id/attribute is written and the text stays as rendered.
+    uint32_t clkEpoch = 0;
+    const bool clkOk = cetEpochFromFields(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,
+                                          meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, &clkEpoch);
+    char clkAttr[48] = "";
+    if (clkOk)
+        snprintf(clkAttr, sizeof(clkAttr), " id=\"mc_clock\" data-epoch=\"%lu\"", (unsigned long)clkEpoch);
+    web_client.printf("<div id=\"content_title\"><p class=\"font-small\"><span%s>%i-%02i-%02i&nbsp;%02i:%02i:%02i</span>&nbsp;%s&nbsp;[%s]</p><h1 class=\"font-bold\">%s</h1></div>", clkAttr, meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource, title.c_str());
 }
 
 /**
@@ -4727,6 +4733,21 @@ void _create_setup_switch_element(const char id[], const char labelText[], const
     }
     web_client.println("</label>");
     web_client.printf("<input type=\"checkbox\" role=\"switch\" id=\"%s\" %s onchange=\"setvalue(this.id,this.checked?'on':'off',false)\"/>\n", id, checked ? "checked" : "");
+}
+
+// WEB-LED-01: three-way LED mode (off / flash / steady) as aria-pressed buttons; posts setparam <id>=off|flash|steady
+__attribute__((unused)) static void _create_setup_led_mode_element(const char id[], const char labelText[], const char descriptionText[], int mode)
+{
+    web_client.printf("<label id=\"%s_lbl\" for=\"%s_off\">%s <span class=\"font-small\">(%s)</span></label>\n", id, id, labelText, descriptionText);
+    web_client.printf("<div class=\"mcledgrp\" role=\"group\" aria-labelledby=\"%s_lbl\">\n", id);
+    const char *names[3] = {"off", "flash", "steady"};
+    for (int i = 0; i < 3; i++)
+    {
+        const bool on = (mode == i);
+        web_client.printf("<button type=\"button\" class=\"mctab mcledbtn%s\" id=\"%s_%s\" aria-pressed=\"%s\" onclick=\"setvalue('%s','%s',true)\">%s</button>\n",
+                          on ? " mctab-on" : "", id, names[i], on ? "true" : "false", id, names[i], names[i]);
+    }
+    web_client.println("</div>");
 }
 
 /**
@@ -4859,8 +4880,9 @@ static void sub_au_status()
     in.etaS = auEtaS(au.stagedIlen);
     fwNetHeapNow(&in.ifree, &in.iblk);
 
-    char body[640];
+    char body[832];
     size_t n = auStatusJson(in, body, sizeof(body));
+
     // "up": seconds since boot, appended outside auStatusJson. The page compares it across the install restart
     // when the build tag cannot be compared (an image built without MC_BUILD_TAG reports run "local").
     n = fwJsonAppendUp(body, sizeof(body), n, (uint32_t)(esp_timer_get_time() / 1000000));
@@ -4969,6 +4991,7 @@ void setparam(String web_header)
     // "--<cmd> %s" line that commandAction() splits on "--"), and aumode/autoupdate/updchan change the update
     // mode or channel: the upd* gate of call_function() would be a bypass otherwise. Same X-MC proof,
     // independent of MC_WEB_GUARD.
+    // The install schedule settings (audelay, auday, autime) run --autoupdate sub-commands: webGuardIsUpdParam covers them.
     if (!webGuardSetparamAllowed(param_name.c_str(), param_value.c_str(), full_header.c_str(), full_header.length()))
     {
         if (bDEBUG)
@@ -4985,6 +5008,67 @@ void setparam(String web_header)
     setupData.returnCode = 255;
     setupData.returnValue = "";
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    if (param_name.equals("tdecktheme"))
+    { // TD-THEME-01 W3: same path as the console --theme (store, save_settings, tdeck_theme_reapply); only auto|dark|light
+        const int t = tdeck_theme_parse(param_value.c_str());
+        if (t >= 0)
+        {
+            char message_text[32];
+            snprintf(message_text, sizeof(message_text), "--theme %s", tdeck_theme_name((uint8_t)t));
+            commandAction(message_text, isPhoneReady == 1);
+            setupData.returnCode = (meshcom_settings.node_tdeck_theme == t) ? WS_RETURNCODE_OKAY : WS_RETURNCODE_FAIL;
+        }
+        else
+            setupData.returnCode = WS_RETURNCODE_FAIL;
+        setupData.returnValue = tdeck_theme_name(meshcom_settings.node_tdeck_theme);
+    }
+    else if (param_name.equals("tdchatfont"))
+    { // WEB-TD-01: same path as the console --chatfont s|m|l
+        const int f = tdeck_chatfont_parse(param_value.c_str());
+        if (f >= 0)
+        {
+            char message_text[32];
+            snprintf(message_text, sizeof(message_text), "--chatfont %s", tdeck_chatfont_name((uint8_t)f));
+            commandAction(message_text, isPhoneReady == 1);
+            setupData.returnCode = (meshcom_settings.node_tdeck_chatfont == f) ? WS_RETURNCODE_OKAY : WS_RETURNCODE_FAIL;
+        }
+        else
+            setupData.returnCode = WS_RETURNCODE_FAIL;
+        setupData.returnValue = tdeck_chatfont_name(meshcom_settings.node_tdeck_chatfont);
+    }
+    else if (param_name.equals("tdbldisp"))
+    { // WEB-TD-01: display mode auto|light|dark = --bl mode auto|day|night; the answer is "<mode>:<active level>"
+        const char *v = param_value.c_str();
+        const char *cmd = strcmp(v, "auto") == 0 ? "auto" : strcmp(v, "light") == 0 ? "day" : strcmp(v, "dark") == 0 ? "night" : NULL;
+        if (cmd != NULL)
+        {
+            char message_text[32];
+            snprintf(message_text, sizeof(message_text), "--bl mode %s", cmd);
+            commandAction(message_text, isPhoneReady == 1);
+            setupData.returnCode = (brightnessMode() == brightness_mode_parse(cmd)) ? WS_RETURNCODE_OKAY : WS_RETURNCODE_FAIL;
+        }
+        else
+            setupData.returnCode = WS_RETURNCODE_FAIL;
+        static const char *const dispNames[3] = {"auto", "light", "dark"};
+        setupData.returnValue = String(dispNames[brightness_mode_to_seg(brightnessMode())]) + ":" + String((int)brightnessActiveLevel());
+    }
+    else if (param_name.equals("tdblbright"))
+    { // WEB-TD-01: level of the slot the display mode selects -- the device slider's own call (no console form edits "the active slot")
+        char *end = NULL;
+        const long lv = strtol(param_value.c_str(), &end, 10);
+        if (end != param_value.c_str() && *end == 0 && lv >= 1 && lv <= BRIGHTNESS_STEPS)
+        {
+            brightnessSetActiveLevel((uint8_t)lv);
+            tdeck_refresh_SET_view(); // the device's own setup slider shows the new level (loop task, like --bl mode / --chatfont)
+            setupData.returnCode = WS_RETURNCODE_OKAY;
+        }
+        else
+            setupData.returnCode = WS_RETURNCODE_FAIL;
+        setupData.returnValue = String((int)brightnessActiveLevel());
+    }
+    else
+#endif
     webSetup_setParam(&setupData);
 
     //Serial.printf("pName: %s\n", setupData.paramName);

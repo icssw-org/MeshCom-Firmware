@@ -10,6 +10,8 @@ Values are case-sensitive.
 The Web-API is currently using the GET - request method. We may change that to POST later.
 The Web-API is not yet finished or stable. We will add or change things. Please stay in touch with us if you rely on the Web-API. 
 
+Page and JSON responses sent with the standard header (send_http_header) use chunked transfer encoding (Transfer-Encoding: chunked, no Content-Length), so a response that the node cut off is detectable as incomplete: the terminating zero-length chunk is missing and the HTTP client reports a network error.
+
 
 
 ============================================
@@ -36,15 +38,16 @@ Setting Parameters
 ============================================
 To set a parameter to the node, use:
 
-	NOTE (RM GUI, request guard): by default (build flag MC_WEB_GUARD=0) the guard below applies only to the
-	remote-management endpoints (/rm*, /?page=remote, /setparam/?rm= and /setparam/?rmstrict=); all other
-	endpoints are unchecked. Built with
-	-D MC_WEB_GUARD=1 every state-changing request (/setparam, /callfunction, /?sendmessage,
-	/?login=, /?logout and any POST) must carry the header "X-MC: 1" (the web page adds it itself), for example
-	curl -H 'X-MC: 1' 'http://<node>/setparam/?onewire=on'. Without it, or with a Host that is not an IP address,
-	a single-label name or a *.local / *.fritz.box / *.lan / *.home.arpa / *.internal / *.speedport.ip /
-	*.localdomain / *.home name, the node answers 403. Typing a /setparam URL into the browser bar is refused
-	for the same reason.
+	NOTE (request guard): by default (build flag MC_WEB_GUARD=1; -D MC_WEB_GUARD=0 limits the guard to the
+	remote-management endpoints /rm*, /?page=remote, /setparam/?rm= and /setparam/?rmstrict=) every
+	state-changing request (/setparam, /callfunction, /?sendmessage,
+	/?login=, /?logout and any POST) must carry
+	the header "X-MC: 1" (the web page adds it itself), for example
+	curl -H 'X-MC: 1' 'http://<node>/setparam/?onewire=on'. The callfunction actions upd*, otaupdate and
+	reboot always need X-MC. Every request needs a Host that is an IP address, a single-label name or a
+	*.local / *.fritz.box / *.lan / *.home.arpa / *.internal / *.speedport.ip / *.localdomain / *.home name
+	(public FQDNs and reverse-proxy names are refused); otherwise, or without X-MC, the node answers 403.
+	Typing a /setparam URL into the browser bar is refused for the same reason. The node sends no CORS headers.
 
 	/setparam/?setcall=AB1CDE-12		Sets the nodes call-sign 
 	/setparam/?onewiregpio=XX			Sets the GPIO to be used for the 1-Wire bus
@@ -114,6 +117,9 @@ The returncodes are defined as:
 	
 The JSON Object will also contain the parameter name that has been requested to set as well as the current value used by the node (or an empty string if the parameter was not found).
 So if the parameter could be set to the new value, the returned value will contain the new value.
+	/setparam/?tdchatfont=s|m|l		(T-Deck only) Chat font size of the T-Deck display (same as --chatfont; read-back is s|m|l)
+	/setparam/?tdbldisp=auto|light|dark	(T-Deck only) Display mode (same as --bl mode auto|day|night); read-back is "<mode>:<level>", mode auto|light|dark and level 1..16 = the brightness level that mode uses now
+	/setparam/?tdblbright=1..16		(T-Deck only) Brightness level of the slot the display mode selects (the T-Deck setup slider; auto uses the daylight slot); an out-of-range value fails; read-back is the level in use
 If the parameter could not be set (e.g. the value was not accepted) the returned value will contain the previous value that is still be used by the node.
 This is to make sure your frontend stays synchron with the node.
 
@@ -135,6 +141,10 @@ The HTML Body will contain a JSON Object with a content body like:
 	{"returncode":0, "setcall":"AB1CDE-12"}
 
 witch is the same as described in "Setting Parameters".
+
+Read-only parameters (getparam only, no setparam; change them with the console command):
+
+	/getparam/?dht				DHT sensor type, 11 or 22 (set with --dht)
 
 
 
@@ -209,6 +219,11 @@ POST /rmsend
 	cmd		reboot | status | sendpos | sendtrack | gps | track | display | gateway | mesh | txpower | setout | sync
 	args		on|off for gps/track/display/gateway/mesh, <n> dBm for txpower (<= board maximum),
 			"<a0..b7> <on|off>" for setout, empty otherwise (sync counter: cmd=sync)
+	pins, gpio	(GPIO-01) pins: empty = read, "<ow|an|wind> <0..48>" = assign (0 = board default, wind: off; an refuses 0); btn is
+			read-only over RM (a restart applies it, a held pin can trigger the long-press deep sleep): "btn <n>" = err blocked;
+			reply "ok ow=<n> btn=<n> an=<n> wind=<n>"; err refused | unsupported | blocked. gpio: empty = read, "<0..48> <on|off|in>" = switch a free GPIO
+			(only with gpio control on at the node); reply "ok m=<0|1> o=<13 hex> i=<13 hex> l=<13 hex>" (bit n =
+			GPIO n: held outputs, held inputs, level); err master | refused | unsupported
 
 	Answer (JSON):	{"ok":true,"ctr":1760000123}		sent, ctr = the counter used (0 for sync)
 			{"ok":false,"err":"<reason>"}		HTTP 422; reason: size | short | form | passwd | cmd | dst |
@@ -257,3 +272,82 @@ GET /rmstatus
 	sent		the whole book of commands this node SENT (up to 12), newest first, streamed one entry at a
 			time (also fields st = queued|waiting|noanswer|ok|err|unverified and msg = one sentence): rep = some reply arrived, ver = its tag matched
 			(verified); rep=1 with ver=0 is an UNVERIFIED reply, reply holds its raw (truncated) text
+
+
+GET /pinstatus
+
+	No parameters, GET only, read-only; behind the login like the pages. Answer (JSON, one line, user text escaped):
+
+	{"led":{"fitted":1,"mode":"flash","busy":0,"rm":"","state":"flash"},
+	 "chg":{"fitted":0,"mode":"off","eff":"off","rm":0},
+	 "mcp":{"present":1,"pins":[{"id":"A0","n":"Relay","d":"out","l":1},{"id":"A1","n":"","d":"in","l":0}, ... 16 entries A0..A7, B0..B7]}}
+
+	led		board LED: fitted, stored mode (off|flash|steady, as --board led), busy = OneWire owns the pad (T-Beam
+			GPIO4) so the mode cannot run, rm = an RM1 "led" hold on the pad ("", on, flash), state = what the pad
+			does now (busy -> off, else the hold, else the stored mode)
+	chg		charge LED (AXP PMU boards): fitted, console mode (auto|off), effective mode (auto|on|off, RM1 "chgled"
+			override included), rm = override active
+	mcp		present = an MCP23017 answered at boot; pins is empty when it is not. d = in|out, l = level 0|1,
+			n = pin name (<= 15 bytes; valid UTF-8 as it is, other bytes read as Latin-1)
+
+	Cached state only, no I2C access in the request: an output level is the commanded one (the chip is written from it),
+	an input level is the last sample of the 5 s refresh. The Pins page polls it every 5 s while it is shown and
+	switches through /setparam/ (boardled=off|flash|steady, mcpout<P>=on|off, mcpio<P>=in|out, mcpname<P>=text).
+	mcpout<P> on a pin that is configured as input (or an invalid port) answers returncode 1 and changes nothing; the Pins page shows
+	"The node refused the change." and re-reads the state.
+
+
+GET /pinassign
+
+	No parameters, GET only, read-only; behind the login like the pages. Answer (JSON, one line):
+
+	{"chip":"esp32","fn":[
+	 {"id":"ow","param":"onewiregpio","avail":1,"pin":0,"def":4,"eff":4,"on":1,"restart":0,"ok":"0x00000000ffffffff"},
+	 {"id":"btn","param":"buttongpio", ...}, {"id":"an","param":"angpio", ...}, {"id":"wind","param":"windpin", ...}]}
+
+	chip		esp32 | esp32s3 | nrf52840 | none
+	fn		always four entries in this order: 1-Wire (ow), button (btn), analog (an), anemometer (wind)
+	param		the /setparam/ name that writes the assignment (the Setup page uses the same)
+	avail		0 = this build cannot change it (function not compiled in, or read-only on the board)
+	pin		stored setting, 0 = board default (button: 99 = no button; analog: 99 = unset reads as 0)
+	def		board default, -1 = no pin (0 is GPIO 0; the board has no default; the anemometer never has one)
+	eff		pin in use, -1 = no pin (0 is GPIO 0; board has no default and none stored): the stored pin, or the default when the stored one is 0. The button reports the pin read
+			at boot (a newly stored value counts after a restart), -1 when it is 99 = no button
+	on		the function is switched on
+	restart		1 = a change takes effect after a restart (button); 0 = applies at once (1-Wire, analog, anemometer)
+	ok		64-bit mask as hex text: bit n set = the setter accepts pin n for this function now (pin policy, minus the pins
+			the console setter refuses on its own). Bit 0 (= default/off) is set unless the setter refuses 0: not for the
+			analog pin (takes 1..98), nor for 1-Wire on BOARD_RAK4630 (also refuses 1 and 2; that macro is set on every
+			nRF52 build). The button's 99 = "no button" is not a bit: the setter always accepts it. The node's own answer
+			to the setparam stays authoritative.
+
+	Numbers are clamped to 0..255. The Pins page polls it with /pinstatus every 5 s while it is shown, refuses a pin whose bit is clear
+	without asking the node, and shows "Refused by pin policy." when the node answers returncode 1 (HTTP 422).
+
+
+GET /gpiostatus
+
+	No parameters, GET only, read-only, node-local (no CORS); behind the login like the pages. Answer (JSON, one line, at most 1 KB):
+
+	{"avail":1,"master":0,"pins":[{"pin":13,"own":"","dir":"-","lvl":-1},{"pin":4,"own":"ow","dir":"-","lvl":-1}]}
+
+	avail		1 = the board offers free GPIOs and the build has gpio control (ESP32); 0 = nothing to show (nRF52: always
+			{"avail":0,"master":0,"pins":[]})
+	master		the gpio control master switch (persisted). Switched by /setparam/?gpioctl=on|off (below) or the console
+			(--gpiocontrol on|off); RM1 and the config import cannot switch it. With master 0 every switch is refused.
+	pins		the pins the board lists as free, ascending
+	own		"" = free to switch; else what claims the pin right now: ow, btn, an, wind (the enabled function) or led
+			(board LED); such a pin has no switch
+	dir		in | out = held by gpio control; "-" = untouched
+	lvl		0 | 1 = level of a held pin; -1 = unknown (untouched pins are never read)
+
+	Switch: /setparam/?gpio<N>=on|off|in|release (N = pin number). Needs the header X-MC: 1 (HTTP 403 without it). The answer
+	is the setparam answer: returncode 0 / HTTP 200 when done, returncode 1 / HTTP 422 when refused (master off, pin not free,
+	or a value other than on|off|in|release). Release of a pin gpio control does not hold changes nothing and answers 0.
+	Master: /setparam/?gpioctl=on|off (ESP32; nRF52 answers 422). Needs X-MC: 1 (HTTP 403 without it). Sets the persisted
+	master like --gpiocontrol; off releases every held pin. Any other value: returncode 1 / HTTP 422. Nothing else
+	switches the master through /setparam: a value carrying a chained "--gpiocontrol" / "&&gpiocontrol" is always
+	refused (403, even with X-MC), a chained "--gpio" / "&&gpio" in any value needs X-MC like the update commands.
+	Levels live in RAM only: nothing is stored, after a reboot every pin is an untouched input. The Pins page shows the
+	table ("Free GPIO") only when the board offers a free pin, polls /gpiostatus after /pinassign every 5 s and, with
+	master 0, lists the rows read-only with the note "GPIO control is off. Turn it on above to switch the pins; every pin returns to input after a restart.".

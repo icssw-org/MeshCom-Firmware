@@ -1,5 +1,5 @@
 // web_rm_parse.h -- pure parsing and validation of the Remote page POST bodies
-//.
+// (docs/rm-gui/impl-plan.md, contract C4, W2a).
 //
 // Header-only, no Arduino, no allocation, C++11, only <stddef.h>/<string.h> and rm_validate.h.
 // Three bodies: POST /rmpasswd, POST /rmnodes, POST /rmsend (dst or slot form).
@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "../rm_validate.h"
+#include "web_auth.h" // WEB-PWD-01: webAuthPasswordProblemN()
 
 #define RM_FORM_BODY_MAX 260 // the handlers' stack buffer is this + 1; dst form, every field %XX: 258
 #define RM_FORM_CMD_MAX 15   // RmCmd::cmd[16]
@@ -162,7 +163,7 @@ struct RmPwdReq
     const char *pw;  // act=set: validated password inside the body buffer; else ""
 };
 
-static inline RmPwdReq rmParsePasswdBody(char *body)
+static inline RmPwdReq rmParsePasswdBodyImpl(char *body, bool web)
 {
     RmPwdReq r;
     r.err = nullptr;
@@ -193,7 +194,8 @@ static inline RmPwdReq rmParsePasswdBody(char *body)
             r.clear = true;
         return r;
     }
-    if (v[1] == nullptr || !rmValidatePasswordN(v[1], strlen(v[1])))
+    if (v[1] == nullptr || (web ? webAuthPasswordProblemN(v[1], strlen(v[1])) != WP_OK
+                                : !rmValidatePasswordN(v[1], strlen(v[1]))))
     {
         r.err = RM_ERR_PW;
         return r;
@@ -201,6 +203,11 @@ static inline RmPwdReq rmParsePasswdBody(char *body)
     r.pw = v[1];
     return r;
 }
+
+static inline RmPwdReq rmParsePasswdBody(char *body) { return rmParsePasswdBodyImpl(body, false); }
+
+// POST /rmwebpwd (WEB-PWD-01): same body, the web login password limits (1..19) instead of the RM ones (1..14)
+static inline RmPwdReq rmParseWebPwdBody(char *body) { return rmParsePasswdBodyImpl(body, true); }
 
 // ---------------------------------------------------------------------------------------------------
 // POST /rmnodes   act=save&slot=0..2&call=<call>&pw=<pw>   |   act=del&slot=n   |   act=forget
