@@ -117,6 +117,12 @@ int ifalseping = 0;
 int BOARD_HARDWARE = MODUL_HARDWARE;
 bool bUSER_BOARD_LED = false;
 
+// WEB-LED-01: stored mode, off / flash / steady (board_led.h); steady bit = node_sset4 0x4000
+int boardLedModeGet(void)
+{
+    return boardLedMode(bUSER_BOARD_LED, (meshcom_settings.node_sset4 & BOARD_LED_STEADY_BIT) != 0);
+}
+
 // LED-08/09/10 (design 6.1): which LEDs exist on this build/node, the one source for --info, BLE SN/SN1 and the web
 // GUI. Board LED = BOARD_LED pin or a NeoPixel-only heartbeat (LED_PIN with pixels, no BOARD_LED); charge LED =
 // AXP compiled in AND a PMU answered (chargeLedFitted(): false without AXP). ledFitted() of board_led.h decides.
@@ -237,6 +243,16 @@ static void boardLedWhitePulse(void)
             bLED_WEISS = true;   // lit edge only; the NeoPixel handler shows it and clears it again
     }
 }
+
+#if !defined(BOARD_LED)
+// WEB-LED-01: steady re-arm. CLEAR is ignored on purpose: after DELAYVAL the handler sets CLEAR, and a pending WEISS
+// wins over CLEAR there (white again, one show() per second); re-arming only after black would leave a dark gap.
+static void boardLedWhiteRearm(void)
+{
+    if (pixels_delay == 0 && boardLedSteadyRearm(BOARD_LED_MODE_STEADY, bLED_RED, bLED_GREEN, bLED_ORANGE, bLED_BLUE, bLED_CLEAR))
+        bLED_WEISS = true;
+}
+#endif
 #endif
 
 #if defined(BOARD_LED)
@@ -269,7 +285,8 @@ static void boardLedWrite(bool lit)
 
 void boardLedTick(void)
 {
-    if (!bUSER_BOARD_LED || !boardLedPinUsable())
+    const int mode = boardLedModeGet();   // WEB-LED-01: off / flash / steady
+    if (mode == BOARD_LED_MODE_OFF || !boardLedPinUsable())
     {
         if (boardLedLit)   // switched off (or OneWire took the pin) mid-flash: leave dark
         {
@@ -283,11 +300,20 @@ void boardLedTick(void)
         #endif
         return;
     }
-    const BoardLedStep st = boardLedPhase(millis(), boardLedTimer, boardLedLit);
+    // An active RM1 "led" override on the same pad wins until it is released (steady resumes after "led off")
+    bool rmHold = false;
+    #if defined(REMOTE_LED_PIN) && defined(BOARD_LED) && (REMOTE_LED_PIN == BOARD_LED)
+    rmHold = bRemoteLed;
+    #endif
+    const BoardLedStep st = boardLedDecide(mode, true, rmHold, millis(), boardLedTimer, boardLedLit);
     boardLedTimer = st.timer;
     boardLedLit = st.lit;
     if (st.changed)
         boardLedWrite(st.lit);
+    #if !defined(BOARD_LED)
+    if (mode == BOARD_LED_MODE_STEADY)   // NeoPixel-only: the pixel handler clears the white pulse, so re-arm it
+        boardLedWhiteRearm();
+    #endif
 }
 
 void boardLedForceOff(void)   // before deep sleep: LED dark, flasher phase reset
