@@ -5356,6 +5356,13 @@ void esp32loop()
 
             PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
+            // PING-FAIL-REPEAT-01: no new ping queued (refused ring, TRACK, invalid target): drop the
+            // stale flag so the unanswered ping is not reported again on the next tick. Cleared after
+            // sendPing(), not before: sendPing() draws "SENT" only while !bPingSend, and the
+            // "PONG FAILED" frame drawn just above must stay on the OLED.
+            if(pingResult != PING_QUEUED)
+                bPingSend = false;
+
             // PING_INVALID_TARGET logs its own once-per-episode notice in sendPing().
             if(pingResult != PING_INVALID_TARGET)
                 printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);

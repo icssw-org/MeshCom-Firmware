@@ -2844,6 +2844,13 @@ void nrf52loop()
 
             PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
+            // PING-FAIL-REPEAT-01: no new ping queued (refused ring, TRACK, invalid target): drop the
+            // stale flag so the unanswered ping is not reported again on the next tick. Cleared after
+            // sendPing(), not before: sendPing() draws "SENT" only while !bPingSend, and the
+            // "PONG FAILED" frame drawn just above must stay on the OLED.
+            if(pingResult != PING_QUEUED)
+                bPingSend = false;
+
             // Fehlschlag außerhalb von bDisplayInfo sichtbar machen, sonst verstummt
             // der Knoten für jeden, der mit Info aus läuft, ohne jede Meldung.
             // PING_INVALID_TARGET logs its own notice in sendPing().
