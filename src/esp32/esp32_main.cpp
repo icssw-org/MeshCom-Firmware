@@ -3198,7 +3198,9 @@ void esp32loop()
     static bool s_bootReadyLogged = false;
     if (!s_bootReadyLogged)
     {
-        bool network_wanted = bGATEWAY || bEXTUDP || bWEBSERVER || bNETCONSOLE || bAPRSWX;
+        // MCFW-WX1: aprswx counts only when it may start Wi-Fi on its own (SSID set, not AP), as at boot
+        const bool aprswx_net = wifiAprsWxWantsStart(bAPRSWX, bWIFIAP, meshcom_settings.node_ssid);
+        bool network_wanted = bGATEWAY || bEXTUDP || bWEBSERVER || bNETCONSOLE || aprswx_net;
         // hasIPaddress (global) kippt bei "now listening at IP"; die Kopie in
         // meshcom_settings wird erst spaeter nachgezogen -- beide pruefen.
         extern bool hasIPaddress;
@@ -5231,7 +5233,9 @@ void esp32loop()
         stopNetConsole();   // no-op unless started
     #endif
 
-    if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS || bAPRSWX)
+    // MCFW-WX1: aprswx enters the service block under the boot rule (wifiAprsWxWantsStart: SSID set, not AP mode),
+    // so "--aprswx on" at runtime never asks startNetwork() for a STA link it cannot have (review finding 3).
+    if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS || wifiAprsWxWantsStart(bAPRSWX, bWIFIAP, meshcom_settings.node_ssid))
     {
         if (web_timer == 0 || (iWlanWait > 0 && ((uint32_t)(millis() - web_timer) >= 1000)) || ((uint32_t)(millis() - web_timer) >= (HEARTBEAT_INTERVAL * 1000 * 10)))   // repeat 5 minutes
         {

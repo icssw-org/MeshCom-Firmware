@@ -8,17 +8,35 @@ a weather station (symbol `_`) instead of telemetry. Off by default.
 
 | Command | Meaning |
 |---------|---------|
-| `--aprswx on` / `off` | enable / disable (default off; `on` also brings Wi-Fi up, STA mode with an SSID) |
+| `--aprswx on` / `off` | enable / disable (default off; `on` also brings Wi-Fi up, STA mode with an SSID). `on` is refused until `--aprswxcall` is set |
 | `--aprswx` | status (passcode shown as `***`) |
 | `--aprswxint N` | minutes between reports, 5..1440 (default 10) |
-| `--aprswxcall X` | source call/SSID for APRS-IS; `-` = use the node call |
+| `--aprswxcall X` | source call for APRS-IS, **required**: `CALL` or `CALL-SSID` (letters/digits, 1..6 plus an optional 1..2 character SSID), different from the node call; `-` = clear |
 | `--aprsis server H` | APRS-IS server (default `euro.aprs2.net`) |
 | `--aprsis port P` | port (default 14580) |
 | `--aprsis pass N` | numeric APRS-IS passcode (empty = `-1`, receive only: the server drops the packet) |
 | `--sendaprswx` | send one report now (needs `--aprswx on`) |
 
 All settings are persisted but not part of the JSON export. The passcode is never printed,
-logged or exported.
+logged or exported. The settings are reachable through the console and the app/BLE command line
+only; the web UI and the app have no dedicated fields for them.
+
+### Setup
+
+```
+--aprswxcall SO2MK-13      a separate SSID: the MeshCom server already reports the node call (SO2MK-12) to APRS-IS
+--aprsis pass 12345        your APRS-IS passcode
+--aprswx on
+--aprswx                   check
+```
+
+Why a separate call: the MeshCom server forwards this node's position to APRS-IS under the node
+call with the node symbol. A second stream under the same call would make aprs.fi flip between
+the node symbol and `_`. `--aprswxcall` therefore rejects the node call, and `--aprswx on` is
+refused until a WX call is set.
+
+`--aprswx on` prints a warning when no passcode is set (the server answers `unverified` and drops
+every report) and when Wi-Fi cannot be started for this feature (no SSID, or AP mode).
 
 ## Frame
 
@@ -41,8 +59,11 @@ A temperature between -0.05 and +0.05 °C is treated as "no reading".
 - ESP32 only; nRF52 builds answer "not supported".
 - Non-blocking state machine in the main loop (DNS, connect, banner, login, send, close), whole
   cycle limited to 15 s, **one attempt per cycle** (no retries until the next interval).
+- Wi-Fi is started for this feature only with an SSID set and outside AP mode (the same rule as the
+  firmware auto update), at boot and in the 5-minute service block of the main loop.
 - Log lines: `[APRS-IS] ok`, `[APRS-IS] fail:<dns|connect|banner|login|send|timeout>`,
-  and `[APRS-IS] skip:<noip|nopos-or-wx|busy|nocall>` when a cycle could not start.
+  and `[APRS-IS] skip:<noip|nopos-or-wx|busy|nocall>` when a cycle could not start
+  (`nocall`: no WX call set, or it equals the node call).
   A `logresp ... unverified` reply (wrong passcode) is reported as `fail:login`.
 - No wind, rain or other weather fields; nothing is sent over LoRa.
 - With `--aprswx off` neither the timer nor the client executes any step.

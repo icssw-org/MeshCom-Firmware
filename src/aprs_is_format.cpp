@@ -1,6 +1,41 @@
 #include "aprs_is_format.h"
 
 #include <stdio.h>
+#include <string.h>
+
+static bool isCallChar(char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+}
+
+bool aprsIsCallValid(const char *call)
+{
+    if(call == NULL)
+        return false;
+
+    size_t n = 0;
+    while(call[n] != 0x00 && call[n] != '-')
+    {
+        if(!isCallChar(call[n]))
+            return false;
+        n++;
+    }
+    if(n < 1 || n > 6)
+        return false;
+
+    if(call[n] == 0x00)
+        return true;
+
+    // "-SS": 1..2 alphanumeric characters, nothing after them
+    size_t s = 0;
+    while(call[n + 1 + s] != 0x00)
+    {
+        if(!isCallChar(call[n + 1 + s]))
+            return false;
+        s++;
+    }
+    return s >= 1 && s <= 2;
+}
 
 static bool trimCall(char *dst, size_t dst_len, const char *call)
 {
@@ -19,11 +54,31 @@ static bool trimCall(char *dst, size_t dst_len, const char *call)
     return n > 0;
 }
 
-bool aprsIsEffectiveCall(char *out, size_t out_len, const char *wxcall, const char *nodecall)
+// Trim + validate in one step; dst is emptied when the call is not usable.
+static bool trimValidCall(char *dst, size_t dst_len, const char *call)
 {
-    if(trimCall(out, out_len, wxcall))
-        return true;
-    return trimCall(out, out_len, nodecall);
+    if(!trimCall(dst, dst_len, call))
+        return false;
+    if(!aprsIsCallValid(dst))
+    {
+        dst[0] = 0x00;
+        return false;
+    }
+    return true;
+}
+
+bool aprsIsWxCall(char *out, size_t out_len, const char *wxcall, const char *nodecall)
+{
+    if(!trimValidCall(out, out_len, wxcall))
+        return false;
+
+    char node[16];
+    if(trimCall(node, sizeof(node), nodecall) && strcmp(out, node) == 0)
+    {
+        out[0] = 0x00;
+        return false;
+    }
+    return true;
 }
 
 bool aprsIsFormatWxLine(char *out, size_t out_len, const char *call, const char *wx_body)
@@ -33,7 +88,7 @@ bool aprsIsFormatWxLine(char *out, size_t out_len, const char *call, const char 
     out[0] = 0x00;
 
     char c[16];
-    if(!trimCall(c, sizeof(c), call))
+    if(!trimValidCall(c, sizeof(c), call))
         return false;
     if(wx_body == NULL || wx_body[0] == 0x00)
         return false;
@@ -54,7 +109,7 @@ bool aprsIsFormatLogin(char *out, size_t out_len, const char *call, const char *
     out[0] = 0x00;
 
     char c[16];
-    if(!trimCall(c, sizeof(c), call))
+    if(!trimValidCall(c, sizeof(c), call))
         return false;
 
     char p[16];

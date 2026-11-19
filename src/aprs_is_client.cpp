@@ -280,8 +280,10 @@ static AprsStart aprsIsStartCycle(void)
                          meshcom_settings.node_temp, meshcom_settings.node_hum, qnh))
         return APS_NODATA;
 
+    // Review finding 2 (option B): the WX call must be set, valid and differ from the node call
+    // (the MeshCom server already forwards the node position under the node call).
     char call[16];
-    if(!aprsIsEffectiveCall(call, sizeof(call), meshcom_settings.node_aprswxcall, meshcom_settings.node_call))
+    if(!aprsIsWxCall(call, sizeof(call), meshcom_settings.node_aprswxcall, meshcom_settings.node_call))
         return APS_NOCALL;
 
     char line[180];
