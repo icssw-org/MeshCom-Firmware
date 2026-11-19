@@ -1052,6 +1052,7 @@ bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet rec
 #ifdef ENABLE_WIND
 #include "wind_counter.h"
 #endif
+#include "ping_budget.h"   // PING-NRF-01: pingBudgetOpen(), pingCountAfterSend()
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -5325,7 +5326,7 @@ void esp32loop()
     if (resendPing == 0)
         resendPing = millis();
 
-    if(meshcom_settings.node_pingtime > 29 && meshcom_settings.node_pingcall[0] != 0x00 && meshcom_settings.node_pingcount > 0)
+    if(pingBudgetOpen(meshcom_settings.node_pingtime, meshcom_settings.node_pingcall, meshcom_settings.node_pingcount))
     {
         if((int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0)
         {
@@ -5348,8 +5349,7 @@ void esp32loop()
             // und der Knoten verstummt dauerhaft -- wirkt dann wie ein Einstellungsfehler.
             // Ein abgelehnter Ring ist dagegen ein echter Sendeversuch und zählt mit.
             // PING_INVALID_TARGET is no send attempt either.
-            if(pingResult != PING_SUPPRESSED_TRACK && pingResult != PING_INVALID_TARGET)
-                meshcom_settings.node_pingcount--;
+            meshcom_settings.node_pingcount = pingCountAfterSend(meshcom_settings.node_pingcount, pingResult == PING_SUPPRESSED_TRACK, pingResult == PING_INVALID_TARGET);
         }
     }
 

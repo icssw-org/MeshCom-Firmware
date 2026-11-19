@@ -12,6 +12,7 @@
 // by gating the sendDisplayTime() call: that function also runs the button page-hold countdown.
 // Order: off, hold, type0, setdisplay (hold before type0: the reason "hold" is the more specific).
 #pragma once
+#include <stdint.h>
 
 enum class DispClkDecision
 {
@@ -56,6 +57,36 @@ static inline bool dispClkHeldFrame(unsigned long displayOffWait, bool &heldFram
     if (displayOffWait == 0)
         heldFrameDrawn = false;
     return displayOffWait > 0 && heldFrameDrawn;
+}
+
+// PING-HOLD-01: a ping/pong/fail frame is shown for PING_FRAME_HOLD_MS (or node_pingtime*1000 if that
+// is shorter), then the clock pass redraws the page. DisplayOffWait keeps its full length (display-off
+// timer, "display stays ON while pinging"); only the clock-skip window is shortened, by the deadline
+// heldUntilMs (0 = none: the setdisplay hold text keeps its own duration).
+#define PING_FRAME_HOLD_MS 10000UL
+
+static inline unsigned long dispClkPingHoldMs(unsigned long pingtimeS)
+{
+    const unsigned long full = pingtimeS * 1000UL;
+    return full < PING_FRAME_HOLD_MS ? full : PING_FRAME_HOLD_MS;
+}
+
+// deadline for a frame drawn at now (never 0: 0 means "no deadline")
+static inline unsigned long dispClkFrameDeadline(unsigned long now, unsigned long holdMs)
+{
+    const unsigned long d = (unsigned long)(uint32_t)(now + holdMs);   // millis() is 32 bit
+    return d == 0 ? 1UL : d;
+}
+
+static inline bool dispClkHeldFrame(unsigned long displayOffWait, bool &heldFrameDrawn,
+                                    unsigned long now, unsigned long &heldUntilMs)
+{
+    if (heldUntilMs != 0 && (int32_t)(uint32_t)(now - heldUntilMs) >= 0)   // wrap-safe; deadline reached
+    {
+        heldFrameDrawn = false;
+        heldUntilMs = 0;
+    }
+    return dispClkHeldFrame(displayOffWait, heldFrameDrawn);
 }
 
 static inline const char *dispClkReason(DispClkDecision d)
