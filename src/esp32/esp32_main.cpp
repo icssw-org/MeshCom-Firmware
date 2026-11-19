@@ -5326,7 +5326,23 @@ void esp32loop()
     if (resendPing == 0)
         resendPing = millis();
 
-    if(pingBudgetOpen(meshcom_settings.node_pingtime, meshcom_settings.node_pingcall, meshcom_settings.node_pingcount))
+    // LAST-PONG-01: armed after the last send; one more check tick gives it its fail verdict.
+    static bool pingFinalArmed = false;
+    const bool pingBudgetIsOpen = pingBudgetOpen(meshcom_settings.node_pingtime, meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
+
+    if(pingFailCheckDue(pingFinalArmed, pingBudgetIsOpen, (int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0))
+    {
+        pingFinalArmed = false;
+        // A target cleared since the last send (--pingcall none) gets no verdict.
+        if(bPingSend && meshcom_settings.node_pingcall[0] != 0x00)
+        {
+            printfdeb("[PONG]...fail from %s\n", meshcom_settings.node_pingcall);
+            PongFail(meshcom_settings.node_pingcall);
+        }
+        bPingSend = false;
+    }
+
+    if(pingBudgetIsOpen)
     {
         if((int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0)
         {
@@ -5349,7 +5365,9 @@ void esp32loop()
             // und der Knoten verstummt dauerhaft -- wirkt dann wie ein Einstellungsfehler.
             // Ein abgelehnter Ring ist dagegen ein echter Sendeversuch und zählt mit.
             // PING_INVALID_TARGET is no send attempt either.
+            const int pingCountBefore = meshcom_settings.node_pingcount;
             meshcom_settings.node_pingcount = pingCountAfterSend(meshcom_settings.node_pingcount, pingResult == PING_SUPPRESSED_TRACK, pingResult == PING_INVALID_TARGET);
+            pingFinalArmed = pingFinalArmAfterSend(pingCountBefore, meshcom_settings.node_pingcount, pingResult == PING_QUEUED);
         }
     }
 
