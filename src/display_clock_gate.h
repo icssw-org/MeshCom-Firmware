@@ -97,6 +97,16 @@ static inline bool dispClkFrameExpired(bool heldFrameDrawn, unsigned long heldUn
     return heldFrameDrawn && heldUntilMs != 0 && (int32_t)(uint32_t)(now - heldUntilMs) >= 0;
 }
 
+// TRACK-PING-01: in TRACK mode the page-update block draws the track page only while no display-off
+// timer runs (DisplayOffWait == 0). A ping/pong/fail frame sets DisplayOffWait for the full node_pingtime,
+// so the frame would stay that long. The track page may also draw on the pass where the drawn frame
+// reaches its deadline (no state change here: the caller consumes heldFrameDrawn/heldUntilMs after the draw).
+static inline bool dispClkTrackMayDraw(unsigned long displayOffWait, bool heldFrameDrawn,
+                                       unsigned long heldUntilMs, unsigned long now)
+{
+    return displayOffWait == 0 || dispClkFrameExpired(heldFrameDrawn, heldUntilMs, now);
+}
+
 static inline const char *dispClkReason(DispClkDecision d)
 {
     switch (d)

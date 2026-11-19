@@ -2775,12 +2775,24 @@ void mainStartTimeLoop()
                         wpRefreshClock();
                     }
                     #else
-                    if(DisplayOffWait == 0)
+                    // TRACK-PING-01: a ping/pong/fail frame (DisplayOffWait = node_pingtime) is replaced by the
+                    // track page at its PING_FRAME_HOLD_MS deadline; DisplayOffWait keeps its full length.
+                    if(dispClkTrackMayDraw(DisplayOffWait, bHeldFrameDrawn, heldFrameUntilMs, millis()))
                     {
+                        const bool bPingFrameExpired = (DisplayOffWait != 0);   // released by the deadline, not by DisplayOffWait
+                        if(bPingFrameExpired)
+                            bDisplayDirty = true;   // rebuild the track page now, do not wait for the 15 s grid
+
                         if(iDisplayChange > 10)
                             sendDisplayWX(); // Show WX
                         else
                             sendDisplayTrack(); // Show Track
+
+                        if(bPingFrameExpired && !bSetDisplay)   // a setdisplay text blocked the draw: keep the hold
+                        {
+                            bHeldFrameDrawn  = false;   // frame consumed: the clock line is free again
+                            heldFrameUntilMs = 0;
+                        }
                     }
                     #endif
                 }
