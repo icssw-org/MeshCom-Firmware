@@ -84,3 +84,10 @@ bool dht_name_matches(const char *name, int type);
  * field "node_pingcall", old value -> "". An empty target is valid ("off").
  * Returns true if the value was cleared. */
 bool sanitize_ping_target(char *pingcall, size_t n, const char *own_call, sanitize_log_fn log);
+
+// nRF52840 pins a stored GPIO setting must never claim: P0.00 and P0.01 carry the
+// 32 kHz crystal, P0.18 is nRESET.
+inline bool mcPinReservedNrf52840(int pin)
+{
+    return pin == 0 || pin == 1 || pin == 18;
+}

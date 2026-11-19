@@ -135,7 +135,8 @@ size_t fieldCount();
     #define SETTINGS_PERSIST_WX(X)                                                               \
         X("node_wxflags", CFG_INT, node_wx_flags, 0.0, 3.0,    CFG_NOESC)                        \
         X("node_windpin", CFG_INT, node_wind_pin, 0.0, 48.0,   CFG_NOESC)                        \
-        X("node_windcal", CFG_FLT, node_wind_cal, 0.1, 100.0,  CFG_NOESC)
+        X("node_windcal", CFG_FLT, node_wind_cal, 0.1, 100.0,  CFG_NOESC)                        \
+        X("node_gpioctl", CFG_INT, node_gpioctl, 0.0, 1.0,     CFG_NOESC)
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
         #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)                                           \
             SETTINGS_PERSIST_WX(X)                                                               \

@@ -385,6 +385,23 @@ void sanitize_loaded_settings(void)
 		meshcom_settings.node_country = p.country;
 	}
 
+	// A stored crystal or reset pin hangs the node before the console is up.
+	if(meshcom_settings.node_button_pin != 0 && mcPinReservedNrf52840(meshcom_settings.node_button_pin))
+	{
+		sanitize_log("node_button_pin", "reserved", "0");
+		meshcom_settings.node_button_pin = 0;
+	}
+	if(mcPinReservedNrf52840(meshcom_settings.node_analog_pin))
+	{
+		sanitize_log("node_analog_pin", "reserved", "99");
+		meshcom_settings.node_analog_pin = 99;
+	}
+	if(meshcom_settings.node_owgpio != 0 && mcPinReservedNrf52840(meshcom_settings.node_owgpio))
+	{
+		sanitize_log("node_owgpio", "reserved", "0");
+		meshcom_settings.node_owgpio = 0;
+	}
+
 	// CS-01: max_hop_text liegt bereits in der Struktur (die ganze Struktur wird
 	// in die Datei geschrieben), aber eine alte Datei traegt dort eine 0, weil das
 	// Feld frueher bei jedem Boot ueberschrieben wurde. Plausibilitaet wie beim
