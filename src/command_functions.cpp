@@ -4332,6 +4332,7 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
 
         meshcom_settings.node_pingcount = meshcom_settings.node_pingmax;
+        bPingSend = false;   // PING-STOP-01: no stale in-flight ping -> no spurious PONG FAILED on the first tick
 
         if(bDisplayTrack)
         {
@@ -4344,6 +4345,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"ping stop") == 0)
     {
         meshcom_settings.node_pingcount = 0;
+        bPingSend = false;   // PING-STOP-01
 
         bReturn = true;
     }

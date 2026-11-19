@@ -2202,9 +2202,18 @@ static void sendDisplayClockLine()
     dcIn.second       = meshcom_settings.node_date_second;
     dcIn.oneButton    = bOneButton;
     dcIn.displayDirty = bDisplayDirty;
-    dcIn.holdActive   = dispClkHeldFrame(DisplayOffWait, bHeldFrameDrawn, millis(), heldFrameUntilMs);   // CLK-PING-01: drawn held frame, no clock line
+    const unsigned long dcNow = millis();   // one read: the expiry edge and the clear must see the same time
+    const bool heldFrameExpired = dispClkFrameExpired(bHeldFrameDrawn, heldFrameUntilMs, dcNow);   // PING-HOLD-02: before the call below clears it
+    (void)heldFrameExpired;   // used only on u8g2 boards (#if below); TFT/e-paper builds would warn -> -Werror
+    dcIn.holdActive   = dispClkHeldFrame(DisplayOffWait, bHeldFrameDrawn, dcNow, heldFrameUntilMs);   // CLK-PING-01: drawn held frame, no clock line
 
     const DispClkDecision dcDecision = dispClkDecide(dcIn);
+    #if !defined (BOARD_T5_EPAPER) && !defined (HAS_TFT) && !defined (HAS_TFT_114) && !defined (HAS_TFT_CONNECT)
+    // PING-HOLD-02: ping/pong frame expired on the message page: no clock line there (F1), but the stale frame
+    // must go; re-transfer the cached page buffer ("#N", pageText[0] untouched) once.
+    if(heldFrameExpired && dcDecision == DispClkDecision::SkipType0 && pageLineAnz > 0)
+        sendDisplay1306(false, true, 0, 0, (char*)"#N");
+    #endif
     if(dcDecision != DispClkDecision::Draw)
         return;
 

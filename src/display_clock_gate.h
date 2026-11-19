@@ -89,6 +89,14 @@ static inline bool dispClkHeldFrame(unsigned long displayOffWait, bool &heldFram
     return dispClkHeldFrame(displayOffWait, heldFrameDrawn);
 }
 
+// PING-HOLD-02: true exactly on the pass where a drawn held frame reaches its deadline (call BEFORE the
+// 4-arg dispClkHeldFrame(), which clears the state). On the message page (SkipType0) nothing else redraws,
+// so the clock pass re-transfers the cached page buffer once on this edge.
+static inline bool dispClkFrameExpired(bool heldFrameDrawn, unsigned long heldUntilMs, unsigned long now)
+{
+    return heldFrameDrawn && heldUntilMs != 0 && (int32_t)(uint32_t)(now - heldUntilMs) >= 0;
+}
+
 static inline const char *dispClkReason(DispClkDecision d)
 {
     switch (d)
