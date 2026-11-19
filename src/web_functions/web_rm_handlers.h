@@ -1,5 +1,5 @@
 /**
- * RM GUI W2a -- server side of the Remote page.
+ * RM GUI W2a (docs/rm-gui/impl-plan.md, contract C4) -- server side of the Remote page.
  *
  * All handlers run in the loop task like the rest of the web server (the key store and the sender
  * API of rm_runtime.h are loop-task only). Called by the route chain in web_functions.cpp (G2):
@@ -28,6 +28,9 @@ const char *rmReadBody(char *buf, size_t cap, long content_length);
 
 /** POST /rmpasswd   act=set&pw=<pw>  |  act=clear   -> nodePasswdApply() */
 void sub_rm_passwd(long content_length);
+
+/** POST /rmwebpwd   act=set&pw=<pw>  |  act=clear   -> web login password (node_webpwd), WEB-PWD-01 */
+void sub_web_passwd(long content_length);
 
 /** GET /rmnodes   {"nodes":[{"slot":0,"used":1,"call":"DK5EN-1"},...3 entries]}   never a key */
 void sub_rm_nodes_get(void);

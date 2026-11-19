@@ -409,6 +409,12 @@ inline bool fwShouldInstall(const FwVersion &running, const FwVersion &cand, con
 #define FW_WINDOW_START_MIN 180u          // 03:00
 #define FW_WINDOW_END_MIN 300u            // 05:00 (exclusive)
 #define FW_BATT_FLOOR_MV 3600u
+
+// QA-AU-09: no install below the battery floor when a battery is fitted
+inline bool fwBattOk(bool battHw, float mv)
+{
+    return !battHw || mv >= (float)FW_BATT_FLOOR_MV;
+}
 #define FW_MAX_ATTEMPTS 3u
 #define FW_ATTEMPT_SPACING_MS (6u * 3600u * 1000u)
 #define FW_PHONE_GUARD_MS (30u * 60u * 1000u) // D16: phone connected this long past the due time

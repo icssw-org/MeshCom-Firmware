@@ -11,6 +11,9 @@
 #include <prod_lock.h>   // prodLockNormalise(): production-locked settings, dependency-free
 #include <daylight.h>    // TD-23: BL_DAY_DEFAULT / BL_NIGHT_DEFAULT for the backlight sanitize
 #include <instrument.h>  // INSTRUMENT_ENABLED
+#if !defined(NATIVE_BUILD)
+#include "pin_board.h"   // GPIO-01: pinRepairLoaded() with the board context (after the variant includes via lora_setchip.h)
+#endif
 #else
 #include <maxhop.h>   // MAXHOP_TEXT_FALLBACK, dependency-frei (siehe unten)
 #endif
@@ -292,6 +295,35 @@ bool sanitize_loaded_settings(void)
     {
         meshcom_settings.node_bl_fnight = 0;
         fixed++;
+    }
+    #endif
+
+    #if !defined(NATIVE_BUILD)   // the repair rule is host-tested in test_pin_policy; the board context needs the variant macros
+    // GPIO-01: a stored pin the policy forbids (flash, console, USB, radio, ...) goes back to 0 = board default,
+    // like the nRF52 sanitizer. Strapping, claimed, unreviewed and input-only pins stay: working setups keep working.
+    {
+        struct PinRepair { const char *name; int *field; PinFunc fn; };
+        PinRepair reps[] = {
+            { "node_owgpio", &meshcom_settings.node_owgpio, PIN_FN_ONEWIRE },
+            { "node_button_pin", &meshcom_settings.node_button_pin, PIN_FN_BUTTON },
+            { "node_analog_pin", &meshcom_settings.node_analog_pin, PIN_FN_ANALOG },
+            { "node_wind_pin", &meshcom_settings.node_wind_pin, PIN_FN_WIND },
+        };
+        for(const PinRepair &r : reps)
+        {
+            const int was = *r.field;
+            if(r.fn == PIN_FN_ANALOG && was >= 99) continue;   // 99 = unset
+            if(r.fn == PIN_FN_BUTTON && was == 99) continue;   // 99 = no button
+            // pinRepairLoaded() keeps the 0 = no default sentinel; pinBoardDefault() returns -1 for none (never store it)
+            const int bd = pinBoardDefault(r.fn);
+            const int now = pinRepairLoaded(pinBoardContext(r.fn), was, bd < 0 ? 0 : bd);
+            if(now != was)
+            {
+                *r.field = now;
+                Serial.printf("[FLASH]...%s gpio %i forbidden on this board, reset to default\n", r.name, was);
+                fixed++;
+            }
+        }
     }
     #endif
 

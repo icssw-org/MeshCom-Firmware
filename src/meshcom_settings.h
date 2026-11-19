@@ -223,6 +223,8 @@
         M(int, node_wx_flags, 0)                                                                     \
         M(int, node_wind_pin, 0)                                                                     \
         M(float, node_wind_cal, 2.4f)                                                                \
+        /* GPIO-01 Part B: master switch of --gpio (0 = off, default); levels are never persisted */ \
+        M(int, node_gpioctl, 0)                                                                      \
         /* runtime: the NTP host in use, recopied from node_ownntp on every connect */              \
         A(char, node_ntp, [40], {0})
 #else

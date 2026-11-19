@@ -7,7 +7,7 @@
  * derived straight from the body buffer, held in a LOCAL RmNodes (never static) and scrubbed on every
  * path. No handler prints, logs or echoes a password or a key; answers carry static tokens only.
  *
- * Output limits: one write <= 512 B, every printf format below
+ * Output limits (docs/rm-gui/verdict-webtests.md M1): one write <= 512 B, every printf format below
  * is a short literal with numeric conversions only (nRF52 Print::printf has a 256 B buffer, ESP32
  * mallocs above 64 B); text from outside goes through rm_json_str() in <= 200 B pieces.
  */
@@ -17,6 +17,9 @@
 #include "web_rm_util.h"
 #include "web_rm_parse.h"
 #include "web_rm_handlers.h"
+#include "web_auth.h"           // WEB-PWD-01: webAuthSetPassword()
+
+#include <loop_functions.h>  // save_settings(): esp32_flash.h on ESP32, WisBlock-API.h on nRF52 (bool there)
 
 #include "../command_functions.h" // nodePasswdApply()
 #include "../remote_cmd.h"        // rmDeriveKey()
@@ -120,6 +123,37 @@ void sub_rm_passwd(long content_length)
 
     rm_wipe(body, sizeof(body)); // the password is gone from here on
     rmAnswer(err);
+}
+
+/* ---- POST /rmwebpwd (WEB-PWD-01) ------------------------------------------------------------------ */
+
+void sub_web_passwd(long content_length)
+{
+    char body[RM_BODY_MAX + 1];
+    const char *err = rmReadBody(body, sizeof(body), content_length);
+
+    if (err == nullptr)
+    {
+        const RmPwdReq req = rmParseWebPwdBody(body); // req.pw points into body
+        if (req.err != nullptr)
+            err = req.err;
+        else
+        {
+            webAuthSetPassword(meshcom_settings.node_webpwd, sizeof(meshcom_settings.node_webpwd),
+                               req.clear ? nullptr : req.pw); // validated above; drops every session
+            save_settings();
+        }
+    }
+
+    rm_wipe(body, sizeof(body));
+    if (err != nullptr && strcmp(err, RM_ERR_PW) == 0)
+    {   // own sentence: the RM table says 14 characters, the web password takes 19
+        send_http_header(422, RESPONSE_TYPE_JSON);
+        web_client.println("{\"ok\":false,\"err\":\"pw\",\"msg\":\"The web password needs 1 to 19 plain characters, "
+                           "no space at the start or end, and must not be the word none.\"}");
+    }
+    else
+        rmAnswer(err);
 }
 
 /* ---- /rmnodes ----------------------------------------------------------------------------------- */

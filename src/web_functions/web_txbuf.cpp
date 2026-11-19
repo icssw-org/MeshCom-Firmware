@@ -11,6 +11,7 @@
 #include "watchdog_feed.h"
 #include "web_commonServer.h"
 #include "web_txbuf.h"
+#include <instrument.h>   // INSTRUMENT_ENABLED
 
 #if defined(ESP32)
 #include <lwip/sockets.h>
@@ -78,6 +79,20 @@ static WebTxIo txIo(CommonWebClient *c)
     return io;
 }
 
+#if INSTRUMENT_ENABLED
+// WEB-TX-01: longest no-progress stretch of the transfer. Quantised at the lwIP retransmission
+// timer (about 0.5 s ticks, backing off) = lost segment; at most the WiFi DTIM interval =
+// modem sleep; at sent == send-buffer size with 0 ACKs = first window. Printed for every
+// transfer with a gap >= 200 ms, also the ones that completed.
+static void txLogGap(const char *how)
+{
+    Serial.printf("[WEB];tx;gap;%s;max_ms;%lu;at_bytes;%lu;eagain;%lu;sent;%lu;total_ms;%lu\n", how,
+                  (unsigned long)s_tx.maxGapMs, (unsigned long)s_tx.gapAtBytes,
+                  (unsigned long)s_tx.eagain, (unsigned long)s_tx.sentBytes,
+                  (unsigned long)(millis() - s_tx.startMs));
+}
+#endif
+
 static void txLogAbort()
 {
     if (!s_tx.aborted || s_txLogged)
@@ -85,13 +100,16 @@ static void txLogAbort()
     s_txLogged = true;
     Serial.printf("[WEB];tx;abort;%s;sent;%lu;ms;%lu\n", webTxAbortName(s_tx.abortReason),
                   (unsigned long)s_tx.sentBytes, (unsigned long)(millis() - s_tx.startMs));
+#if INSTRUMENT_ENABLED
+    txLogGap("abort");
+#endif
 }
 
 static void txLazyBegin()
 {
     if (s_tx.active)
         return;
-    uint8_t *mem = (uint8_t *)malloc(WEB_TX_BUF_SIZE);
+    uint8_t *mem = (uint8_t *)malloc(WEB_TX_BUF_SIZE + WEB_TX_FRAME_ROOM); // + room for in-place chunk framing
     if (mem == nullptr && !s_noBufLogged)
     {
         s_noBufLogged = true;
@@ -125,6 +143,7 @@ void CommonWebClient::txEnd()
         return;
     bool wasAborted = s_tx.aborted;
     webTxFlush(s_tx, txIo(this));
+    webTxFinish(s_tx, txIo(this)); // terminating chunk; none after an abort, so the browser sees the cut
     if (!wasAborted && s_tx.aborted)
     {
         txLogAbort();
@@ -135,9 +154,32 @@ void CommonWebClient::txEnd()
         Serial.printf("[WEB];tx;done;sent;%lu;ms;%lu;flushes;%u\n", (unsigned long)s_tx.sentBytes,
                       (unsigned long)(millis() - s_tx.startMs), (unsigned)s_tx.flushes);
     }
-    free(s_tx.buf);
+#if INSTRUMENT_ENABLED
+    if (!s_tx.aborted && s_tx.maxGapMs >= 200)
+        txLogGap("done");
+#endif
+    free(s_tx.raw);
+    s_tx.raw = nullptr;
     s_tx.buf = nullptr;
     webTxEnd(s_tx);
+}
+
+void webTxBeginChunked(CommonWebClient &c)
+{
+    txLazyBegin();
+    bool wasAborted = s_tx.aborted;
+    webTxStartChunked(s_tx, txIo(&c));
+    if (!wasAborted && s_tx.aborted)
+    {
+        txLogAbort();
+        // Base stop like the write path: CommonWebClient::stop() would txEnd() and reset s_tx, and the
+        // rest of the page would malloc a fresh buffer and log a second abort.
+#if defined(ESP32)
+        c.WiFiClient::stop();
+#else
+        c.EthernetClient::stop();
+#endif
+    }
 }
 
 void CommonWebClient::stop()

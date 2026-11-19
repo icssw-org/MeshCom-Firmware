@@ -5,6 +5,7 @@ This file contains all web-based remotely callable functions
 #include <command_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <batt_functions.h> // QA-AU-09: battHardwarePresent
 #include <string> 
 #ifdef ESP32
 #include <esp_partition.h> // updapply: Safeboot partition present
@@ -103,6 +104,11 @@ void webFunctionCall(funCallStruct* functionData) {
         FwNetStatus au;
         fwNetGetStatus(au);
         FwStageRecord rec;
+        if(!fwBattOk(battHardwarePresent(), global_batt)) {   // QA-AU-09
+            Serial.println("[AU];apply;refuse;battery");
+            functionData->returnCode = WF_RETURNCODE_FAIL;
+            return;
+        }
         if(au.state == FWS_BUSY || !fwNetLoadRecord(rec) || !fwNetSafebootCapable() ||
            esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, "safeboot") == nullptr) {
             functionData->returnCode = WF_RETURNCODE_FAIL;
