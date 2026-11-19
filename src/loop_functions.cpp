@@ -382,6 +382,7 @@ char LogCallsign[10] = {0};
 
 bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
+unsigned long heldFrameUntilMs = 0;   // PING-HOLD-01: clock-skip deadline of a ping/pong frame (0 = none)
 bool bHeldFrameDrawn = false;   // CLK-PING-01: a held full-screen frame was drawn (DisplayPong, hold text)
 bool bDisplayTrack = false;
 bool bOneButton = false;
@@ -2201,9 +2202,18 @@ static void sendDisplayClockLine()
     dcIn.second       = meshcom_settings.node_date_second;
     dcIn.oneButton    = bOneButton;
     dcIn.displayDirty = bDisplayDirty;
-    dcIn.holdActive   = dispClkHeldFrame(DisplayOffWait, bHeldFrameDrawn);   // CLK-PING-01: drawn held frame, no clock line
+    const unsigned long dcNow = millis();   // one read: the expiry edge and the clear must see the same time
+    const bool heldFrameExpired = dispClkFrameExpired(bHeldFrameDrawn, heldFrameUntilMs, dcNow);   // PING-HOLD-02: before the call below clears it
+    (void)heldFrameExpired;   // used only on u8g2 boards (#if below); TFT/e-paper builds would warn -> -Werror
+    dcIn.holdActive   = dispClkHeldFrame(DisplayOffWait, bHeldFrameDrawn, dcNow, heldFrameUntilMs);   // CLK-PING-01: drawn held frame, no clock line
 
     const DispClkDecision dcDecision = dispClkDecide(dcIn);
+    #if !defined (BOARD_T5_EPAPER) && !defined (HAS_TFT) && !defined (HAS_TFT_114) && !defined (HAS_TFT_CONNECT)
+    // PING-HOLD-02: ping/pong frame expired on the message page: no clock line there (F1), but the stale frame
+    // must go; re-transfer the cached page buffer ("#N", pageText[0] untouched) once.
+    if(heldFrameExpired && dcDecision == DispClkDecision::SkipType0 && pageLineAnz > 0)
+        sendDisplay1306(false, true, 0, 0, (char*)"#N");
+    #endif
     if(dcDecision != DispClkDecision::Draw)
         return;
 
@@ -2765,12 +2775,24 @@ void mainStartTimeLoop()
                         wpRefreshClock();
                     }
                     #else
-                    if(DisplayOffWait == 0)
+                    // TRACK-PING-01: a ping/pong/fail frame (DisplayOffWait = node_pingtime) is replaced by the
+                    // track page at its PING_FRAME_HOLD_MS deadline; DisplayOffWait keeps its full length.
+                    if(dispClkTrackMayDraw(DisplayOffWait, bHeldFrameDrawn, heldFrameUntilMs, millis()))
                     {
+                        const bool bPingFrameExpired = (DisplayOffWait != 0);   // released by the deadline, not by DisplayOffWait
+                        if(bPingFrameExpired)
+                            bDisplayDirty = true;   // rebuild the track page now, do not wait for the 15 s grid
+
                         if(iDisplayChange > 10)
                             sendDisplayWX(); // Show WX
                         else
                             sendDisplayTrack(); // Show Track
+
+                        if(bPingFrameExpired && !bSetDisplay)   // a setdisplay text blocked the draw: keep the hold
+                        {
+                            bHeldFrameDrawn  = false;   // frame consumed: the clock line is free again
+                            heldFrameUntilMs = 0;
+                        }
                     }
                     #endif
                 }
@@ -4015,7 +4037,8 @@ void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20])
             u8g2->drawStr(5, 60, line4);
         #endif
     } while (u8g2->nextPage());
-    bHeldFrameDrawn = true;   // CLK-PING-01: the clock line keeps off this frame while DisplayOffWait runs
+    bHeldFrameDrawn = true;   // CLK-PING-01: the clock line keeps off this frame for PING_FRAME_HOLD_MS
+    heldFrameUntilMs = dispClkFrameDeadline(millis(), dispClkPingHoldMs(meshcom_settings.node_pingtime));
 
     #endif
 }

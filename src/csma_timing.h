@@ -106,3 +106,11 @@ static inline unsigned long csmaApplyAgeFloor(unsigned long today_ms, uint32_t a
     unsigned long aged = csmaAgedHoldMs(stage, own_airtime_ms, jitter_slot);
     return aged < today_ms ? aged : today_ms;
 }
+
+/* CSMA-03 (2026-11-08): nrf52loop() slept a fixed 100 ms per pass, so a finished CAD result sat
+ * 60-97 ms before the TX arm consumed it. While a CAD runs or its result is pending the loop
+ * polls at 1 ms; otherwise the usual 100 ms. */
+static inline unsigned long csmaLoopDelayMs(bool cadInProgress, bool cadDone)
+{
+    return (cadInProgress || cadDone) ? 1UL : 100UL;
+}

@@ -1052,6 +1052,7 @@ bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet rec
 #ifdef ENABLE_WIND
 #include "wind_counter.h"
 #endif
+#include "ping_budget.h"   // PING-NRF-01: pingBudgetOpen(), pingCountAfterSend()
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -5325,7 +5326,23 @@ void esp32loop()
     if (resendPing == 0)
         resendPing = millis();
 
-    if(meshcom_settings.node_pingtime > 29 && meshcom_settings.node_pingcall[0] != 0x00 && meshcom_settings.node_pingcount > 0)
+    // LAST-PONG-01: armed after the last send; one more check tick gives it its fail verdict.
+    static bool pingFinalArmed = false;
+    const bool pingBudgetIsOpen = pingBudgetOpen(meshcom_settings.node_pingtime, meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
+
+    if(pingFailCheckDue(pingFinalArmed, pingBudgetIsOpen, (int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0))
+    {
+        pingFinalArmed = false;
+        // A target cleared since the last send (--pingcall none) gets no verdict.
+        if(bPingSend && meshcom_settings.node_pingcall[0] != 0x00)
+        {
+            printfdeb("[PONG]...fail from %s\n", meshcom_settings.node_pingcall);
+            PongFail(meshcom_settings.node_pingcall);
+        }
+        bPingSend = false;
+    }
+
+    if(pingBudgetIsOpen)
     {
         if((int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0)
         {
@@ -5339,6 +5356,13 @@ void esp32loop()
 
             PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
+            // PING-FAIL-REPEAT-01: no new ping queued (refused ring, TRACK, invalid target): drop the
+            // stale flag so the unanswered ping is not reported again on the next tick. Cleared after
+            // sendPing(), not before: sendPing() draws "SENT" only while !bPingSend, and the
+            // "PONG FAILED" frame drawn just above must stay on the OLED.
+            if(pingResult != PING_QUEUED)
+                bPingSend = false;
+
             // PING_INVALID_TARGET logs its own once-per-episode notice in sendPing().
             if(pingResult != PING_INVALID_TARGET)
                 printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
@@ -5348,8 +5372,9 @@ void esp32loop()
             // und der Knoten verstummt dauerhaft -- wirkt dann wie ein Einstellungsfehler.
             // Ein abgelehnter Ring ist dagegen ein echter Sendeversuch und zählt mit.
             // PING_INVALID_TARGET is no send attempt either.
-            if(pingResult != PING_SUPPRESSED_TRACK && pingResult != PING_INVALID_TARGET)
-                meshcom_settings.node_pingcount--;
+            const int pingCountBefore = meshcom_settings.node_pingcount;
+            meshcom_settings.node_pingcount = pingCountAfterSend(meshcom_settings.node_pingcount, pingResult == PING_SUPPRESSED_TRACK, pingResult == PING_INVALID_TARGET);
+            pingFinalArmed = pingFinalArmAfterSend(pingCountBefore, meshcom_settings.node_pingcount, pingResult == PING_QUEUED);
         }
     }
 
