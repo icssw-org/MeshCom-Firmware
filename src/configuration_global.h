@@ -8,6 +8,10 @@
 #define SOURCE_VERSION_SUB "a"
 #define SOURCE_VERSION_WEB_SUB "a"
 
+// BOOT-01: product title on boot screens and the web logo; must stay the prefix of SOURCE_VERSION.
+#define MESHCOM_VERSION_SHORT "4.4"
+#define MESHCOM_TITLE "MeshCom " MESHCOM_VERSION_SHORT
+
 // Werkseinstellung des Rufzeichens und der zugehoerige "Node ist noch nicht
 // konfiguriert"-Test. Beides stand bisher als Literal an fuenf Stellen in drei
 // Images (esp32_main, nrf52_main, safeboot) und wurde dort unterschiedlich

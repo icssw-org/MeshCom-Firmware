@@ -1047,12 +1047,14 @@ bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet rec
 #include "gateway_service.h"
 #include "gw_reg_runtime.h"
 #include "wx_pins.h"
+#include "pin_board.h"   // GPIO-01
 #ifdef ENABLE_LTR390
 #include "ltr390.h"
 #endif
 #ifdef ENABLE_WIND
 #include "wind_counter.h"
 #endif
+#include "ping_budget.h"   // PING-NRF-01: pingBudgetOpen(), pingCountAfterSend()
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -1826,7 +1828,18 @@ void esp32setup()
     #endif
 
     #if defined(ENABLE_WIND)
-        if(bWINDON && meshcom_settings.node_wind_pin != 0 && wxWindPinOk(meshcom_settings.node_wind_pin))
+        // GPIO-01: a stored forbidden pin is repaired (esp32_flash.cpp sanitize_loaded_settings); strapping/claimed
+        // pins of an existing setup keep working, input-only pins have no pull-up for the anemometer
+        {
+            const int wbd = pinBoardDefault(PIN_FN_WIND);   // -1 = none; pinRepairLoaded() wants the 0 sentinel
+            const int wp = pinRepairLoaded(pinBoardContext(PIN_FN_WIND), meshcom_settings.node_wind_pin, wbd < 0 ? 0 : wbd);
+            if(wp != meshcom_settings.node_wind_pin)
+            {
+                Serial.printf("[WIND]...gpio %i forbidden on this board, reset to off\n", meshcom_settings.node_wind_pin);
+                meshcom_settings.node_wind_pin = wp;
+            }
+        }
+        if(bWINDON && pinBoardLoadedUsable(PIN_FN_WIND, meshcom_settings.node_wind_pin))
             windBegin(meshcom_settings.node_wind_pin);
     #endif
 
@@ -2089,15 +2102,14 @@ void esp32setup()
         bRadio = false;
     #endif
 
-    //#if not defined(BOARD_T_DECK_PRO)
-    // extra source
+    #ifdef BOARD_COUNTRY
+        if(meshcom_settings.node_country == 0)
+            meshcom_settings.node_country = BOARD_COUNTRY;
+    #endif
+
     // > 4.34w we use EU8 instead of EU
     if(meshcom_settings.node_country == 0)
         meshcom_settings.node_country = 8;
-
-    #ifdef BOARD_COUNTRY
-        meshcom_settings.node_country = BOARD_COUNTRY;
-    #endif
 
     lora_setcountry(meshcom_settings.node_country);
 
@@ -4237,6 +4249,16 @@ void esp32loop()
         #if defined(GPS_SWITCH)
             digitalWrite(GPS_SWITCH, LOW);
         #endif
+        #if defined(BOARD_HELTEC_V4)
+            // GPSV4-01: GPS off -> GNSS enable driven inactive once, not left floating. This branch runs every
+            // loop pass, so a latch keeps it to one call per boot (a later --gps off deactivates by itself).
+            static bool s_hv4GpsOffApplied = false;
+            if(!s_hv4GpsOffApplied)
+            {
+                WZ_GPS_Deactivate();
+                s_hv4GpsOffApplied = true;
+            }
+        #endif
     }
     #endif
 
@@ -4590,9 +4612,8 @@ void esp32loop()
             
         if(!bGPSON)
         {
-            #if defined (BOARD_T_DECK_PRO)
-            tdeck_set_gps(false);
-            #endif
+            // T-Deck Pro: no loop-side suspend of gps_task. bGPSON is forced false at boot, so this ran
+            // every 3 s and froze GPS screen 3 (GPS-SKY W4). entry3/exit3 start and stop the task.
 
             if(meshcom_settings.node_postime > 0)
             {
@@ -4914,8 +4935,8 @@ void esp32loop()
         telemetry_timer = millis();
     }
 
-    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-        { INSTR_SECTION("display_tick"); LOOP_SECTION(LSEC_DISPLAY); mainStartTimeLoop(); }
+    // CLK-PING-01: clock tick always; the clock line skips itself while a held frame is shown.
+    { INSTR_SECTION("display_tick"); LOOP_SECTION(LSEC_DISPLAY); mainStartTimeLoop(); }
 
     #if not defined(BOARD_T_DECK_PRO)
     if(DisplayOffWait > 0)
@@ -4931,8 +4952,7 @@ void esp32loop()
                 digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
                 #endif
 
-                if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-                    sendDisplay1306(true, true, 0, 0, (char*)"#C");
+                sendDisplay1306(true, true, 0, 0, (char*)"#C");
             }
         }
     }
@@ -5330,7 +5350,23 @@ void esp32loop()
     if (resendPing == 0)
         resendPing = millis();
 
-    if(meshcom_settings.node_pingtime > 29 && meshcom_settings.node_pingcall[0] != 0x00 && meshcom_settings.node_pingcount > 0)
+    // LAST-PONG-01: armed after the last send; one more check tick gives it its fail verdict.
+    static bool pingFinalArmed = false;
+    const bool pingBudgetIsOpen = pingBudgetOpen(meshcom_settings.node_pingtime, meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
+
+    if(pingFailCheckDue(pingFinalArmed, pingBudgetIsOpen, (int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0))
+    {
+        pingFinalArmed = false;
+        // A target cleared since the last send (--pingcall none) gets no verdict.
+        if(bPingSend && meshcom_settings.node_pingcall[0] != 0x00)
+        {
+            printfdeb("[PONG]...fail from %s\n", meshcom_settings.node_pingcall);
+            PongFail(meshcom_settings.node_pingcall);
+        }
+        bPingSend = false;
+    }
+
+    if(pingBudgetIsOpen)
     {
         if((int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0)
         {
@@ -5344,6 +5380,13 @@ void esp32loop()
 
             PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
+            // PING-FAIL-REPEAT-01: no new ping queued (refused ring, TRACK, invalid target): drop the
+            // stale flag so the unanswered ping is not reported again on the next tick. Cleared after
+            // sendPing(), not before: sendPing() draws "SENT" only while !bPingSend, and the
+            // "PONG FAILED" frame drawn just above must stay on the OLED.
+            if(pingResult != PING_QUEUED)
+                bPingSend = false;
+
             // PING_INVALID_TARGET logs its own once-per-episode notice in sendPing().
             if(pingResult != PING_INVALID_TARGET)
                 printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
@@ -5353,8 +5396,9 @@ void esp32loop()
             // und der Knoten verstummt dauerhaft -- wirkt dann wie ein Einstellungsfehler.
             // Ein abgelehnter Ring ist dagegen ein echter Sendeversuch und zählt mit.
             // PING_INVALID_TARGET is no send attempt either.
-            if(pingResult != PING_SUPPRESSED_TRACK && pingResult != PING_INVALID_TARGET)
-                meshcom_settings.node_pingcount--;
+            const int pingCountBefore = meshcom_settings.node_pingcount;
+            meshcom_settings.node_pingcount = pingCountAfterSend(meshcom_settings.node_pingcount, pingResult == PING_SUPPRESSED_TRACK, pingResult == PING_INVALID_TARGET);
+            pingFinalArmed = pingFinalArmAfterSend(pingCountBefore, meshcom_settings.node_pingcount, pingResult == PING_QUEUED);
         }
     }
 

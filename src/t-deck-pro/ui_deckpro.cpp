@@ -15,6 +15,7 @@
 #include <command_functions.h>
 #include "regex_functions.h"
 #include "msg_input_budget.h"   // TD-25 byte budget of the message input
+#include "tdeck_pro_gps_sky.h"
 
 #define SETTING_PAGE_MAX_ITEM 7
 #define GET_BUFF_LEN(a) sizeof(a)/sizeof(a[0])
@@ -947,6 +948,7 @@ static void scr3_GPS_updata(void)
     lv_snprintf(buf, 16, "%d", hdop);
     gps_set_line(label_list[9], "hdop:", buf);
 
+    tdeckProGpsSkyRefresh();   // GPS-SKY W4
 }
 
 static void GPS_loop_timer_event(lv_timer_t * t)
@@ -993,6 +995,7 @@ static void create3(lv_obj_t *parent)
     lv_obj_align(scr3_cnt_lab, LV_ALIGN_TOP_RIGHT, -10, 10);
 
     scr_back_btn_create(parent, ("GPS"), scr3_btn_event_cb);
+    tdeckProGpsSkyCreate(parent, scr3_cont);   // GPS-SKY W4: sky plot over the text view, toggle button
 }
 
 static void entry3(void) 

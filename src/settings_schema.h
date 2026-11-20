@@ -111,6 +111,8 @@ size_t fieldCount();
     X("node_cflash",    CFG_INT, node_cleanflash, CFG_NORANGE, CFG_NOESC)                        \
     /* gateway registration state (gw_reg_runtime.cpp): persisted, never exported/imported. */   \
     X("node_gwrf",      CFG_INT, node_gwrf,       CFG_NORANGE, CFG_NOESC)                        \
+    /* SENS-04: one-wire DHT type (11 or 22), --dht; persisted, not exported. */                  \
+    X("node_dht",       CFG_INT, node_dht_type,   11.0, 22.0, CFG_NOESC)                         \
     X("node_gwrc",      CFG_STR, node_gwrc,       CFG_NORANGE, CFG_NOESC)                        \
     SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)
 
@@ -140,7 +142,8 @@ size_t fieldCount();
         X("node_aprswxcal", CFG_STR, node_aprswxcall,   CFG_NORANGE,    CFG_NOESC)                   \
         X("node_aprsissrv", CFG_STR, node_aprsisserver, CFG_NORANGE,    CFG_NOESC)                   \
         X("node_aprsisprt", CFG_INT, node_aprsisport,   1.0, 65535.0,   CFG_NOESC)                   \
-        X("node_aprsispas", CFG_STR, node_aprsispass,   CFG_NORANGE,    CFG_NOESC)
+        X("node_aprsispas", CFG_STR, node_aprsispass,   CFG_NORANGE,    CFG_NOESC)                   \
+        X("node_gpioctl", CFG_INT, node_gpioctl, 0.0, 1.0,     CFG_NOESC)
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
         #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)                                           \
             SETTINGS_PERSIST_WX(X)                                                               \
@@ -159,7 +162,10 @@ size_t fieldCount();
             X("node_wifion",   CFG_BOOL, node_wifion,           CFG_NORANGE, CFG_NOESC)          \
             X("node_blday",    CFG_INT,  node_bl_day,           CFG_NORANGE, CFG_NOESC)          \
             X("node_blnight",  CFG_INT,  node_bl_night,         CFG_NORANGE, CFG_NOESC)          \
-            X("node_blauto",   CFG_BOOL, node_bl_auto,          CFG_NORANGE, CFG_NOESC)
+            X("node_blauto",   CFG_BOOL, node_bl_auto,          CFG_NORANGE, CFG_NOESC)          \
+            X("node_tdtheme",  CFG_CHR,  node_tdeck_theme,      CFG_NORANGE, CFG_NOESC)          \
+            X("node_tdchatf",  CFG_CHR,  node_tdeck_chatfont,   CFG_NORANGE, CFG_NOESC)         \
+            X("node_blfnight", CFG_CHR,  node_bl_fnight,        CFG_NORANGE, CFG_NOESC)
     #else
         #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X) SETTINGS_PERSIST_WX(X)
     #endif

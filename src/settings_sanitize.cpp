@@ -139,6 +139,28 @@ bool sanitize_backlight_level(int &v, int def, const char *field, sanitize_log_f
     return true;
 }
 
+bool dht_type_valid(int v)
+{
+    return v == 11 || v == 22;
+}
+
+bool sanitize_dht_type(int &v, sanitize_log_fn log)
+{
+    if (dht_type_valid(v))
+        return false;
+
+    report_int(log, "node_dht", v, 11);
+    v = 11;
+    return true;
+}
+
+bool dht_name_matches(const char *name, int type)
+{
+    if (name == NULL || !dht_type_valid(type))
+        return false;
+    return strcmp(name, type == 22 ? "DHT22" : "DHT11") == 0;
+}
+
 int resolve_tx_power(int stored, int board_default)
 {
     if (stored == 0 || stored == POWER_NOT_SET)

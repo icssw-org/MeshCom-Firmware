@@ -140,6 +140,25 @@ static inline bool cetFrameStale(const uint8_t *frame, uint16_t len, const CetCl
     return cetFrameStale(frame, len, c.trusted, c.now_ok, c.now_utc);
 }
 
+// CET-AGE-01 (R1): ein zweiter Server-Strom liefert {CET}-Beacons 20-115 s zu spaet;
+// ohne Schutz springt die Uhr zurueck und mit dem naechsten frischen Beacon wieder vor.
+// delta_s = Nutzlast-UTC minus Knoten-Uhr-UTC (beide UTC, siehe cetNowUtc()).
+// Rueckwaerts > CET_BACKSTEP_MAX_S binnen CET_BACKSTEP_WINDOW_MS nach dem letzten
+// angenommenen {CET} -> false (ignorieren). Vorwaerts, kleine Schritte, erstes {CET}
+// nach Boot und Ablauf des Fensters -> true.
+#ifndef CET_BACKSTEP_MAX_S
+#define CET_BACKSTEP_MAX_S 5
+#endif
+#ifndef CET_BACKSTEP_WINDOW_MS
+#define CET_BACKSTEP_WINDOW_MS (30UL * 60UL * 1000UL)
+#endif
+static inline bool cetStepAllowed(long delta_s, bool have_last, unsigned long since_last_ms)
+{
+    if(!have_last) return true;
+    if(since_last_ms > (unsigned long)CET_BACKSTEP_WINDOW_MS) return true;
+    return delta_s >= -(long)CET_BACKSTEP_MAX_S;
+}
+
 #endif // CET_AGE_PURE_H
 
 #if defined(CET_AGE_WITH_CLOCK) && !defined(UNIT_TEST) && !defined(CET_AGE_CLOCK_H)

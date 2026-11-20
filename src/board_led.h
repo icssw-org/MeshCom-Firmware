@@ -1,4 +1,4 @@
-// board_led.h -- board LED decision logic. Arduino-free, header-only.
+// board_led.h -- board LED decision logic. Arduino-free, header-only (native test: test/test_board_led).
 //
 // The pin driving (digitalWrite / NeoPixel) stays in loop_functions.cpp (boardLedTick, boardLedForceOff); this
 // header holds what can be tested on the host:
@@ -59,6 +59,50 @@ inline BoardLedStep boardLedPhase(uint32_t now, uint32_t timer, bool lit)
         s.changed = true;
     }
     return s;
+}
+
+// WEB-LED-01: the persisted three-way mode. Stored as bUSER_BOARD_LED (node_sset3 0x0080, "lit at all") plus the
+// steady bit (node_sset4 0x4000); a stored node without the steady bit keeps today's heartbeat (= flash).
+#define BOARD_LED_MODE_OFF    0
+#define BOARD_LED_MODE_FLASH  1
+#define BOARD_LED_MODE_STEADY 2
+#define BOARD_LED_STEADY_BIT  0x4000   // node_sset4
+
+inline int boardLedMode(bool ledOn, bool steadyBit)
+{
+    return !ledOn ? BOARD_LED_MODE_OFF : (steadyBit ? BOARD_LED_MODE_STEADY : BOARD_LED_MODE_FLASH);
+}
+
+inline const char *boardLedModeName(int mode)
+{
+    return mode == BOARD_LED_MODE_STEADY ? "steady" : mode == BOARD_LED_MODE_FLASH ? "flash" : "off";
+}
+
+// One tick of the stored mode. pinFree = boardLedPinFree(); rmHold = an RM1 "led" override holds the same pad (it
+// wins until reboot or "led off"): the stored mode then reports dark without a pin write and resumes on release.
+inline BoardLedStep boardLedDecide(int mode, bool pinFree, bool rmHold, uint32_t now, uint32_t timer, bool lit)
+{
+    if (mode == BOARD_LED_MODE_OFF || !pinFree || rmHold)
+    {
+        BoardLedStep s = {false, timer, false};   // dark; a held pad is not ours to write
+        s.changed = lit && !rmHold;
+        return s;
+    }
+    if (mode == BOARD_LED_MODE_STEADY)
+    {
+        BoardLedStep s = {true, timer, !lit};
+        return s;
+    }
+    return boardLedPhase(now, timer, lit);
+}
+
+// WEB-LED-01 M1: NeoPixel-only boards re-arm the white pulse every tick in steady. The handler (esp32_main.cpp)
+// wipes the pixel after DELAYVAL by sending black while bLED_CLEAR is set; a pending white wins over CLEAR there, so
+// the re-arm must ignore CLEAR (else one dark iteration and a second show() per second) but yield to a status colour.
+inline bool boardLedSteadyRearm(int mode, bool red, bool green, bool orange, bool blue, bool clear)
+{
+    (void)clear;   // see above
+    return mode == BOARD_LED_MODE_STEADY && !red && !green && !orange && !blue;
 }
 
 // pin level (0 / 1) for a logical lit state

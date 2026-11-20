@@ -11,6 +11,9 @@
 #include <prod_lock.h>   // prodLockNormalise(): production-locked settings, dependency-free
 #include <daylight.h>    // TD-23: BL_DAY_DEFAULT / BL_NIGHT_DEFAULT for the backlight sanitize
 #include <instrument.h>  // INSTRUMENT_ENABLED
+#if !defined(NATIVE_BUILD)
+#include "pin_board.h"   // GPIO-01: pinRepairLoaded() with the board context (after the variant includes via lora_setchip.h)
+#endif
 #else
 #include <maxhop.h>   // MAXHOP_TEXT_FALLBACK, dependency-frei (siehe unten)
 #endif
@@ -242,6 +245,10 @@ bool sanitize_loaded_settings(void)
     if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
         fixed++;
 
+    // DHT type: the schema range 11..22 lets e.g. 15 through; --info/--persiststat must show 11 or 22 only
+    if(sanitize_dht_type(meshcom_settings.node_dht_type, sanitize_log))
+        fixed++;
+
     // Ping target must be a plain callsign (no group, special target, own call)
     if(sanitize_ping_target(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), meshcom_settings.node_call, sanitize_log))
         fixed++;
@@ -271,6 +278,53 @@ bool sanitize_loaded_settings(void)
         fixed++;
     if(sanitize_backlight_level(meshcom_settings.node_bl_night, BL_NIGHT_DEFAULT, "node_bl_night", sanitize_log))
         fixed++;
+    // TD-THEME-01: 0 auto, 1 dark, 2 light; anything else is a corrupt value -> auto
+    if(meshcom_settings.node_tdeck_theme > 2)
+    {
+        meshcom_settings.node_tdeck_theme = 0;
+        fixed++;
+    }
+    // 0 S, 1 M, 2 L chat font; anything else is a corrupt value -> S
+    if(meshcom_settings.node_tdeck_chatfont > 2)
+    {
+        meshcom_settings.node_tdeck_chatfont = 0;
+        fixed++;
+    }
+    // Display mode: forced-night flag is 0 or 1
+    if(meshcom_settings.node_bl_fnight > 1)
+    {
+        meshcom_settings.node_bl_fnight = 0;
+        fixed++;
+    }
+    #endif
+
+    #if !defined(NATIVE_BUILD)   // the repair rule is host-tested in test_pin_policy; the board context needs the variant macros
+    // GPIO-01: a stored pin the policy forbids (flash, console, USB, radio, ...) goes back to 0 = board default,
+    // like the nRF52 sanitizer. Strapping, claimed, unreviewed and input-only pins stay: working setups keep working.
+    {
+        struct PinRepair { const char *name; int *field; PinFunc fn; };
+        PinRepair reps[] = {
+            { "node_owgpio", &meshcom_settings.node_owgpio, PIN_FN_ONEWIRE },
+            { "node_button_pin", &meshcom_settings.node_button_pin, PIN_FN_BUTTON },
+            { "node_analog_pin", &meshcom_settings.node_analog_pin, PIN_FN_ANALOG },
+            { "node_wind_pin", &meshcom_settings.node_wind_pin, PIN_FN_WIND },
+        };
+        for(const PinRepair &r : reps)
+        {
+            const int was = *r.field;
+            if(r.fn == PIN_FN_ANALOG && was >= 99) continue;   // 99 = unset
+            if(r.fn == PIN_FN_BUTTON && was == 99) continue;   // 99 = no button
+            // pinRepairLoaded() keeps the 0 = no default sentinel; pinBoardDefault() returns -1 for none (never store it)
+            const int bd = pinBoardDefault(r.fn);
+            const int now = pinRepairLoaded(pinBoardContext(r.fn), was, bd < 0 ? 0 : bd);
+            if(now != was)
+            {
+                *r.field = now;
+                Serial.printf("[FLASH]...%s gpio %i forbidden on this board, reset to default\n", r.name, was);
+                fixed++;
+            }
+        }
+    }
     #endif
 
     if(fixed > 0)

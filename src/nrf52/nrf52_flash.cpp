@@ -385,11 +385,32 @@ void sanitize_loaded_settings(void)
 		meshcom_settings.node_country = p.country;
 	}
 
+	// A stored crystal or reset pin hangs the node before the console is up.
+	if(meshcom_settings.node_button_pin != 0 && mcPinReservedNrf52840(meshcom_settings.node_button_pin))
+	{
+		sanitize_log("node_button_pin", "reserved", "0");
+		meshcom_settings.node_button_pin = 0;
+	}
+	if(mcPinReservedNrf52840(meshcom_settings.node_analog_pin))
+	{
+		sanitize_log("node_analog_pin", "reserved", "99");
+		meshcom_settings.node_analog_pin = 99;
+	}
+	if(meshcom_settings.node_owgpio != 0 && mcPinReservedNrf52840(meshcom_settings.node_owgpio))
+	{
+		sanitize_log("node_owgpio", "reserved", "0");
+		meshcom_settings.node_owgpio = 0;
+	}
+
 	// CS-01: max_hop_text liegt bereits in der Struktur (die ganze Struktur wird
 	// in die Datei geschrieben), aber eine alte Datei traegt dort eine 0, weil das
 	// Feld frueher bei jedem Boot ueberschrieben wurde. Plausibilitaet wie beim
 	// ESP32; max_hop_pos bleibt bewusst beim Compile-Default (nrf52_main.cpp).
 	if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
+		fixed++;
+
+	// DHT type: the schema range 11..22 lets e.g. 15 through; --info/--persiststat must show 11 or 22 only
+	if(sanitize_dht_type(meshcom_settings.node_dht_type, sanitize_log))
 		fixed++;
 
 	// Ping target must be a plain callsign (no group, special target, own call)

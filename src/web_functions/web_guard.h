@@ -3,14 +3,13 @@
 // Header-only, no Arduino, C++11-clean, const char* + length only. The firmware calls
 // webGuardCheck() with the raw request header text (web_header: request line plus header
 // lines, as the server accumulates it, CR bytes included) BEFORE any routing, and answers
-// 403 on anything but WG_OK. Host-testable.
+// 403 on anything but WG_OK. Host test: test/test_web_guard (env native_web_guard).
 //
-// Scope (compile flag MC_WEB_GUARD, default 0): by default the guard applies ONLY to the remote
-// management paths (/rm*, and the remote page /?page=remote); every other path passes unchecked,
-// like upstream (which also always sends Access-Control-Allow-Origin: *). Build with
-// -D MC_WEB_GUARD=1 to guard every path as described below. See webGuardApplies().
+// Scope (compile flag MC_WEB_GUARD, default 1): the guard applies to every path as described
+// below. Build with -D MC_WEB_GUARD=0 to restrict it to the remote management paths (/rm*, and
+// the remote page /?page=remote) like before. See webGuardApplies().
 //
-// What it stops:
+// What it stops (docs/rm-gui/verdict-security.md):
 //   - DNS rebinding: an attacker page whose name resolves to the node is "same-origin" for
 //     the browser and can send any header. The Host header still carries the attacker name.
 //   - Cross-site request forgery (<img src=http://node/setparam/?manualcommand=--passwd x>,
@@ -34,7 +33,7 @@
 //     - MISSING Host: refused (WG_BAD_HOST) for HTTP/1.1 and for anything truncated. Accepted
 //       only for a complete request whose request line ends in exactly `HTTP/1.0` (legacy
 //       tools; no browser can produce that). Decision rationale: every browser, urllib,
-//       requests, http.client and curl send Host on HTTP/1.1, so no client tool is hurt,
+//       requests, http.client and curl send Host on HTTP/1.1, so nothing in tools/ is hurt,
 //       and a missing Host is exactly what a truncated header looks like.
 //   State-changing requests (webGuardIsStateChanging: /setparam, /callfunction, /?sendmessage,
 //     /?nodepassword, /rmsend, /rmpasswd, and ANY POST incl. POST /rmnodes and POST /config).
@@ -82,9 +81,9 @@
 #define WEB_GUARD_PAGE_ALLOW_EMPTY_DEST 0
 #endif
 
-// 0 (default): guard only /rm* and the remote page. 1: guard all paths.
+// 1 (default): guard all paths. 0: guard only /rm* and the remote page.
 #ifndef MC_WEB_GUARD
-#define MC_WEB_GUARD 0
+#define MC_WEB_GUARD 1
 #endif
 
 enum WebGuardVerdict
@@ -782,8 +781,12 @@ inline bool webGuardHasXmc(const char *header, size_t len)
     return count > 0 && !bad;
 }
 
-// True for the update actions of /callfunction (name already percent-decoded).
-inline bool webGuardIsUpdAction(const char *fn) { return fn != NULL && strncmp(fn, "upd", 3) == 0; }
+// True for the update actions of /callfunction (name already percent-decoded): "upd*" plus the
+// explicit "otaupdate" and "reboot".
+inline bool webGuardIsUpdAction(const char *fn)
+{
+    return fn != NULL && (strncmp(fn, "upd", 3) == 0 || strcmp(fn, "otaupdate") == 0 || strcmp(fn, "reboot") == 0);
+}
 
 // The decision call_function() makes: update actions need X-MC, everything else is unchanged.
 inline bool webGuardCallAllowed(const char *fn, const char *header, size_t len)
@@ -818,21 +821,75 @@ inline bool webGuardHasUpdCommand(const char *text)
     return false;
 }
 
-// The /setparam names that set the update mode or channel (aumode, autoupdate, updchan): they do what the
-// X-MC-gated console commands --autoupdate / --updchan do (name already lower-cased, exact match).
+// The /setparam names that set the update mode, channel or install schedule (aumode, autoupdate, updchan, audelay,
+// auday, autime): they do what the X-MC-gated console commands --autoupdate / --updchan do (name already
+// lower-cased, exact match).
 inline bool webGuardIsUpdParam(const char *name)
 {
-    return name != NULL && (strcmp(name, "aumode") == 0 || strcmp(name, "autoupdate") == 0 || strcmp(name, "updchan") == 0);
+    return name != NULL && (strcmp(name, "aumode") == 0 || strcmp(name, "autoupdate") == 0 || strcmp(name, "updchan") == 0 ||
+                             strcmp(name, "audelay") == 0 || strcmp(name, "auday") == 0 || strcmp(name, "autime") == 0);
 }
 
-// The decision setparam() makes (name already lower-cased, value percent-decoded). X-MC is needed for
-// - the update names (webGuardIsUpdParam), and
-// - an update command in the value of ANY name: every setparam branch pastes the value into "--<cmd> %s" and
-//   commandAction() splits on each "--", so setcall=X%20--update%20install runs --update install too.
-// Everything else is unchanged.
+// GPIO-01 Part B: the /setparam name that switches a free GPIO, "gpio" + 1 or more digits and nothing else (exact:
+// gpio, gpioctl, gpio1x, gpiocontrol are no match).
+inline bool webGuardIsGpioParam(const char *name)
+{
+    if (name == NULL || strncmp(name, "gpio", 4) != 0 || name[4] == 0) return false;
+    for (const char *c = name + 4; *c; c++)
+        if (*c < '0' || *c > '9') return false;
+    return true;
+}
+
+// GPIO-01 web switch (operator decision 2026-11-07): the /setparam name of the free-GPIO master, exactly "gpioctl"
+// (name already lower-cased). Needs X-MC; web_setup.cpp accepts only the values on / off.
+inline bool webGuardIsGpioCtlParam(const char *name)
+{
+    return name != NULL && strcmp(name, "gpioctl") == 0;
+}
+
+// True if the text carries a chained console command whose name starts with `tok` (lower-case) after a "--" or
+// "&&" prefix, case-insensitive, blanks/tabs between prefix and name skipped. Prefix match on purpose (no
+// end-of-token check): "--gpio13 on", "--gpio<TAB>13" and "--gpiocontrol on" all hit "gpio".
+inline bool webGuardHasChainedCommand(const char *text, const char *tok)
+{
+    using namespace webguard_detail;
+    if (text == NULL || tok == NULL)
+        return false;
+    for (size_t i = 0; text[i] != 0; i++)
+    {
+        if (!((text[i] == '-' && text[i + 1] == '-') || (text[i] == '&' && text[i + 1] == '&')))
+            continue;
+        size_t j = i + 2;
+        while (text[j] == ' ' || text[j] == '\t')
+            j++;
+        size_t k = 0;
+        while (tok[k] != 0 && text[j + k] != 0 && lc(text[j + k]) == tok[k])
+            k++;
+        if (tok[k] == 0)
+            return true;
+    }
+    return false;
+}
+
+// The decision setparam() makes (name already lower-cased, value percent-decoded). Refused ALWAYS, even with X-MC:
+// - a value that carries the chained console command --gpiocontrol: the GPIO master now has exactly one web path,
+//   the X-MC-gated name gpioctl (webGuardIsGpioCtlParam, docs/concept-gpio-pins-20261106.md); it is never reachable
+//   chained through the value of another name (or of gpioctl itself).
+// X-MC is needed for
+// - the update names (webGuardIsUpdParam),
+// - the free-GPIO switch names gpio<N> (webGuardIsGpioParam) and the master name gpioctl (webGuardIsGpioCtlParam), and
+// - an update command or a --gpio command (prefix match "gpio": "--gpio 13 on", "--gpio13") in the value of ANY
+//   name: every setparam branch pastes the value into "--<cmd> %s" and commandAction() splits on each "--" (the web
+//   translates only a leading "&&" of manualcommand into "--", web_setup.cpp), so setcall=X%20--update%20install runs --update install too and setcall=X%20--gpio%2013%20on would
+//   drive a pin.
+// Everything else is unchanged (no "--"/"&&" in the value: untouched).
 inline bool webGuardSetparamAllowed(const char *name, const char *value, const char *header, size_t len)
 {
-    if (!webGuardIsUpdParam(name) && !webGuardHasUpdCommand(value))
+    if (webGuardHasChainedCommand(value, "gpiocontrol"))
+        return false;
+    if (!webGuardIsUpdParam(name) && !webGuardIsGpioParam(name) && !webGuardIsGpioCtlParam(name) &&
+        !webGuardHasUpdCommand(value) &&
+        !webGuardHasChainedCommand(value, "gpio"))
         return true;
     return webGuardHasXmc(header, len);
 }

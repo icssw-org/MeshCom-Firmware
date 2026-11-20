@@ -45,6 +45,7 @@
 #include <Arduino.h>
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "clock.h"
+#include "clock_tick.h"   // tick arithmetic
 
 #include <time.h>
 
@@ -97,12 +98,15 @@ Clock::EEvent Clock::CheckEvent()
 	uint8_t        u8Day, u8Hour;
 
 	// check for next minute
-	if ((int32_t)(millis() - u32Next_m) > 0)
+	if (clockTickDue(millis(), u32Next_m))
 	{
 		// next minute
 		u8Day      = suClock_m.tm_mday;
 		u8Hour     = suClock_m.tm_hour;
-		u32Diff    = ((u32Next_m - u32Start_m) / 1000);
+		// Count the real elapsed whole seconds, carry the remainder
+		const uint32_t u32Now = millis();
+		// whole seconds + new start/next (start advanced by exactly secs*1000, remainder kept)
+		u32Diff    = clockTickStep(&u32Start_m, &u32Next_m, u32Now);
 		tsClock_m += u32Diff;
 		localtime_r(&tsClock_m, &suClock_m);
 #if defined(TEST)
@@ -142,9 +146,7 @@ Clock::EEvent Clock::CheckEvent()
 			}
 		}
 
-		// set new update cycle
-		u32Start_m = millis();
-		u32Next_m  = u32Start_m + 1000; //((60 - suClock_m.tm_sec) * 1000);
+		// new update cycle: u32Start_m / u32Next_m were set by clockTickStep() above
 #if defined(TEST)
 		Serial.printf("[clock] now %lu -> then %lu\n", u32Start_m, u32Next_m);
 #endif

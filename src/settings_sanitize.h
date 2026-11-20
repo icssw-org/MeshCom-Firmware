@@ -71,9 +71,23 @@ int resolve_tx_power(int stored, int board_default);
  * reset to `def`. Returns true if the value was corrected. */
 bool sanitize_backlight_level(int &v, int def, const char *field, sanitize_log_fn log);
 
+/* SENS-04: the one-wire DHT type (node_dht_type, --dht) is 11 (DHT11) or 22 (DHT22). */
+bool dht_type_valid(int v);
+/* Resets anything else (a wiped or corrupt value reads 0) to 11. Returns true if corrected. */
+bool sanitize_dht_type(int &v, sanitize_log_fn log);
+/* True when the name the DHT driver reports ("DHT11", "DHT22") matches the configured type. */
+bool dht_name_matches(const char *name, int type);
+
 /* A stored ping target (node_pingcall) must be a plain callsign:
  * no group, no special target, not the node's own call (see ping_target.h).
  * An invalid one is cleared to "" and logged once as
  * field "node_pingcall", old value -> "". An empty target is valid ("off").
  * Returns true if the value was cleared. */
 bool sanitize_ping_target(char *pingcall, size_t n, const char *own_call, sanitize_log_fn log);
+
+// nRF52840 pins a stored GPIO setting must never claim: P0.00 and P0.01 carry the
+// 32 kHz crystal, P0.18 is nRESET.
+inline bool mcPinReservedNrf52840(int pin)
+{
+    return pin == 0 || pin == 1 || pin == 18;
+}

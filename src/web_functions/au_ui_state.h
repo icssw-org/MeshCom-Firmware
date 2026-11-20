@@ -1,5 +1,5 @@
 // Pure model of the Auto update row on the Info page (campaign-au-webgui-ux, spec 4.1, 4.3, 5.1).
-// Header-only, no Arduino, host-testable. The page JS mirrors the state
+// Header-only, no Arduino, host-testable (test/test_au_ui_state). The page JS mirrors the state
 // selector and the error table; the golden strings in the host test keep both sides honest.
 #pragma once
 
@@ -146,8 +146,8 @@ static inline const char *auErrText(const char *job, const char *err)
 {
     static const char *const kConn[] = {"tls", "conn", "http", "begin", "timeout", nullptr};
     static const char *const kList[] = {"short", "stall", "toobig", "chunk", "feed", "enc", "json", "noenv", "badver", nullptr};
-    static const char *const kDamaged[] = {"short", "stall", "digest", "readback", "crc", "write", "enc", "feed", "chunk", nullptr};
-    static const char *const kNoImg[] = {"noasset", "nodigest", nullptr};
+    static const char *const kDamaged[] = {"short", "stall", "digest", "readback", "crc", "write", "enc", "feed", "chunk", "inflate_chk", "image", nullptr};
+    static const char *const kNoImg[] = {"noasset", "nodigest", "env", nullptr};
     static const char *const kLayout[] = {"notota0", "imglen", "size", "overlap", "small", "inflate", "layout", nullptr};
     static const char *const kFlash[] = {"erase", "noflash", "nvs", nullptr};
     char w[24];
@@ -260,5 +260,26 @@ static inline size_t auStatusJson(const AuUiIn &in, char *out, size_t cap)
         return 0;
     }
     out[w.n] = 0;
+    return w.n;
+}
+
+// Appends `"sched":"<notice>"` to the object auStatusJson() wrote (n chars, closing '}'), like fwJsonAppendUp.
+// Returns the new length; body is left as it was when it does not fit. An empty notice is still sent (the page
+// clears its line).
+static inline size_t auAppendSched(char *body, size_t cap, size_t n, const char *text)
+{
+    if (body == 0 || n < 2 || body[n - 1] != '}' || n >= cap)
+        return n;
+    AuJsonW w = {body, cap, n - 1, false};
+    w.key("sched");
+    w.str(text ? text : "");
+    w.put('}');
+    if (w.bad || w.n >= cap)
+    {
+        body[n - 1] = '}';
+        body[n] = 0;
+        return n;
+    }
+    body[w.n] = 0;
     return w.n;
 }

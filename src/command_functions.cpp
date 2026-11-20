@@ -144,6 +144,7 @@ extern TinyGPSPlus gps;
 #include <t-deck/lv_obj_functions.h>
 #include <t-deck/tdeck_debug.h>
 #include <t-deck/tdeck_helpers.h>   // TD-23: --bl
+#include <t-deck/tdeck_theme.h>     // TD-THEME-01: --theme
 #include <SD.h>
 #include <esp32/esp32_audio.h>
 #ifdef HEAP_TEST
@@ -155,6 +156,8 @@ extern TinyGPSPlus gps;
 #include "gw_link_status.h"   // --info ...Server line
 #include "gw_reg_runtime.h"   // --info ...REGISTRATION line
 #include "nvs_diag.h"         // --info ...NVS line
+#include "pin_board.h"        // GPIO-01: pin policy with the board context (after the variant includes)
+#include "gpio_control.h"     // GPIO-01 Part B: --gpio / --gpiocontrol (state machine; hardware glue on ESP32 only)
 
 #if defined(BOARD_T5_EPAPER)
 #include <t5-epaper/t5epaper_extern.h>
@@ -437,7 +440,24 @@ static void storeApplyMode(enum MsgStoreMode newMode)
 // ---------------------------------------------------------------------------
 
 static void tg_post_setlog_off() { memset(LogCallsign, 0x00, sizeof(LogCallsign)); }
-static void tg_post_button_on() { init_onebutton(); }
+// pinCanAssign()/pinRepairLoaded() (src/pin_policy.h) still take the 0 = "no default" sentinel; pinBoardDefault() now
+// returns -1 for none (0 is a real GPIO). Keep their behaviour: hand them the old value, never -1.
+static inline int pinBoardDefaultLegacy(PinFunc f) { const int d = pinBoardDefault(f); return d < 0 ? 0 : d; }
+// GPIO-01 Part B: function wins. A pin that gets assigned / enabled for 1-Wire, button, analog or anemometer is
+// released from --gpio control first (pinMode INPUT, state dropped). Nothing on nRF52.
+static void gpioFnWins(PinFunc f)
+{
+#if defined(ESP32)
+    // the stored pin and the one in use now (the button pin is read at boot, they differ until a restart)
+    const int p = pinBoardEffective(f);
+    if(p >= 0) gpioCtlReleasePin(p);   // -1 = none, 0 is GPIO 0
+    const int u = pinBoardInUse(f);
+    if(u >= 0 && u != p) gpioCtlReleasePin(u);
+#else
+    (void)f;
+#endif
+}
+static void tg_post_button_on() { gpioFnWins(PIN_FN_BUTTON); init_onebutton(); }
 static void tg_post_680_off() { bme680_found = false; }
 static void tg_post_811_off() { mcu811_found = false; }
 // EXT-02 (second half): --extudp off used to leave hasExternIPaddress (and
@@ -461,7 +481,7 @@ static void tg_post_t5_on() { disp_next_power(true); }
 static void tg_post_t5_off() { disp_next_power(false); }
 #endif
 #if defined(ANALOG_PIN)
-static void tg_post_analog_check_on() { initAnalogPin(); }
+static void tg_post_analog_check_on() { gpioFnWins(PIN_FN_ANALOG); initAnalogPin(); }
 #endif
 #if defined (ENABLE_INA226)
 static void tg_post_ina226_on() { setupINA226(); }
@@ -478,6 +498,7 @@ static void tg_post_charge_led_off() { meshcom_settings.node_sset2 |= SSET2_CHGL
 #endif
 static void tg_post_board_led_off()
 {
+    meshcom_settings.node_sset4 &= ~BOARD_LED_STEADY_BIT;   // WEB-LED-01: off forgets steady
 #if defined(BOARD_LED)   // a NeoPixel-only board (LED_PIN/LED_PIXEL) has no plain pad to drive low
     if(!boardLedPinUsable()) return;   // OneWire/DHT owns the pad (T-Beam GPIO4): never write it
 #if defined(REMOTE_LED_PIN)
@@ -486,6 +507,9 @@ static void tg_post_board_led_off()
     digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW);
 #endif
 }
+// WEB-LED-01: "on" = flash, "steady" = persistent steady-on (node_sset4 0x4000); both run before the mask/save
+static void tg_post_board_led_flash() { meshcom_settings.node_sset4 &= ~BOARD_LED_STEADY_BIT; }
+static void tg_post_board_led_steady() { meshcom_settings.node_sset4 |= BOARD_LED_STEADY_BIT; }
 #endif
 #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
 static void tg_post_gps_on() { gpsInitDone = false; init_loop_function(); }
@@ -494,298 +518,33 @@ static void tg_post_gps_on() { gpsInitDone = false; init_loop_function(); }
 static void tg_post_uv_on() { wxMeanReset(&wx_uv_mean); ltr390_found = ltr390Begin(); }   // fresh window on switch-on
 static void tg_post_uv_off() { ltr390End(); ltr390_found = false; }
 #endif
+// GPIO-01: every setter that assigns one of the four pins asks the policy. Prints one line and returns true
+// when the pin is refused; the caller restores the old value. 0 = board default / off always passes, 99 is the
+// documented "no button" sentinel of --button gpio.
+static bool pinSetterRefuses(PinFunc f, const char *fn, int pin)
+{
+    if(f == PIN_FN_BUTTON && pin == 99) return false;
+    if(pinCanAssign(pinBoardContext(f), f, pin, pinBoardDefaultLegacy(f))) return false;
+    printfdeb("%s gpio %i refused: %s\n", fn, pin, pinClassName(pinClassify(pinBoardContext(f), pin)));
+    return true;
+}
+
 #if defined(ENABLE_WIND)
-// WX-01: pins the anemometer must not take: the radio (chip select, reset, busy, DIO/IRQ, RF switch, SPI bus),
-// ETH, SD card, I2C, GPS and button pins of the board (each macro only where the variant defines it), the
-// default SPI bus of the Arduino variant (SS/SCK/MISO/MOSI are constants there, not macros), the flash pins,
-// on the ESP32-S3 with octal PSRAM/flash GPIO 33-37, pins the chip does not have and, on the classic
-// ESP32, the input-only pins 34-39.
-// WX_RES(x) is safe for a macro that is defined EMPTY (LORA_DIO0 on the T-Beam Supreme: "+ 0" makes it 0, which
-// only reserves pin 0 = "off" anyway) and for one that is a runtime expression (SS, RST_LoRa: Arduino constants).
-#define WX_RES(x) , (int)(x + 0)
+// WX-01 / GPIO-01: may the anemometer take this pin? Thin wrapper over the pin policy (src/pin_policy.h) with the
+// board's real context (src/pin_board.h: reserved variant macros, other functions' pins, chip, octal PSRAM).
+// Refused: radio/ETH/SD/I2C/GPS/button/display/power pins of the board, flash, console, USB, octal PSRAM, pins
+// the chip does not have, strapping, claimed and (no pull-up) input-only pins. Pin 0 = off is always accepted.
 bool wxWindPinOk(int pin)
 {
-    const int reserved[] = {
-        -1
-    #if defined(LORA_CS)
-    WX_RES(LORA_CS)
-    #endif
-    #if defined(LORA_NSS)
-    WX_RES(LORA_NSS)
-    #endif
-    #if defined(LORA_RST)
-    WX_RES(LORA_RST)
-    #endif
-    #if defined(LORA_RESET)
-    WX_RES(LORA_RESET)
-    #endif
-    #if defined(LORA_DIO0)
-    WX_RES(LORA_DIO0)
-    #endif
-    #if defined(LORA_DIO1)
-    WX_RES(LORA_DIO1)
-    #endif
-    #if defined(LORA_DIO2)
-    WX_RES(LORA_DIO2)
-    #endif
-    #if defined(LORA_DIO3)
-    WX_RES(LORA_DIO3)
-    #endif
-    #if defined(LORA_SCK)
-    WX_RES(LORA_SCK)
-    #endif
-    #if defined(LORA_MISO)
-    WX_RES(LORA_MISO)
-    #endif
-    #if defined(LORA_MOSI)
-    WX_RES(LORA_MOSI)
-    #endif
-    #if defined(LORA_IRQ)
-    WX_RES(LORA_IRQ)
-    #endif
-    #if defined(LORA_IO0)
-    WX_RES(LORA_IO0)
-    #endif
-    #if defined(LORA_IO1)
-    WX_RES(LORA_IO1)
-    #endif
-    #if defined(LORA_IO2)
-    WX_RES(LORA_IO2)
-    #endif
-    #if defined(SX1262X_CS)
-    WX_RES(SX1262X_CS)
-    #endif
-    #if defined(SX1262X_IRQ)
-    WX_RES(SX1262X_IRQ)
-    #endif
-    #if defined(SX1262X_RST)
-    WX_RES(SX1262X_RST)
-    #endif
-    #if defined(SX1262X_GPIO)
-    WX_RES(SX1262X_GPIO)
-    #endif
-    #if defined(SX1268_CS)
-    WX_RES(SX1268_CS)
-    #endif
-    #if defined(SX1268_IRQ)
-    WX_RES(SX1268_IRQ)
-    #endif
-    #if defined(SX1268_RST)
-    WX_RES(SX1268_RST)
-    #endif
-    #if defined(SX1268_GPIO)
-    WX_RES(SX1268_GPIO)
-    #endif
-    #if defined(SX126x_CS)
-    WX_RES(SX126x_CS)
-    #endif
-    #if defined(SX126x_IRQ)
-    WX_RES(SX126x_IRQ)
-    #endif
-    #if defined(SX126x_RST)
-    WX_RES(SX126x_RST)
-    #endif
-    #if defined(SX126x_GPIO)
-    WX_RES(SX126x_GPIO)
-    #endif
-    #if defined(SX126x_BUSY)
-    WX_RES(SX126x_BUSY)
-    #endif
-    #if defined(RF95_SCK)
-    WX_RES(RF95_SCK)
-    #endif
-    #if defined(RF95_MISO)
-    WX_RES(RF95_MISO)
-    #endif
-    #if defined(RF95_MOSI)
-    WX_RES(RF95_MOSI)
-    #endif
-    #if defined(RF95_NSS)
-    WX_RES(RF95_NSS)
-    #endif
-    #if defined(RADIO_SCLK_PIN)
-    WX_RES(RADIO_SCLK_PIN)
-    #endif
-    #if defined(RADIO_MISO_PIN)
-    WX_RES(RADIO_MISO_PIN)
-    #endif
-    #if defined(RADIO_MOSI_PIN)
-    WX_RES(RADIO_MOSI_PIN)
-    #endif
-    #if defined(RADIO_CS_PIN)
-    WX_RES(RADIO_CS_PIN)
-    #endif
-    #if defined(RADIO_RST_PIN)
-    WX_RES(RADIO_RST_PIN)
-    #endif
-    #if defined(RADIO_IRQ_PIN)
-    WX_RES(RADIO_IRQ_PIN)
-    #endif
-    #if defined(RADIO_BUSY_PIN)
-    WX_RES(RADIO_BUSY_PIN)
-    #endif
-    #if defined(RADIO_DIO1_PIN)
-    WX_RES(RADIO_DIO1_PIN)
-    #endif
-    #if defined(RADIO_SCK)
-    WX_RES(RADIO_SCK)
-    #endif
-    #if defined(RADIO_MISO)
-    WX_RES(RADIO_MISO)
-    #endif
-    #if defined(RADIO_MOSI)
-    WX_RES(RADIO_MOSI)
-    #endif
-    #if defined(RADIO_CTRL)
-    WX_RES(RADIO_CTRL)
-    #endif
-    #if defined(RADIO_LDO_EN)
-    WX_RES(RADIO_LDO_EN)
-    #endif
-    #if defined(PIN_LORA_NSS)
-    WX_RES(PIN_LORA_NSS)
-    #endif
-    #if defined(PIN_LORA_DIO_1)
-    WX_RES(PIN_LORA_DIO_1)
-    #endif
-    #if defined(PIN_LORA_NRST)
-    WX_RES(PIN_LORA_NRST)
-    #endif
-    #if defined(PIN_LORA_BUSY)
-    WX_RES(PIN_LORA_BUSY)
-    #endif
-    #if defined(PIN_LORA_SCK)
-    WX_RES(PIN_LORA_SCK)
-    #endif
-    #if defined(PIN_LORA_MISO)
-    WX_RES(PIN_LORA_MISO)
-    #endif
-    #if defined(PIN_LORA_MOSI)
-    WX_RES(PIN_LORA_MOSI)
-    #endif
-    #if defined(E22_NSS)
-    WX_RES(E22_NSS)
-    #endif
-    #if defined(E22_BUSY)
-    WX_RES(E22_BUSY)
-    #endif
-    #if defined(E22_DIO1)
-    WX_RES(E22_DIO1)
-    #endif
-    #if defined(E22_NRST)
-    WX_RES(E22_NRST)
-    #endif
-    #if defined(E22_RXEN)
-    WX_RES(E22_RXEN)
-    #endif
-    #if defined(E22_TXEN)
-    WX_RES(E22_TXEN)
-    #endif
-    #if defined(E22_SCK)
-    WX_RES(E22_SCK)
-    #endif
-    #if defined(ETH_CS_PIN)
-    WX_RES(ETH_CS_PIN)
-    #endif
-    #if defined(ETH_INT_PIN)
-    WX_RES(ETH_INT_PIN)
-    #endif
-    #if defined(ETH_RST_PIN)
-    WX_RES(ETH_RST_PIN)
-    #endif
-    #if defined(ETH_SCLK_PIN)
-    WX_RES(ETH_SCLK_PIN)
-    #endif
-    #if defined(ETH_MISO_PIN)
-    WX_RES(ETH_MISO_PIN)
-    #endif
-    #if defined(ETH_MOSI_PIN)
-    WX_RES(ETH_MOSI_PIN)
-    #endif
-    #if defined(SDCARD_CS)
-    WX_RES(SDCARD_CS)
-    #endif
-    #if defined(SDCARD_SCLK)
-    WX_RES(SDCARD_SCLK)
-    #endif
-    #if defined(SDCARD_MISO)
-    WX_RES(SDCARD_MISO)
-    #endif
-    #if defined(SDCARD_MOSI)
-    WX_RES(SDCARD_MOSI)
-    #endif
-    #if defined(TDECK_SDCARD_CS)
-    WX_RES(TDECK_SDCARD_CS)
-    #endif
-    #if defined(TDECK_SPI_SCK)
-    WX_RES(TDECK_SPI_SCK)
-    #endif
-    #if defined(TDECK_SPI_MISO)
-    WX_RES(TDECK_SPI_MISO)
-    #endif
-    #if defined(TDECK_SPI_MOSI)
-    WX_RES(TDECK_SPI_MOSI)
-    #endif
-    #if defined(I2C_SDA)
-    WX_RES(I2C_SDA)
-    #endif
-    #if defined(I2C_SCL)
-    WX_RES(I2C_SCL)
-    #endif
-    #if defined(I2C1_SDA)
-    WX_RES(I2C1_SDA)
-    #endif
-    #if defined(I2C1_SCL)
-    WX_RES(I2C1_SCL)
-    #endif
-    #if defined(SDA_PIN)
-    WX_RES(SDA_PIN)
-    #endif
-    #if defined(SCL_PIN)
-    WX_RES(SCL_PIN)
-    #endif
-    #if defined(GPS_RX_PIN)
-    WX_RES(GPS_RX_PIN)
-    #endif
-    #if defined(GPS_TX_PIN)
-    WX_RES(GPS_TX_PIN)
-    #endif
-    #if defined(GPS_EN_PIN)
-    WX_RES(GPS_EN_PIN)
-    #endif
-    #if defined(GPS_PPS_PIN)
-    WX_RES(GPS_PPS_PIN)
-    #endif
-    #if defined(BUTTON_PIN)
-    WX_RES(BUTTON_PIN)
-    #endif
-        WX_RES(SS)
-        WX_RES(SCK)
-        WX_RES(MISO)
-        WX_RES(MOSI)
-    };
-    #if defined(CONFIG_IDF_TARGET_ESP32S3)
-    const bool is_s3 = true;
-    #else
-    const bool is_s3 = false;
-    #endif
-    // octal PSRAM/flash (qio_opi, opi_opi in the board JSON -> sdkconfig.h) takes GPIO 33-37
-    #if defined(CONFIG_SPIRAM_MODE_OCT) || defined(CONFIG_ESPTOOLPY_OCT_FLASH)
-    const bool octal = true;
-    #else
-    const bool octal = false;
-    #endif
-    // a pin the chip does not have (GPIO 22-25 on the S3, 20/24/28-31 on the classic ESP32)
-    if(pin != 0 && (pin < 0 || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_GPIO(pin))) return false;
-    return wxPinAllowed(pin, reserved, sizeof(reserved) / sizeof(reserved[0]), is_s3, octal);
+    return pinCanAssign(pinBoardContext(PIN_FN_WIND), PIN_FN_WIND, pin, pinBoardDefaultLegacy(PIN_FN_WIND));
 }
-#undef WX_RES
 static void tg_post_wind_on()
 {
-    wxMeanReset(&wx_wind_mean);   // fresh window on switch-on (telemetry may have been inactive)
+    wxMeanReset(&wx_wind_mean);   // fresh window on switch-on (telemetry may be inactive, see TLM-03)
     wxGustReset(&wx_wind_gust);
+    gpioFnWins(PIN_FN_WIND);
     if(meshcom_settings.node_wind_pin == 0) { printfdeb("wind on, but no pin set: use --windpin <gpio>\n"); return; }
-    if(!wxWindPinOk(meshcom_settings.node_wind_pin)) { printfdeb("wind pin %i not allowed on this board\n", meshcom_settings.node_wind_pin); return; }
+    if(!pinBoardLoadedUsable(PIN_FN_WIND, meshcom_settings.node_wind_pin)) { printfdeb("wind pin %i not allowed on this board\n", meshcom_settings.node_wind_pin); return; }
     windBegin(meshcom_settings.node_wind_pin);
 }
 static void tg_post_wind_off() { windEnd(); }
@@ -935,7 +694,8 @@ static const ToggleRow COMMAND_TOGGLES[] =
     { "--charge led off",     &bCHARGE_LED,          &meshcom_settings.node_sset3,    0xFFFFFFFE,   0x00000000,   tg_post_charge_led_off,        TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_POST_FIRST },
 #endif
 #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
-    { "--board led on",       &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0080,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--board led on",       &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0080,       tg_post_board_led_flash,       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE | TG_POST_FIRST },
+    { "--board led steady",   &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0080,       tg_post_board_led_steady,      TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE | TG_POST_FIRST },
     { "--board led off",      &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFF7F,   0x00000000,   tg_post_board_led_off,         TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_POST_FIRST },
 #endif
 #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
@@ -1251,6 +1011,11 @@ void commandAction(char *umsg_text, bool ble)
 #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
     // LED-04: the heartbeat must not take a pad OneWire/DHT owns (T-Beam: both GPIO4). Refuse before the row saves.
     if(commandMatches(msg_text+2, "board led on") && !boardLedPinUsable())
+    {
+        printfdeb("\n--board led refused: LED pin is used by OneWire/DHT (see --info, --owgpio)\n");
+        return;
+    }
+    if(commandMatches(msg_text+2, "board led steady") && !boardLedPinUsable())   // WEB-LED-01: same refusal as "on"
     {
         printfdeb("\n--board led refused: LED pin is used by OneWire/DHT (see --info, --owgpio)\n");
         return;
@@ -1896,11 +1661,12 @@ void commandAction(char *umsg_text, bool ble)
             #if defined(ESP32)
             printdeb("--aprswx on/off         APRS-IS weather over Wi-Fi (--aprswx = status)\n--aprswxint 10          minutes between reports (5..1440)\n--aprswxcall X          WX call-SSID, required, not the node call (- = clear)\n--aprsis server H|port P|pass N   APRS-IS server/port/passcode\n--sendaprswx            send one report now\n");
             #endif
+            printdeb("--gpiocontrol on/off    free GPIO control master (ESP32)\n--gpio list            free GPIOs and levels\n--gpio 13 on/off/in/release  drive, read, free a pin\n");
             #if defined(LPS33)
             printdeb("--lps33 on/off          LPS33\n");
             #endif
             #ifdef OneWire_GPIO
-            printdeb("--onewire on/off        1-Wire DSxxxx\n--onewire gpio 99       1-Wire pin\n");
+            printdeb("--onewire on/off        1-Wire DSxxxx\n--onewire gpio 99       1-Wire pin\n--dht 11|22            1-Wire DHT type\n");
             #endif
             #if defined (ENABLE_INA226)
             printdeb("--ina226 on/off         INA226\n--shunt 9.999           INA226 shunt ohms\n--imax 9.9              INA226 max current A\n--isamp 9               INA226 sample count\n");
@@ -1931,10 +1697,10 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--persiststat           NVS-only values\n");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             printdeb("--keylock on/off        SYM+K lock\n");
-            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl day|night 1-16     saved level\n");
+            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl mode auto|day|night  display mode\n--bl day|night 1-16     saved level\n--theme auto|dark|light  display theme\n--chatfont s|m|l        chat text 12/14/16 px\n");
             #endif
             #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
-            printdeb("--board led on/off      board LED\n");
+            printdeb("--board led off|on|steady  board LED: off, flash (on) or steady\n");
             #endif
             #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
             printdeb("--charge led on/off     charge indicator LED\n");
@@ -2262,6 +2028,26 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
+        #if defined(NRF52_SERIES)
+        if(meshcom_settings.node_button_pin != 0 && mcPinReservedNrf52840(meshcom_settings.node_button_pin))
+        {
+            printlndeb("BUTTON GPIO refused: reserved on nRF52 (32 kHz crystal or reset)");
+
+            meshcom_settings.node_button_pin = ibt;
+
+            return;
+        }
+        #endif
+
+        if(pinSetterRefuses(PIN_FN_BUTTON, "button", meshcom_settings.node_button_pin))
+        {
+            meshcom_settings.node_button_pin = ibt;
+
+            return;
+        }
+
+        gpioFnWins(PIN_FN_BUTTON);
+
         save_settings();
 
         if(ble)
@@ -2271,9 +2057,9 @@ void commandAction(char *umsg_text, bool ble)
 
         bReturn = true;
 
-        iButtonPin = ibt;
-
-        init_onebutton();
+        // GPIO-02: OneButton reads iButtonPin once at boot; the running button stays on its pin,
+        // the new pin applies after a restart (/pinassign shows restart=1).
+        printlndeb("BUTTON GPIO stored, restart needed to apply");
     }
     #endif
     else
@@ -2292,6 +2078,26 @@ void commandAction(char *umsg_text, bool ble)
 
             return;
         }
+
+        #if defined(NRF52_SERIES)
+        if(mcPinReservedNrf52840(meshcom_settings.node_analog_pin))
+        {
+            printfdeb("ANALOG GPIO refused: reserved on nRF52 (32 kHz crystal or reset)");
+
+            meshcom_settings.node_analog_pin = iap;
+
+            return;
+        }
+        #endif
+
+        if(pinSetterRefuses(PIN_FN_ANALOG, "analog", meshcom_settings.node_analog_pin))
+        {
+            meshcom_settings.node_analog_pin = iap;
+
+            return;
+        }
+
+        gpioFnWins(PIN_FN_ANALOG);
 
         save_settings();
 
@@ -2882,6 +2688,91 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
     }
+    // GPIO-01 Part B: --gpiocontrol / --gpio. Every board answers; only ESP32 has the code (nRF52: "not on this board").
+    else
+    if(commandCheck(msg_text+2, (char*)"gpiocontrol ") == 0)
+    {
+    #if defined(ESP32)
+        const char *ga = msg_text+14;
+        // exact tokens like --gpio: "on" | "off", nothing after ("on foo", "onx" are refused)
+        char ctok[4] = {0};
+        char cextra[4] = {0};
+        const int gn = sscanf(ga, "%3s %3s", ctok, cextra);
+        if(gn == 1 && strcasecmp(ctok, "on") == 0)
+        {
+            meshcom_settings.node_gpioctl = 1;
+            gpioCtlSetMaster(true);
+        }
+        else
+        if(gn == 1 && strcasecmp(ctok, "off") == 0)
+        {
+            meshcom_settings.node_gpioctl = 0;
+            gpioCtlSetMaster(false);
+        }
+        else
+        {
+            printfdeb("gpiocontrol: use on or off\n");
+            return;
+        }
+        printfdeb("\ngpiocontrol:%s\n", meshcom_settings.node_gpioctl ? "on" : "off");
+        bReturn = true;
+        save_settings();
+    #else
+        printfdeb("gpio control: not on this board\n");
+        return;
+    #endif
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gpio ") == 0)
+    {
+    #if defined(ESP32)
+        const char *ga = msg_text+7;
+        bReturn = true;
+        // exact tokens: "list" | "<n> on|off|in|release", nothing after (no "listen", "13on", trailing garbage)
+        char gtok[12] = {0};
+        char gop[10] = {0};
+        char gextra[4] = {0};
+        const int gn = sscanf(ga, "%11s %9s %3s", gtok, gop, gextra);
+        if(gn == 1 && strcasecmp(gtok, "list") == 0)
+        {
+            GpioPinRow rows[8];
+            const size_t n = gpioCtlSnapshot(rows, 8);
+            printfdeb("gpio control: %s\n", gpioCtlMaster() ? "on" : "off");
+            if(n == 0) printfdeb("gpio: no pin offered on this board\n");
+            for(size_t i = 0; i < n; i++)
+            {
+                if(rows[i].level < 0) printfdeb("gpio %i %s %s -\n", (int)rows[i].pin, pinClassName((PinClass)rows[i].cls), gpioDirName((GpioDir)rows[i].dir));
+                else printfdeb("gpio %i %s %s %i\n", (int)rows[i].pin, pinClassName((PinClass)rows[i].cls), gpioDirName((GpioDir)rows[i].dir), (int)rows[i].level);
+            }
+            return;
+        }
+        bool gdigits = gtok[0] != 0 && strlen(gtok) <= 3;
+        for(const char *d = gtok; *d && gdigits; d++)
+            if(*d < '0' || *d > '9') gdigits = false;
+        if(gn != 2 || !gdigits)
+        {
+            printfdeb("gpio: use list, <n> on/off/in/release\n");
+            return;
+        }
+        const int gpin = atoi(gtok);
+        GpioOp op;
+        if(strcasecmp(gop, "on") == 0) op = GPIO_OP_ON;
+        else if(strcasecmp(gop, "off") == 0) op = GPIO_OP_OFF;
+        else if(strcasecmp(gop, "in") == 0) op = GPIO_OP_IN;
+        else if(strcasecmp(gop, "release") == 0) op = GPIO_OP_RELEASE;
+        else { printfdeb("gpio: use list, <n> on/off/in/release\n"); return; }
+        PinClass why = PIN_FORBIDDEN;
+        int lvl = -1;
+        const GpioRes gr = gpioCtlCommand(gpin, op, &why, &lvl);
+        if(gr == GPIO_REFUSED_MASTER) printfdeb("gpio %i refused: master off\n", gpin);
+        else if(gr == GPIO_REFUSED_CLASS) printfdeb("gpio %i refused: %s\n", gpin, pinClassName(why));
+        else if(gr == GPIO_NOT_HELD) printfdeb("gpio %i not held\n", gpin);
+        else if(op == GPIO_OP_IN) printfdeb("gpio %i in: %i\n", gpin, lvl);
+        else printfdeb("gpio %i %s\n", gpin, gop);
+    #else
+        printfdeb("gpio control: not on this board\n");
+    #endif
+    }
     // WX-01 (upstream #999): outside the OneWire block, so every board answers
     else
     if(commandCheck(msg_text+2, (char*)"windpin ") == 0)
@@ -2898,13 +2789,12 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
-        if(!wxWindPinOk(newPin))
-        {
-            printfdeb("windpin %i not allowed (LoRa, I2C, GPS, button, flash or input-only pin), ignored\n", newPin);
+        if(pinSetterRefuses(PIN_FN_WIND, "windpin", newPin))
             return;
-        }
 
         meshcom_settings.node_wind_pin = newPin;
+
+        gpioFnWins(PIN_FN_WIND);
 
         if(ble)
         {
@@ -3147,6 +3037,8 @@ void commandAction(char *umsg_text, bool ble)
         one_found=false;
         dht_found=false;
 
+        gpioFnWins(PIN_FN_ONEWIRE);
+
         meshcom_settings.node_sset2 |= 0x0001;
 
         if(ble)
@@ -3185,6 +3077,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"onewire gpio ") == 0)
     {
+        const int iowold = meshcom_settings.node_owgpio;
         CmdSetResult setres = cmdStoreInt(msg_text+15, &meshcom_settings.node_owgpio, 0.0, 99.0, &iVar);
 
         if(setres == CMD_SET_NAN) { cmdArgNotNumber("onewire gpio", msg_text+15); return; }
@@ -3200,9 +3093,18 @@ void commandAction(char *umsg_text, bool ble)
         if(meshcom_settings.node_owgpio <= 2)
         {
             printfdeb("GPIO 0-2 not supported on RAK4630 (reserved)");
+            meshcom_settings.node_owgpio = iowold;
             return;
         }
         #endif
+
+        if(pinSetterRefuses(PIN_FN_ONEWIRE, "onewire", meshcom_settings.node_owgpio))
+        {
+            meshcom_settings.node_owgpio = iowold;
+            return;
+        }
+
+        gpioFnWins(PIN_FN_ONEWIRE);
 
         if(ble)
         {
@@ -3218,6 +3120,39 @@ void commandAction(char *umsg_text, bool ble)
         if(bONEWIRE)
         {
             init_onewire_ds18();
+            init_onewire_dht();
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"dht ") == 0)
+    {
+        // SENS-04: DHT type, 11 or 22; anything else is refused and the stored value stays.
+        int idht = 0;
+        CmdSetResult setres = cmdStoreInt(msg_text+6, &idht, 0.0, 99.0, &iVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("dht", msg_text+6); return; }
+
+        if(setres == CMD_SET_RANGE || !dht_type_valid(idht))
+        {
+            printfdeb("dht type must be 11 or 22, ignored\n");
+            return;
+        }
+
+        meshcom_settings.node_dht_type = idht;
+
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        printfdeb("\ndht type:%i\n", meshcom_settings.node_dht_type);
+
+        bReturn = true;
+
+        save_settings();
+
+        if(bONEWIRE)
+        {
             init_onewire_dht();
         }
     }
@@ -4385,7 +4320,7 @@ void commandAction(char *umsg_text, bool ble)
 
         String sShort = convertCallToShort(meshcom_settings.node_call);
         bSameCall = bSameCall && sShort.equals(meshcom_settings.node_short);
-        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", sShort.c_str());
+        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%.5s", sShort.c_str());
 
         printfdeb("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
 
@@ -4497,6 +4432,7 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
 
         meshcom_settings.node_pingcount = meshcom_settings.node_pingmax;
+        bPingSend = false;   // PING-STOP-01: no stale in-flight ping -> no spurious PONG FAILED on the first tick
 
         if(bDisplayTrack)
         {
@@ -4509,6 +4445,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"ping stop") == 0)
     {
         meshcom_settings.node_pingcount = 0;
+        bPingSend = false;   // PING-STOP-01
 
         bReturn = true;
     }
@@ -6349,6 +6286,8 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_cleanflash,
                       meshcom_settings.node_fwversion);
 
+        Serial.printf("[PERSIST];sens;dht;%d\n", meshcom_settings.node_dht_type);
+
         Serial.printf("[PERSIST];gw;gwrf;%d;gwrc;%s\n", meshcom_settings.node_gwrf, meshcom_settings.node_gwrc);
 
         #if defined(ESP32) && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO))
@@ -6358,7 +6297,7 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_immediate_save ? 1 : 0,
                       meshcom_settings.node_mute ? 1 : 0);
 
-        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d\n",
+        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d;theme;%d;chatfont;%d;blfnight;%d\n",
                       meshcom_settings.node_keyboardlock ? 1 : 0,
                       meshcom_settings.node_backlightlock ? 1 : 0,
                       meshcom_settings.node_kbllightlock ? 1 : 0,
@@ -6368,7 +6307,10 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_wifion ? 1 : 0,
                       meshcom_settings.node_bl_day,
                       meshcom_settings.node_bl_night,
-                      meshcom_settings.node_bl_auto ? 1 : 0);
+                      meshcom_settings.node_bl_auto ? 1 : 0,
+                      (int)meshcom_settings.node_tdeck_theme,
+                      (int)meshcom_settings.node_tdeck_chatfont,
+                      (int)meshcom_settings.node_bl_fnight);
 
         // One path per line: these are free-text char[128] and a ';' inside a
         // path would otherwise split a field of the line above.
@@ -6447,7 +6389,33 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"bl auto on") == 0 ||
        commandCheck(msg_text+2, (char*)"bl auto off") == 0)
     {
-        meshcom_settings.node_bl_auto = (commandCheck(msg_text+2, (char*)"bl auto on") == 0);
+        // on = mode auto, off = mode day (fixed day level)
+        brightness_mode_flags(commandCheck(msg_text+2, (char*)"bl auto on") == 0 ? BL_MODE_AUTO : BL_MODE_DAY,
+                              &meshcom_settings.node_bl_auto, &meshcom_settings.node_bl_fnight);
+        save_settings();
+        brightnessTick(true);
+        tdeck_refresh_SET_view();
+        return;
+    }
+    else
+    // --bl mode auto|day|night (exact lower case): auto = day/night switching, day = fixed day level, night = fixed night level
+    if(commandCheck(msg_text+2, (char*)"bl mode ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 8;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        const int m = brightness_mode_parse(arg);
+        if(m < 0)
+        {
+            Serial.printf("[TFT];bl;error;mode;%s;allowed;auto|day|night\n", arg);
+            return;
+        }
+        brightness_mode_flags(m, &meshcom_settings.node_bl_auto, &meshcom_settings.node_bl_fnight);
         save_settings();
         brightnessTick(true);
         tdeck_refresh_SET_view();
@@ -6467,12 +6435,76 @@ void commandAction(char *umsg_text, bool ble)
         }
         save_settings();
         brightnessTick(true);
+        tdeck_refresh_SET_view();
         return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"bl") == 0)
     {
         brightnessLogState("show");
+        return;
+    }
+    else
+    // TD-THEME-01: --theme auto|dark|light. Stored, saved and applied live; bare --theme shows it.
+    // The argument is matched exactly in lower case (tdeck_theme_parse); anything else is an error.
+    if(commandCheck(msg_text+2, (char*)"theme ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 6;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        int t = tdeck_theme_parse(arg);
+        if(t < 0)
+        {
+            Serial.printf("[TFT];theme;error;arg;%s;allowed;auto|dark|light\n", arg);
+            return;
+        }
+        meshcom_settings.node_tdeck_theme = (uint8_t)t;
+        save_settings();
+        tdeck_theme_reapply();
+        tdeck_refresh_SET_view();
+        Serial.printf("[TFT];theme;%s;dark;%d\n", tdeck_theme_name(meshcom_settings.node_tdeck_theme), tdeck_theme_is_dark() ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"theme") == 0)
+    {
+        Serial.printf("[TFT];theme;%s;dark;%d\n", tdeck_theme_name(meshcom_settings.node_tdeck_theme), tdeck_theme_is_dark() ? 1 : 0);
+        return;
+    }
+    else
+    // --chatfont s|m|l: chat bubble body text 12/14/16 px. Exact lower-case (tdeck_chatfont_parse); bare shows it.
+    if(commandCheck(msg_text+2, (char*)"chatfont ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 9;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        int t = tdeck_chatfont_parse(arg);
+        if(t < 0)
+        {
+            Serial.printf("[TFT];chatfont;error;arg;%s;allowed;s|m|l\n", arg);
+            return;
+        }
+        meshcom_settings.node_tdeck_chatfont = (uint8_t)t;
+        save_settings();
+        tdeck_chatfont_apply();
+        tdeck_refresh_SET_view();
+        Serial.printf("[TFT];chatfont;%s\n", tdeck_chatfont_name(meshcom_settings.node_tdeck_chatfont));
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"chatfont") == 0)
+    {
+        Serial.printf("[TFT];chatfont;%s\n", tdeck_chatfont_name(meshcom_settings.node_tdeck_chatfont));
         return;
     }
     #endif
@@ -7578,7 +7610,7 @@ void commandAction(char *umsg_text, bool ble)
                 printfdeb("...WIND: off\n");
             #endif
 
-            printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
+            printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%i%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, meshcom_settings.node_dht_type, cdht);
 
             #ifdef NTC_PIN
                 printfdeb("...NTC-TEMP: %.1f °C  ...FAN: %s\n", meshcom_settings.node_ntctemp, meshcom_settings.node_fanon ? "on" : "off");
@@ -7779,7 +7811,7 @@ void commandAction(char *umsg_text, bool ble)
             // LED-09: LED readback (charge LED shows the effective mode, "(RM x)" while an RM override is active)
             {
                 const LedFitted lf = ledFittedNow();
-                const char *bledTxt = !lf.board ? "not fitted" : !bUSER_BOARD_LED ? "off" : boardLedPinUsable() ? "on" : "on (pin busy)";   // OneWire/DHT holds the pad
+                const char *bledTxt = !lf.board ? "not fitted" : !bUSER_BOARD_LED ? "off" : boardLedPinUsable() ? boardLedModeName(boardLedModeGet()) : (boardLedModeGet() == BOARD_LED_MODE_STEADY ? "steady (pin busy)" : "flash (pin busy)");   // WEB-LED-01; OneWire/DHT holds the pad
                 printfdeb("...BOARD LED: %s\n", bledTxt);
                 if(!lf.charge)
                     printfdeb("...CHARGE LED: not fitted\n");

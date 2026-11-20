@@ -12,7 +12,6 @@ definitions for HELTEC_V3
 #define SX1262_V3
 #define RX_TIMEOUT_VALUE 0      // continous rx with 0
 
-#define ENABLE_INA226_DISABLED  // I2C fault
 
 //#define ENABLE_SOFTSER
 

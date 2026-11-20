@@ -29,6 +29,10 @@
 #include <SD.h>
 #include <SPI.h>
 #include "tdeck_sdmap.h"
+#include "tdeck_theme.h"   // TD-THEME-01
+#include "tdeck_gps_sky.h"   // GPS-SKY
+LV_IMG_DECLARE(mc_lock_img);
+LV_IMG_DECLARE(mc_logo_img);
 #include "tdeck_text_cover.h"
 #include "pos_persist.h"
 #include "msg_persist_policy.h"
@@ -129,7 +133,6 @@ lv_obj_t    *dropdown_mapselect;
 lv_obj_t    *btn_clear_messages;
 lv_obj_t    *btn_clear_mh;
 lv_obj_t    *btn_clear_nodes;
-lv_obj_t    *btn_blauto;
 lv_obj_t    *btn_gps;
 lv_obj_t    *btn_mesh;
 lv_obj_t    *btn_noallmsg;
@@ -259,6 +262,9 @@ static void update_header_sat_indicator(void);
 static void update_header_batt_indicator(float batt, int proz);
 static void update_header_wifi_indicator(void);
 static void update_header_bt_indicator(void);
+static void header_theme_cb(void);
+static lv_obj_t *header_lock_icon = NULL;   // keyboard-lock glyph (mc_lock_img)
+static int8_t save_node_keyboardlock = -1;  // -1 = not yet applied
 // static void update_header_locator_label(void);
 static bool compute_locator_from_settings(char *buffer, size_t len);
 static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
@@ -276,6 +282,7 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble);
 static void msg_tabs_clear_all(void);
 static void msg_render_active_tab(void);
 static void msg_list_show_hint(const char *text);
+static void boot_logo_sync(bool show);
 static void msg_list_append_bubble(const MsgBubble &bubble);
 static void msg_list_trim_view(size_t target = MSG_TAB_MAX_MESSAGES);
 
@@ -347,6 +354,71 @@ static lv_obj_t *get_tab_bar()
     return lv_tabview_get_tab_btns(tv);
 }
 
+// TD-THEME-01: the colours that cannot be shared styles. The three header icons take their colour from a state
+// (menu open, keyboard backlight lock, backlight lock); the setup/table styles are file-local lv_style_t.
+// theme_recolor_cb (one of this file's two tdeck_theme_on_change slots) re-colours both after every theme apply.
+static lv_style_t *s_th_ta = NULL, *s_th_tr = NULL, *s_th_input = NULL, *s_th_cursor = NULL;
+static lv_style_t *s_th_cell = NULL, *s_th_cell1 = NULL, *s_th_cell2 = NULL, *s_th_bg = NULL;
+
+static void tab_icons_recolor(void)
+{
+    const TdeckPalette &p = tdeck_theme_pal();
+    if(tab_menu_icon_label != NULL)
+        lv_obj_set_style_text_color(tab_menu_icon_label, lv_color_hex(tab_menu_visible ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
+    if(tab_kbl_icon_label != NULL)
+        lv_obj_set_style_text_color(tab_kbl_icon_label, lv_color_hex(meshcom_settings.node_kbllightlock ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
+    if(tab_standby_icon_label != NULL)
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_color_hex(meshcom_settings.node_backlightlock ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
+}
+
+static void theme_fill_static_styles(void)
+{
+    const TdeckPalette &p = tdeck_theme_pal();
+    const lv_color_t text = lv_color_hex(p.text), surf = lv_color_hex(p.surface), brd = lv_color_hex(p.border);
+    if(s_th_bg)
+        lv_style_set_text_color(s_th_bg, text);
+    if(s_th_ta)
+    {
+        lv_style_set_text_color(s_th_ta, text);
+        lv_style_set_bg_color(s_th_ta, surf);
+        lv_style_set_border_color(s_th_ta, brd);
+    }
+    if(s_th_tr)
+    {
+        lv_style_set_text_color(s_th_tr, text);
+        lv_style_set_bg_color(s_th_tr, surf);
+        lv_style_set_border_color(s_th_tr, brd);
+    }
+    if(s_th_input)
+    {
+        lv_style_set_text_color(s_th_input, text);
+        lv_style_set_bg_color(s_th_input, surf);
+    }
+    if(s_th_cursor)
+        lv_style_set_bg_color(s_th_cursor, text);
+    if(s_th_cell)
+        lv_style_set_bg_color(s_th_cell, surf);
+    lv_style_t *cells[2] = {s_th_cell1, s_th_cell2};
+    for(lv_style_t *c : cells)
+        if(c)
+        {
+            lv_style_set_bg_color(c, surf);
+            lv_style_set_text_color(c, text);
+            lv_style_set_border_color(c, brd);
+        }
+}
+
+// First tdeck_theme_on_change slot of this file (the second, header_theme_cb, re-colours the header indicators).
+static void theme_recolor_cb(void)
+{
+    tab_icons_recolor();
+    theme_fill_static_styles();
+    lv_style_t *all[] = {s_th_bg, s_th_ta, s_th_tr, s_th_input, s_th_cursor, s_th_cell, s_th_cell1, s_th_cell2};
+    for(lv_style_t *st : all)
+        if(st)
+            lv_obj_report_style_change(st);
+}
+
 static void update_tab_button_state(bool show)
 {
     if(tab_menu_button != NULL)
@@ -359,9 +431,7 @@ static void update_tab_button_state(bool show)
 
     if(tab_menu_icon_label != NULL)
     {
-        lv_color_t color = show ? lv_palette_main(LV_PALETTE_RED)
-                                : lv_palette_main(LV_PALETTE_LIME); //ex LV_PALETTE_LIGHT_GREEN
-        lv_obj_set_style_text_color(tab_menu_icon_label, color, LV_PART_MAIN);
+        tab_icons_recolor();   // reads tab_menu_visible, which tdeck_set_tab_menu_visible() sets before calling here
     }
 }
 
@@ -423,14 +493,12 @@ static void tab_standby_button_event_cb(lv_event_t * e)
         {
             meshcom_settings.node_modus = meshcom_settings.node_modus | 0x02;
 
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
         }
         else
         {
             meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFD;
-
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
+        tab_icons_recolor();
 
         save_settings();
     }
@@ -452,7 +520,6 @@ static void tab_kbl_button_event_cb(lv_event_t * e)
             if (bDEBUG)
                 Serial.println("[TDECK]...tab_kbl: turn on keyboard backlight");
             setKeyboardBacklight(150);
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
         }
         else
         {
@@ -462,8 +529,8 @@ static void tab_kbl_button_event_cb(lv_event_t * e)
                 Serial.println("[TDECK]...tab_kbl: turn off keyboard backlight");
                 
             setKeyboardBacklight(0);
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
+        tab_icons_recolor();
 
         save_settings();
     }
@@ -510,6 +577,93 @@ String getCountryDropbox();
 /**
  * SET view new line
  */
+static lv_obj_t *setup_brightness_slider = NULL;
+static lv_obj_t *setup_theme_seg = NULL;
+static lv_obj_t *setup_chatfont_seg = NULL;
+static lv_obj_t *setup_display_seg = NULL;
+
+static void setup_brightness_slider_cb(lv_event_t *e)
+{
+    // no commandAction: each call would write flash; brightnessSetActiveLevel debounces the save
+    brightnessSetActiveLevel((uint8_t)lv_slider_get_value(lv_event_get_target(e)));
+}
+
+// SYM+B (cycleBrightness) -> move the slider
+static void setup_brightness_changed_cb(uint8_t level)
+{
+    if(setup_brightness_slider != NULL)
+        lv_slider_set_value(setup_brightness_slider, level, LV_ANIM_OFF);
+}
+
+// Segmented control: one lv_btnmatrix, checkable, exactly one segment checked, theme styles
+// (checked = tdeck_style_btn_on, else tdeck_style_btn_off). Selector 'sel' is a map of 3 labels.
+static lv_obj_t * setup_segment_create(lv_obj_t * parent, const char ** map, lv_event_cb_t cb)
+{
+    lv_obj_t * m = lv_btnmatrix_create(parent);
+    lv_btnmatrix_set_map(m, map);
+    // CLICK_TRIG: commit on release, so a scroll that starts on a segment or a finger sliding across
+    // segments neither saves nor leaves the shown and stored value apart (LVGL 8.3 fires on press otherwise)
+    lv_btnmatrix_set_btn_ctrl_all(m, (lv_btnmatrix_ctrl_t)(LV_BTNMATRIX_CTRL_CHECKABLE | LV_BTNMATRIX_CTRL_CLICK_TRIG));
+    lv_btnmatrix_set_one_checked(m, true);
+    lv_obj_set_size(m, 210, 30);
+    lv_obj_align(m, LV_ALIGN_LEFT_MID, 77, 0);
+    lv_obj_set_style_pad_all(m, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_gap(m, 4, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(m, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(m, 0, LV_PART_MAIN);
+    lv_obj_add_style(m, &tdeck_style_btn_off, LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_add_style(m, &tdeck_style_btn_on, LV_PART_ITEMS | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(m, cb, LV_EVENT_VALUE_CHANGED, NULL);
+    return m;
+}
+
+static void setup_segment_select(lv_obj_t * m, uint32_t idx)
+{
+    if(m != NULL)
+        lv_btnmatrix_set_btn_ctrl(m, (uint16_t)idx, LV_BTNMATRIX_CTRL_CHECKED);
+}
+
+static void setup_sync_segments()
+{
+    setup_segment_select(setup_chatfont_seg, meshcom_settings.node_tdeck_chatfont <= 2 ? meshcom_settings.node_tdeck_chatfont : 0);
+    setup_segment_select(setup_theme_seg, tdeck_theme_setting_to_seg(meshcom_settings.node_tdeck_theme));
+    setup_segment_select(setup_display_seg, brightness_mode_to_seg(brightnessMode()));
+}
+
+static void setup_theme_seg_cb(lv_event_t *e)
+{
+    const uint8_t setting = tdeck_theme_seg_to_setting(lv_btnmatrix_get_selected_btn(lv_event_get_target(e)));
+    if(meshcom_settings.node_tdeck_theme == setting)
+        return;
+    meshcom_settings.node_tdeck_theme = setting;
+    save_settings();
+    tdeck_theme_reapply();
+}
+
+static void setup_chatfont_seg_cb(lv_event_t *e)
+{
+    const uint16_t sel = lv_btnmatrix_get_selected_btn(lv_event_get_target(e));
+    if(sel > 2 || meshcom_settings.node_tdeck_chatfont == sel)
+        return;
+    meshcom_settings.node_tdeck_chatfont = (uint8_t)sel;
+    save_settings();
+    tdeck_chatfont_apply();
+}
+
+// Display: Auto = day/night switching, Light = fixed day level, Dark = fixed night level.
+// The slider then edits that slot and the new active level is applied at once (same path as --bl mode).
+static void setup_display_seg_cb(lv_event_t *e)
+{
+    const int mode = brightness_mode_from_seg(lv_btnmatrix_get_selected_btn(lv_event_get_target(e)));
+    if(brightnessMode() == mode)
+        return;
+    brightness_mode_flags(mode, &meshcom_settings.node_bl_auto, &meshcom_settings.node_bl_fnight);
+    save_settings();
+    brightnessTick(true);
+    if(setup_brightness_slider != NULL)
+        lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
+}
+
 lv_obj_t * SET_new_line(lv_obj_t * parent, lv_obj_t * last_line, lv_coord_t distance)
 {
     lv_obj_t * new_line = lv_obj_create(parent);
@@ -570,12 +724,10 @@ static void msg_input_budget_cb(lv_event_t *e)
 void setDisplayLayout(lv_obj_t *parent)
 {
     static lv_style_t lable_style;
-    lv_style_init(&lable_style);
-    lv_style_set_text_color(&lable_style, lv_color_white());
+    lv_style_init(&lable_style);   // unused; colour dropped (TD-THEME-01)
 
     static lv_style_t bg_style;
     lv_style_init(&bg_style);
-    lv_style_set_text_color(&bg_style, lv_color_white());
     lv_style_set_text_font(&bg_style, &mc_font_latin_16);
     //lv_style_set_bg_img_src(&bg_style, &image);
     lv_style_set_bg_opa(&bg_style, LV_OPA_100);
@@ -586,8 +738,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_menu_header = lv_obj_create(parent);
     lv_obj_set_size(tab_menu_header, screen_w, header_height);
-    lv_obj_set_style_bg_color(tab_menu_header, lv_palette_main(LV_PALETTE_BLUE_GREY), LV_PART_MAIN); //ex LV_PALETTE_BLUE
-    lv_obj_set_style_bg_opa(tab_menu_header, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_add_style(tab_menu_header, &tdeck_style_header, LV_PART_MAIN);   // bg + opa + text colour from the theme
     lv_obj_set_style_border_width(tab_menu_header, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_menu_header, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(tab_menu_header, 4, LV_PART_MAIN);
@@ -597,60 +748,65 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(tab_menu_button, 32, header_height - 4);
     lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(tab_menu_button, tab_menu_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE_GREY); //ex LV_PALETTE_BLUE
-    lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(tab_menu_button, &tdeck_style_header, LV_PART_MAIN);
+    lv_obj_add_style(tab_menu_button, &tdeck_style_header, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_menu_button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_menu_button, 4, LV_PART_MAIN);
 
     tab_menu_icon_label = lv_label_create(tab_menu_button);
     lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_BARS);
     lv_obj_set_style_text_font(tab_menu_icon_label, &mc_font_latin_18, LV_PART_MAIN);
-    lv_obj_set_style_text_color(tab_menu_icon_label, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_MAIN);
     lv_obj_center(tab_menu_icon_label);
 
     tab_kbl_button = lv_btn_create(tab_menu_header);
     lv_obj_set_size(tab_kbl_button, 32, header_height - 4);
     lv_obj_align_to(tab_kbl_button, tab_menu_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_kbl_button, tab_kbl_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(tab_kbl_button, &tdeck_style_header, LV_PART_MAIN);
+    lv_obj_add_style(tab_kbl_button, &tdeck_style_header, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_kbl_button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_kbl_button, 4, LV_PART_MAIN);
 
     tab_kbl_icon_label = lv_label_create(tab_kbl_button);
     lv_label_set_text(tab_kbl_icon_label, LV_SYMBOL_KEYBOARD);
     lv_obj_set_style_text_font(tab_kbl_icon_label, &mc_font_latin_18, LV_PART_MAIN);
-    lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_kbl_icon_label);
 
     tab_standby_button = lv_btn_create(tab_menu_header);
     lv_obj_set_size(tab_standby_button, 32, header_height - 4);
     lv_obj_align_to(tab_standby_button, tab_kbl_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_standby_button, tab_standby_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(tab_standby_button, &tdeck_style_header, LV_PART_MAIN);
+    lv_obj_add_style(tab_standby_button, &tdeck_style_header, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_standby_button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_standby_button, 4, LV_PART_MAIN);
 
     tab_standby_icon_label = lv_label_create(tab_standby_button);
     lv_label_set_text(tab_standby_icon_label, LV_SYMBOL_EYE_OPEN);
     lv_obj_set_style_text_font(tab_standby_icon_label, &mc_font_latin_18, LV_PART_MAIN);
-    lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_standby_icon_label);
+    tab_icons_recolor();   // initial state colours of the three header icons
+
+    // keyboard-lock glyph: header content starts at x=4 (pad), the three 32 px buttons end at x=100; glyph at x=106 (14x16)
+    header_lock_icon = lv_img_create(tab_menu_header);
+    lv_img_set_src(header_lock_icon, &mc_lock_img);
+    lv_obj_align_to(header_lock_icon, tab_standby_button, LV_ALIGN_OUT_RIGHT_MID, 6, 0);
+    lv_obj_add_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+    save_node_keyboardlock = -1;
+    tdeck_update_header_standby();   // applies colour and visibility
 
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
     lv_obj_set_style_text_font(header_time_label, &mc_font_latin_18, LV_PART_MAIN);
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_time_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
+    lv_obj_add_style(header_time_label, &tdeck_style_header_text, LV_PART_MAIN);
     lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     header_batt_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_label, "0%");
     lv_obj_set_style_text_font(header_batt_label, &mc_font_latin_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_batt_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
+    lv_obj_add_style(header_batt_label, &tdeck_style_header_text, LV_PART_MAIN);
     lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -35, 0);
 
     header_batt_icon = lv_label_create(tab_menu_header);
@@ -662,7 +818,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_label_set_text(header_sat_label, "0");
     lv_obj_set_style_text_font(header_sat_label, &mc_font_latin_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_sat_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
+    lv_obj_add_style(header_sat_label, &tdeck_style_header_text, LV_PART_MAIN);
     lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     header_sat_icon = lv_label_create(tab_menu_header);
@@ -716,6 +872,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t *t8 = lv_tabview_add_tab(tv, "\uF0C9");
     lv_obj_t *t1 = lv_tabview_add_tab(tv, LV_SYMBOL_SETTINGS);
 
+    lv_obj_add_style(t2, &tdeck_style_chat_bg, LV_PART_MAIN);   // t2 is the page around msg_list and the group bar
     lv_obj_set_scroll_dir(t2, LV_DIR_VER);
     lv_obj_set_scroll_dir(t5, LV_DIR_VER);
     lv_obj_set_scroll_dir(t3, LV_DIR_VER);
@@ -731,31 +888,23 @@ void setDisplayLayout(lv_obj_t *parent)
 
     static lv_style_t ta_style;
     lv_style_init(&ta_style);
-    lv_style_set_text_color(&ta_style, lv_color_black());
     lv_style_set_bg_opa(&ta_style, LV_OPA_100);
-    lv_style_set_bg_color(&ta_style, lv_color_white());
-    lv_style_set_border_color(&ta_style, lv_color_black());
     lv_style_set_line_width(&ta_style, 4);
 
     static lv_style_t tr_style;
-    lv_style_set_text_font(&tr_style, &lv_font_unscii_16);
-    lv_style_set_text_color(&tr_style, lv_color_black());
+    lv_style_init(&tr_style);
+    lv_style_set_text_font(&tr_style, &mc_font_latin_12);   // same font as the table pages
     lv_style_set_bg_opa(&tr_style, LV_OPA_100);
-    lv_style_set_bg_color(&tr_style, lv_color_white());
-    lv_style_set_border_color(&tr_style, lv_color_black());
     lv_style_set_line_width(&tr_style, 4);
 
     static lv_style_t ta_input_style;
     lv_style_init(&ta_input_style);
     lv_style_set_text_font(&ta_input_style, &mc_font_latin_12);
-    lv_style_set_text_color(&ta_input_style, lv_color_black()); // BLAU lv_color_make(0x1C, 0x73, 0xFF));
     lv_style_set_bg_opa(&ta_input_style, LV_OPA_100);
-    lv_style_set_bg_color(&ta_input_style, lv_color_white());
 
     static lv_style_t ta_input_cursor;
     lv_style_init(&ta_input_cursor);
     lv_style_set_bg_opa(&ta_input_cursor, LV_OPA_80);
-    lv_style_set_bg_color(&ta_input_cursor, lv_color_black());
     lv_style_set_border_width(&ta_input_cursor, 1);
 
     static lv_style_t cell_style;
@@ -767,18 +916,14 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_bottom(&cell_style, 0);
     lv_style_set_pad_left(&cell_style, 0);
     lv_style_set_pad_right(&cell_style, 0);
-    lv_style_set_bg_color(&cell_style, lv_color_white());
 
     lv_style_init(&cell_style1);
     lv_style_set_pad_top(&cell_style1, 1);
     lv_style_set_pad_bottom(&cell_style1, 1);
     lv_style_set_pad_left(&cell_style1, 2);
     lv_style_set_pad_right(&cell_style1, 2);
-    lv_style_set_bg_color(&cell_style1, lv_color_white());
-    lv_style_set_text_color(&cell_style1, lv_color_black());
     lv_style_set_text_font(&cell_style1, &mc_font_latin_12);
     lv_style_set_border_width(&cell_style1, 1);
-    lv_style_set_border_color(&cell_style1, lv_color_black());
     lv_style_set_border_side(&cell_style1, LV_BORDER_SIDE_FULL);
 
     lv_style_init(&cell_style2);
@@ -786,12 +931,16 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_bottom(&cell_style2, 1);
     lv_style_set_pad_left(&cell_style2, 2);
     lv_style_set_pad_right(&cell_style2, 2);
-    lv_style_set_bg_color(&cell_style2, lv_color_white());
-    lv_style_set_text_color(&cell_style2, lv_color_black());
     lv_style_set_text_font(&cell_style2, &mc_font_latin_12);
     lv_style_set_border_width(&cell_style2, 1);
-    lv_style_set_border_color(&cell_style2, lv_color_black());
     lv_style_set_border_side(&cell_style2, LV_BORDER_SIDE_FULL);
+
+    // TD-THEME-01: the colours of the styles above come from the palette and follow a live theme switch.
+    s_th_bg = &bg_style;  s_th_ta = &ta_style;  s_th_tr = &tr_style;  s_th_input = &ta_input_style;
+    s_th_cursor = &ta_input_cursor;  s_th_cell = &cell_style;  s_th_cell1 = &cell_style1;  s_th_cell2 = &cell_style2;
+    theme_fill_static_styles();
+    tdeck_theme_on_change(theme_recolor_cb);
+    tdeck_theme_on_change(header_theme_cb);
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -866,8 +1015,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_wifi, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_wifi, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_wifi, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_wifi, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_wifi, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_wifi, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_wifi_label = lv_label_create(btn_wifi);
@@ -880,8 +1029,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_gps, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_gps, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_gps, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_gps, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_gps, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_gps, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_gps_label = lv_label_create(btn_gps);
@@ -894,8 +1043,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_soundon, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_soundon, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_soundon, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_soundon, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_soundon, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_soundon, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_soundon_label = lv_label_create(btn_soundon);
@@ -1059,8 +1208,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_track, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_track, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_track, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_track, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_track, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_track, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_track_label = lv_label_create(btn_track);
@@ -1099,8 +1248,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_webserver, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_webserver, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_webserver, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_webserver, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_webserver, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_webserver, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_webserver_label = lv_label_create(btn_webserver);
@@ -1139,8 +1288,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_wifiap, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_wifiap, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_wifiap, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_wifiap, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_wifiap, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_wifiap, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_wifiap_label = lv_label_create(btn_wifiap);
@@ -1329,8 +1478,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_mesh, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_mesh, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_mesh, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_mesh, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_mesh, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_mesh, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_mesh_label = lv_label_create(btn_mesh);
@@ -1345,8 +1494,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     /* Make the button checkable (like a toggle) */
     lv_obj_add_flag(btn_noallmsg, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_noallmsg, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_noallmsg, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_noallmsg, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_noallmsg, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_noallmsg, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_noallmsg_label = lv_label_create(btn_noallmsg);
@@ -1362,8 +1511,33 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_event_cb(dropdown_mapselect, btn_event_handler_dropdown_mapselect, LV_EVENT_ALL, NULL);
     lv_dropdown_close(dropdown_mapselect);
 
-    // Line Backlight (TD-23): the callsign and buttons lines are full at 320 px
-    lv_obj_t * setup_line_backlight = SET_new_line(t1, setup_line_buttons, 5);
+    // Font size (S/M/L: chat bubbles and the message input), Theme, Display (backlight mode), Bright.
+    // Segmented controls on one 75 px label column; every segment set re-syncs in tdeck_refresh_SET_view.
+    static const char * seg_font_map[] = {"S", "M", "L", ""};
+    static const char * seg_theme_map[] = {"Auto", "Light", "Dark", ""};
+    static const char * seg_display_map[] = {"Auto", "Light", "Dark", ""};
+
+    lv_obj_t * setup_line_chatfont = SET_new_line(t1, setup_line_buttons, 5);
+
+    lv_obj_t * setup_cf_label = lv_label_create(setup_line_chatfont);
+    lv_obj_align(setup_cf_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_cf_label, 75);
+    lv_label_set_text(setup_cf_label, "Font size ");
+    lv_obj_set_style_text_align(setup_cf_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_chatfont_seg = setup_segment_create(setup_line_chatfont, seg_font_map, setup_chatfont_seg_cb);
+
+    lv_obj_t * setup_line_theme = SET_new_line(t1, setup_line_chatfont, 5);
+
+    lv_obj_t * setup_th_label = lv_label_create(setup_line_theme);
+    lv_obj_align(setup_th_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_th_label, 75);
+    lv_label_set_text(setup_th_label, "Theme ");
+    lv_obj_set_style_text_align(setup_th_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_theme_seg = setup_segment_create(setup_line_theme, seg_theme_map, setup_theme_seg_cb);
+
+    lv_obj_t * setup_line_backlight = SET_new_line(t1, setup_line_theme, 5);
 
     lv_obj_t * setup_bl_label = lv_label_create(setup_line_backlight);
     lv_obj_align(setup_bl_label, LV_ALIGN_LEFT_MID, 0, 0);
@@ -1371,24 +1545,29 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_label_set_text(setup_bl_label, "Display ");
     lv_obj_set_style_text_align(setup_bl_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
-    // AUTO DAY/NIGHT BRIGHTNESS (levels are set with SYM+B)
-    btn_blauto = lv_btn_create(setup_line_backlight);
-    lv_obj_align(btn_blauto, LV_ALIGN_TOP_LEFT, 77, 0);
-    lv_obj_set_width(btn_blauto, 140);
-    lv_obj_set_height(btn_blauto, 35);
+    setup_display_seg = setup_segment_create(setup_line_backlight, seg_display_map, setup_display_seg_cb);
 
-    /* Make the button checkable (like a toggle) */
-    lv_obj_add_flag(btn_blauto, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_blauto, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_blauto, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_add_event_cb(btn_blauto, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
+    // Brightness slider: edits the slot of the Display segment (Light day, Dark night, Auto the active period)
+    lv_obj_t * setup_line_brightness = SET_new_line(t1, setup_line_backlight, 5);
 
-    lv_obj_t * btn_blauto_label = lv_label_create(btn_blauto);
-    lv_label_set_text(btn_blauto_label, "Auto Day/Night");
-    lv_obj_center(btn_blauto_label);
+    lv_obj_t * setup_br_label = lv_label_create(setup_line_brightness);
+    lv_obj_align(setup_br_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_br_label, 75);
+    lv_label_set_text(setup_br_label, "Bright ");
+    lv_obj_set_style_text_align(setup_br_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_brightness_slider = lv_slider_create(setup_line_brightness);
+    lv_slider_set_range(setup_brightness_slider, 1, BRIGHTNESS_STEPS);
+    lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
+    lv_obj_set_width(setup_brightness_slider, 200);
+    lv_obj_align(setup_brightness_slider, LV_ALIGN_LEFT_MID, 90, 0);
+    lv_obj_add_event_cb(setup_brightness_slider, setup_brightness_slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    brightnessSetChangeCallback(setup_brightness_changed_cb);
+
+    setup_sync_segments();
 
     // StartupTone
-    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_backlight, 5);
+    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_brightness, 5);
 
     // StartupTone
     lv_obj_t * setup_stone_label = lv_label_create(setup_line_starttone);
@@ -1449,8 +1628,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // Make the button checkable (like a toggle) 
     lv_obj_add_flag(btn_persist_to_flash, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_persist_to_flash, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_persist_to_flash, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_persist_to_flash, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_to_flash_label = lv_label_create(btn_persist_to_flash);
@@ -1464,8 +1643,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // Make the button checkable (like a toggle)
     lv_obj_add_flag(btn_persist_to_SD, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_persist_to_SD, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_persist_to_SD, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_persist_to_SD, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_to_SD_label = lv_label_create(btn_persist_to_SD);
@@ -1479,8 +1658,8 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // Make the button checkable (like a toggle)
     lv_obj_add_flag(btn_persist_immediate, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(btn_persist_immediate, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(btn_persist_immediate, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_add_event_cb(btn_persist_immediate, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_immediate_label = lv_label_create(btn_persist_immediate);
@@ -1559,7 +1738,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_style(msg_list, &cell_style1, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_size(msg_list, 300, LV_VER_RES * 0.6);
     lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_opa(msg_list, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_add_style(msg_list, &tdeck_style_chat_bg, LV_PART_MAIN);   // chat area colour via the theme (live switch)
     lv_obj_set_style_border_width(msg_list, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(msg_list, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_row(msg_list, 0, LV_PART_MAIN);
@@ -1600,7 +1779,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     map_no_data_label = lv_label_create(t7);
     lv_label_set_text(map_no_data_label, "No card selected\nor present!");
-    lv_obj_set_style_text_color(map_no_data_label, lv_color_white(), 0);
+    lv_obj_add_style(map_no_data_label, &tdeck_style_text, 0);
     lv_obj_set_style_text_align(map_no_data_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(map_no_data_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(map_no_data_label, 200);
@@ -1641,20 +1820,31 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_textarea_set_cursor_click_pos(track_ta, false);
     lv_textarea_set_text_selection(track_ta, false);
     lv_textarea_set_cursor_pos(track_ta, 0);
-    lv_obj_set_size(track_ta, 300, LV_VER_RES * 0.72);
+    // Page without padding/scroll (166 px high); 9 lines x 17 px = 153 px
+    // + 2x2 pad + 2x2 border = 161 px; SEND POS sits right of the text, not below
+    lv_obj_set_style_pad_all(t6, 0, LV_PART_MAIN);
+    lv_obj_set_scroll_dir(t6, LV_DIR_NONE);
+    lv_obj_set_scrollbar_mode(t6, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_size(track_ta, 196, 163);
+    lv_obj_set_pos(track_ta, 2, 1);
     lv_textarea_set_text(track_ta, "");
     lv_textarea_set_max_length(track_ta, 1000);
-    lv_obj_align(track_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_style(track_ta, &tr_style, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(track_ta, 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(track_ta, 2, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(track_ta, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_scroll_dir(track_ta, LV_DIR_NONE);
 
     lv_obj_t * btsendpos = lv_btn_create(t6);
-    lv_obj_set_pos(btsendpos, 180, 150);
+    lv_obj_set_pos(btsendpos, 208, 4);
     lv_obj_set_size(btsendpos, 100, 20);
     lv_obj_add_event_cb(btsendpos, btn_event_handler_sendpos, LV_EVENT_ALL, NULL);
 
     lv_obj_t * btnlabelsendpos = lv_label_create(btsendpos);
     lv_label_set_text(btnlabelsendpos, "SEND POS");
     lv_obj_center(btnlabelsendpos);
+
+    tdeckGpsSkyCreate(t6, track_ta);   // GPS-SKY: sky plot over the text view + SKY/TEXT toggle
 
     ////////////////////////////////////////////////////////////////////////////
     // TEXT MHEARD (Quelle seit Welle 4: nbr_views, siehe tdeck_refresh_mh_view())
@@ -1727,6 +1917,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_textarea_set_max_length(text_input, 300);  // TD-25: LVGL cap stays above the byte budget; msg_input_budget_cb() clamps
     lv_obj_align(text_input, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_add_style(text_input, &ta_input_style, LV_PART_MAIN);
+    lv_obj_add_style(text_input, &tdeck_style_chat_body, LV_PART_MAIN);   // S/M/L font size, live via tdeck_chatfont_apply
     lv_obj_add_style(text_input, &ta_input_cursor, LV_PART_SELECTED | LV_PART_CURSOR);
 
     lv_textarea_set_placeholder_text(text_input, "Type Message");
@@ -1734,7 +1925,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     msg_budget_label = lv_label_create(t5);
     lv_label_set_text(msg_budget_label, "149 bytes left");
-    lv_obj_set_style_text_color(msg_budget_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(msg_budget_label, &tdeck_style_muted, LV_PART_MAIN);
     lv_obj_align_to(msg_budget_label, text_input, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 2);
 
     msg_controls = lv_obj_create(t5);
@@ -2341,7 +2532,7 @@ static void update_header_sat_indicator(void)
     if(!bGPSON)
     {
         label_set_if_changed(header_sat_label, "0");
-        text_color_set_if_changed(header_sat_icon, lv_color_white());
+        text_color_set_if_changed(header_sat_icon, lv_color_hex(tdeck_theme_pal().hdr_off));
         lv_obj_add_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
         return;
@@ -2352,8 +2543,8 @@ static void update_header_sat_indicator(void)
     label_set_if_changed(header_sat_label, sat_text);
 
     // Show green when we have a fix OR at least some satellites visible, red when GPS on but no sats/fix
-    lv_color_t icon_color = (posinfo_fix || posinfo_satcount > 0) ? lv_palette_main(LV_PALETTE_GREEN)
-                                                                         : lv_palette_main(LV_PALETTE_RED);
+    const TdeckPalette &pal = tdeck_theme_pal();
+    lv_color_t icon_color = lv_color_hex((posinfo_fix || posinfo_satcount > 0) ? pal.hdr_on : pal.hdr_err);
     text_color_set_if_changed(header_sat_icon, icon_color);
     lv_obj_clear_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
@@ -2376,7 +2567,7 @@ static void update_header_batt_indicator(float batt, int proz)
     {
         label_set_if_changed(header_batt_label, "USB");
         label_set_if_changed(header_batt_icon, LV_SYMBOL_USB);
-        text_color_set_if_changed(header_batt_icon, lv_palette_main(LV_PALETTE_ORANGE));
+        text_color_set_if_changed(header_batt_icon, lv_color_hex(tdeck_theme_pal().hdr_on));
         return;
     }
 
@@ -2386,7 +2577,7 @@ static void update_header_batt_indicator(float batt, int proz)
     label_set_if_changed(header_batt_label, percent_text);
 
     const char *icon = LV_SYMBOL_BATTERY_EMPTY;
-    lv_color_t icon_color = lv_palette_main(LV_PALETTE_LIGHT_GREEN);
+    lv_color_t icon_color = lv_color_hex(tdeck_theme_pal().hdr_on);
 
     if(clamped_proz >= 80)
     {
@@ -2404,6 +2595,10 @@ static void update_header_batt_indicator(float batt, int proz)
     {
         icon = LV_SYMBOL_BATTERY_1;
     }
+    else
+    {
+        icon_color = lv_color_hex(tdeck_theme_pal().warn);   // low battery
+    }
 
     label_set_if_changed(header_batt_icon, icon);
     text_color_set_if_changed(header_batt_icon, icon_color);
@@ -2417,95 +2612,55 @@ static void update_header_batt_indicator(float batt, int proz)
  */
 extern volatile bool deviceConnected; // from esp32_main.cpp (volatile since BLC-01)
 
+static void hidden_set_if_changed(lv_obj_t *obj, bool hidden)
+{
+    if(obj == NULL || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN) == hidden)
+        return;
+    if(hidden)
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Header icons for WLAN and BLE, one rule in the theme colours:
+//   hdr_on  (white)  link up: WLAN connected or AP active / phone connected over BLE
+//   hdr_err (yellow) switched on, no link yet: WLAN configured but not connected / BLE advertising
+//   hdr_off (grey)   switched off; the icon stays visible
 static void update_header_wifi_indicator(void)
 {
     if(header_wifi_icon == NULL)
         return;
 
-    // If the user explicitly disabled Wi‑Fi via the T‑Deck Settings, show
-    // the Wi‑Fi icon as 'off' (white) regardless of configured SSID.
-    {
-        if(!meshcom_settings.node_wifion)
-        {
-            if (bDEBUG)
-                Serial.printf("[TDECK]...update_header_wifi_indicator: node_wifion=false, WiFi.status=%d, ssid='%s'\n", (int)WiFi.status(), meshcom_settings.node_ssid);
-            
-            text_color_set_if_changed(header_wifi_icon, lv_color_white());
-            label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-            lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-            return;
-        }
-    }
+    label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
+    hidden_set_if_changed(header_wifi_icon, false);
 
-    // AP mode considered connected
-    // Check actual WiFi state for Green (Connected or AP created)
-    bool is_connected = (WiFi.status() == WL_CONNECTED);
-    bool is_ap_active = (WiFi.getMode() == WIFI_MODE_AP) || (WiFi.getMode() == WIFI_MODE_APSTA);
+    const TdeckPalette &p = tdeck_theme_pal();
+    const bool is_connected = (WiFi.status() == WL_CONNECTED);
+    const bool is_ap_active = (WiFi.getMode() == WIFI_MODE_AP) || (WiFi.getMode() == WIFI_MODE_APSTA);
+    const bool configured = bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1);
 
-    if(is_connected || is_ap_active)
-    {
-        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_GREEN));
-        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-
-    // If configured/enabled but not yet connected/active -> Red
-    // Only if global switch is ON (which we checked above, but double check logic)
-    if (bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1))
-    {
-        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_LIME));  //ex lv_palette_main(LV_PALETTE_RED)
-        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-    }
-    else
-    {
-        // Not enabled/configured -> White
-        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_GREY)); //ex lv_color_white()
-        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
-        lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
-    }
+    uint32_t c = p.hdr_off;
+    if(meshcom_settings.node_wifion && (is_connected || is_ap_active))
+        c = p.hdr_on;
+    else if(meshcom_settings.node_wifion && configured)
+        c = p.hdr_err;
+    text_color_set_if_changed(header_wifi_icon, lv_color_hex(c));
 }
 
 static void update_header_bt_indicator(void)
 {
     if(header_bt_icon == NULL)
         return;
-    // Always render the icon glyph in white
-    text_color_set_if_changed(header_bt_icon, lv_palette_main(LV_PALETTE_GREY)); //ex lv_color_white()
+
+    // Rule above update_header_wifi_indicator(). BLE advertises once its name is set.
+    const TdeckPalette &p = tdeck_theme_pal();
+    uint32_t c = p.hdr_off;
+    if(deviceConnected)
+        c = p.hdr_on;
+    else if(strlen(cBLEName) > 1)
+        c = p.hdr_err;
+    text_color_set_if_changed(header_bt_icon, lv_color_hex(c));
     label_set_if_changed(header_bt_icon, LV_SYMBOL_BLUETOOTH);
-
-    /* KBC
-    // Ensure a square touch/visual area for the icon
-    lv_obj_set_size(header_bt_icon, 22, 22);
-    lv_obj_set_style_text_align(header_bt_icon, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(header_bt_icon, 0, LV_PART_MAIN);
-
-    // Default: no border / transparent background
-    lv_obj_set_style_border_width(header_bt_icon, 0, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(header_bt_icon, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_radius(header_bt_icon, 12, LV_PART_MAIN);
-    */
-
-    // deviceConnected is set by NimBLE callbacks
-    if (deviceConnected)
-    {
-        // Connected: blue logo
-        text_color_set_if_changed(header_bt_icon, lv_palette_main(LV_PALETTE_LIME)); //ex lv_color_make(0x00, 0x00, 0xff)
-    }
-    else
-    {
-        // BLE advertising active: white glyph with white ring
-        if (strlen(cBLEName) > 1)
-        {
-            //ex lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
-            lv_obj_set_style_border_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
-        }
-        else
-        {
-            // BLE disabled: plain white glyph, no border (default above)
-        }
-    }
 }
 
 /* Public wrappers so other modules can trigger a header refresh */
@@ -2522,39 +2677,62 @@ void tdeck_update_header_bt(void)
 bool save_node_backlightlock=false;
 bool save_node_kbllightlock=false;
 
+// Keyboard-lock glyph (mc_lock_img) in the header, right of the three icon buttons; -1 = not yet applied.
+
+static void header_lock_apply(bool locked)
+{
+    if(header_lock_icon == NULL)
+        return;
+    lv_obj_set_style_img_recolor(header_lock_icon, lv_color_hex(tdeck_theme_pal().hdr_on), LV_PART_MAIN);
+    lv_obj_set_style_img_recolor_opa(header_lock_icon, LV_OPA_COVER, LV_PART_MAIN);
+    if(locked)
+        lv_obj_clear_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+}
+
+// TD-THEME-01: the header indicators compare against the cached state; after a theme change force the
+// next standby update to re-apply and recolour the token-coloured indicators right away.
+static void header_theme_cb(void)
+{
+    save_node_keyboardlock = -1;
+    header_lock_apply(meshcom_settings.node_keyboardlock);
+    save_node_keyboardlock = meshcom_settings.node_keyboardlock ? 1 : 0;
+    update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
+    update_header_sat_indicator();
+    update_header_wifi_indicator();
+    update_header_bt_indicator();
+}
+
 void tdeck_update_header_standby(void)
 {
     meshcom_settings.node_backlightlock = meshcom_settings.node_modus & 0x02;
 
     if(meshcom_settings.node_backlightlock != save_node_backlightlock)
     {
-        if (meshcom_settings.node_backlightlock)
-        {
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
-        }
-        else
-        {
-            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-        }
-
         save_node_backlightlock = meshcom_settings.node_backlightlock;
+        tab_icons_recolor();
     }
 
     meshcom_settings.node_kbllightlock = meshcom_settings.node_modus & 0x01;
 
     if(meshcom_settings.node_kbllightlock != save_node_kbllightlock)
     {
-        if (meshcom_settings.node_kbllightlock)
-        {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
-        }
-        else
-        {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
-        }
-
         save_node_kbllightlock = meshcom_settings.node_kbllightlock;
+        tab_icons_recolor();
     }
+
+    const int8_t kbl = meshcom_settings.node_keyboardlock ? 1 : 0;
+    if(kbl != save_node_keyboardlock)
+    {
+        save_node_keyboardlock = kbl;
+        header_lock_apply(kbl != 0);
+    }
+
+    // WLAN and BLE icons follow the live state; the *_if_changed() helpers touch LVGL only
+    // when something really changes (the BLE name is set only after the header was built).
+    update_header_wifi_indicator();
+    update_header_bt_indicator();
 }
 
 /* Pause/resume a small set of UI timers when the display is turned off/on.
@@ -2584,13 +2762,8 @@ static void apply_tab_bar_styles(void)
     if(tab_bar == NULL)
         return;
 
-    lv_obj_set_style_text_color(tab_bar, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_ITEMS);
-    lv_obj_set_style_text_color(tab_bar, lv_palette_main(LV_PALETTE_RED), LV_PART_ITEMS | LV_STATE_CHECKED);
-
-    lv_obj_set_style_bg_color(tab_bar, lv_color_black(), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_opa(tab_bar, LV_OPA_80, LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(tab_bar, lv_palette_darken(LV_PALETTE_BLUE_GREY, 2), LV_PART_ITEMS);   //ex LV_PALETTE_BLUE
-    lv_obj_set_style_bg_opa(tab_bar, LV_OPA_60, LV_PART_ITEMS);
+    lv_obj_add_style(tab_bar, &tdeck_style_tab, LV_PART_ITEMS);
+    lv_obj_add_style(tab_bar, &tdeck_style_tab_sel, LV_PART_ITEMS | LV_STATE_CHECKED);
 
     lv_obj_set_style_border_width(tab_bar, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(tab_bar, 4, LV_PART_ITEMS);
@@ -2679,7 +2852,7 @@ static void msg_list_show_hint(const char *text)
     msg_list_clear();
     msg_list_hint_label = lv_label_create(msg_list);
     lv_label_set_text(msg_list_hint_label, text != NULL ? text : "");
-    lv_obj_set_style_text_color(msg_list_hint_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(msg_list_hint_label, &tdeck_style_muted, LV_PART_MAIN);
     lv_obj_align(msg_list_hint_label, LV_ALIGN_CENTER, 0, 0);
 }
 
@@ -2691,18 +2864,12 @@ static void ensure_msg_styles(void)
     msg_styles_ready = true;
 
     lv_style_init(&msg_style_incoming);
-    lv_style_set_bg_opa(&msg_style_incoming, LV_OPA_COVER);
-    lv_style_set_bg_color(&msg_style_incoming, lv_color_hex(0xD7F5D0));
     lv_style_set_radius(&msg_style_incoming, 14);
 
     lv_style_init(&msg_style_outgoing);
-    lv_style_set_bg_opa(&msg_style_outgoing, LV_OPA_COVER);
-    lv_style_set_bg_color(&msg_style_outgoing, lv_color_hex(0xD4E8FF));
     lv_style_set_radius(&msg_style_outgoing, 14);
 
     lv_style_init(&msg_style_system);
-    lv_style_set_bg_opa(&msg_style_system, LV_OPA_COVER);
-    lv_style_set_bg_color(&msg_style_system, lv_palette_lighten(LV_PALETTE_GREY, 2));
     lv_style_set_radius(&msg_style_system, 14);
 }
 
@@ -2740,7 +2907,6 @@ static void init_msg_tab_bar(lv_obj_t *parent)
     lv_obj_set_height(msg_tab_bar, 28);
     lv_obj_align(msg_tab_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_opa(msg_tab_bar, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(msg_tab_bar, lv_palette_lighten(LV_PALETTE_GREY, 4), LV_PART_MAIN);
     lv_obj_set_style_border_width(msg_tab_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(msg_tab_bar, 6, LV_PART_MAIN);
     lv_obj_set_style_pad_all(msg_tab_bar, 4, LV_PART_MAIN);
@@ -2753,7 +2919,7 @@ static void init_msg_tab_bar(lv_obj_t *parent)
 
     msg_tab_hint_label = lv_label_create(msg_tab_bar);
     lv_label_set_text(msg_tab_hint_label, "No MSG groups");
-    lv_obj_set_style_text_color(msg_tab_hint_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(msg_tab_hint_label, &tdeck_style_muted, LV_PART_MAIN);
 
     msg_tab_entries.clear();
     msg_active_tab_index = -1;
@@ -2786,6 +2952,7 @@ static void msg_tabs_select_index(int index)
     if(msg_tab_entries.empty())
     {
         msg_active_tab_index = -1;
+        boot_logo_sync(false);   // no "booting..." tab left: logo off, list geometry back
         msg_list_show_hint("No messages yet");
         return;
     }
@@ -2973,13 +3140,13 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
     new_entry.last_activity = msg_tab_stamp();
     new_entry.button = lv_btn_create(msg_tab_bar);
 
-    lv_obj_set_style_bg_color(new_entry.button, lv_palette_lighten(LV_PALETTE_BLUE, 3), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(new_entry.button, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_style(new_entry.button, &tdeck_style_tab, LV_PART_MAIN);
+    lv_obj_add_style(new_entry.button, &tdeck_style_tab_sel, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(new_entry.button, LV_OPA_70, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(new_entry.button, LV_OPA_100, LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_border_width(new_entry.button, 0, LV_PART_MAIN);
+    // border and padding come from tdeck_style_grp_btn (outline in light mode); a local value would override it
+    lv_obj_add_style(new_entry.button, &tdeck_style_grp_btn, LV_PART_MAIN);
     lv_obj_set_style_radius(new_entry.button, 8, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(new_entry.button, 6, LV_PART_MAIN);
     lv_obj_set_style_min_width(new_entry.button, 35, LV_PART_MAIN);
     lv_obj_add_flag(new_entry.button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_event_cb(new_entry.button, msg_tab_button_event_cb, LV_EVENT_CLICKED, NULL);
@@ -3224,10 +3391,44 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
     msg_tabs_heap_trim();
 }
 
+// Boot logo above the version lines: only on the "booting..." tab. msg_list moves down by the logo
+// height and shrinks by it, so the logo never covers a bubble; any other tab restores the geometry.
+static lv_obj_t *s_boot_logo = NULL;
+
+static void boot_logo_sync(bool show)
+{
+    if(msg_list == NULL)
+        return;
+    const lv_coord_t full_h = LV_VER_RES * 0.6;
+    const lv_coord_t logo_h = 64;
+    if(show)
+    {
+        if(s_boot_logo == NULL)
+        {
+            s_boot_logo = lv_img_create(lv_obj_get_parent(msg_list));
+            lv_img_set_src(s_boot_logo, &mc_logo_img);
+            lv_obj_clear_flag(s_boot_logo, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_align(s_boot_logo, LV_ALIGN_TOP_MID, 0, 0);
+        }
+        lv_obj_clear_flag(s_boot_logo, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_height(msg_list, full_h - logo_h);
+        lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, logo_h);
+    }
+    else if(s_boot_logo != NULL && !lv_obj_has_flag(s_boot_logo, LV_OBJ_FLAG_HIDDEN))
+    {
+        lv_obj_add_flag(s_boot_logo, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_height(msg_list, full_h);
+        lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, 0);
+    }
+}
+
 static void msg_render_active_tab(void)
 {
     if(msg_list == NULL)
         return;
+
+    boot_logo_sync(msg_active_tab_index >= 0 && msg_active_tab_index < (int)msg_tab_entries.size() &&
+                   msg_tab_entries[msg_active_tab_index].group == "booting...");
 
     if(msg_active_tab_index < 0 || msg_active_tab_index >= (int)msg_tab_entries.size())
     {
@@ -3327,7 +3528,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     if(max_bubble_width < 80)
         max_bubble_width = 80;
 
-    lv_coord_t content_max_width = max_bubble_width - 12; // allow for bubble padding
+    lv_coord_t content_max_width = max_bubble_width - 16; // 2 x 8 px horizontal padding (pad + border = 8)
     if(content_max_width < 40)
         content_max_width = max_bubble_width;
 
@@ -3335,18 +3536,28 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_obj_set_width(bubble_obj, LV_SIZE_CONTENT);
     lv_obj_set_height(bubble_obj, LV_SIZE_CONTENT);
     lv_obj_set_style_max_width(bubble_obj, max_bubble_width, LV_PART_MAIN);
-    lv_obj_set_style_border_width(bubble_obj, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(bubble_obj, 8, LV_PART_MAIN);
+    // TD-THEME-01: no local border width here; the theme bubble style owns it (outline in light mode only),
+    // and a local value would override that style.
+    // pad_all comes from the theme bubble style (8 - border width) so the outer geometry equals the dark one.
     lv_obj_set_style_pad_row(bubble_obj, 4, LV_PART_MAIN);
     lv_obj_clear_flag(bubble_obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(bubble_obj, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(bubble_obj, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
+    // TD-THEME-01: the shared style carries bg colour + opa + text colour, the msg style only the shape (radius).
+    lv_style_t *theme_style = &tdeck_style_bubble_in;
     const lv_style_t *style = &msg_style_incoming;
     if(bubble.type == MsgBubbleType::Outgoing)
+    {
+        theme_style = &tdeck_style_bubble_out;
         style = &msg_style_outgoing;
+    }
     else if(bubble.type == MsgBubbleType::System)
+    {
+        theme_style = &tdeck_style_bubble_sys;
         style = &msg_style_system;
+    }
+    lv_obj_add_style(bubble_obj, theme_style, LV_PART_MAIN);
     lv_obj_add_style(bubble_obj, const_cast<lv_style_t *>(style), LV_PART_MAIN);
 
     if(bubble.type == MsgBubbleType::Outgoing)
@@ -3382,7 +3593,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
 
     lv_obj_t *header = lv_label_create(header_row);
     lv_label_set_text(header, display_header.c_str());
-    lv_obj_set_style_text_color(header, lv_palette_darken(LV_PALETTE_BLUE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(header, &tdeck_style_muted, LV_PART_MAIN);
     lv_label_set_long_mode(header, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(header, LV_SIZE_CONTENT);
     lv_obj_set_style_max_width(header, content_max_width, LV_PART_MAIN);
@@ -3459,7 +3670,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
 
     lv_obj_t *time_label = lv_label_create(footer_row);
     lv_label_set_text(time_label, bubble.timestamp.c_str());
-    lv_obj_set_style_text_color(time_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_add_style(time_label, &tdeck_style_muted, LV_PART_MAIN);
     lv_label_set_long_mode(time_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(time_label, LV_SIZE_CONTENT);
     lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
@@ -3468,7 +3679,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_label_set_text(body, bubble.body.c_str());
     lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(body, content_max_width);
-    lv_obj_set_style_text_color(body, lv_color_black(), LV_PART_MAIN);
+    lv_obj_add_style(body, &tdeck_style_chat_body, LV_PART_MAIN);   // S/M/L chat text size
 
     // footer row with timestamp aligned to right-bottom
     if(bubble.timestamp.length() > 0)
@@ -3485,7 +3696,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
 
         lv_obj_t *time_label = lv_label_create(footer_row);
         lv_label_set_text(time_label, msg_footer_text(bubble).c_str());
-        lv_obj_set_style_text_color(time_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+        lv_obj_add_style(time_label, &tdeck_style_muted, LV_PART_MAIN);
         lv_label_set_long_mode(time_label, LV_LABEL_LONG_CLIP);
         lv_obj_set_width(time_label, LV_SIZE_CONTENT);
         lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
@@ -3652,6 +3863,7 @@ static void msg_tabs_clear_all(void)
     msg_tab_entries.clear();
     msg_active_tab_index = -1;
     msg_tabs_update_hint();
+    boot_logo_sync(false);   // no "booting..." tab left: logo off, list geometry back
     msg_list_show_hint("No messages yet");
 }
 
@@ -4379,6 +4591,10 @@ void tdeck_refresh_SET_view()
     snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_power);
     lv_textarea_set_text(setup_txpower, vChar);
 
+    if(setup_brightness_slider != NULL)
+        lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
+    setup_sync_segments();
+
     lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start);
     lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg);
     lv_textarea_set_text(setup_name, meshcom_settings.node_name);
@@ -4446,11 +4662,6 @@ void tdeck_refresh_SET_view()
         lv_obj_clear_state(btn_soundon, LV_STATE_CHECKED);
     else
         lv_obj_add_state(btn_soundon, LV_STATE_CHECKED);
-    // AUTO DAY/NIGHT BRIGHTNESS (TD-23)
-    if (meshcom_settings.node_bl_auto)
-        lv_obj_add_state(btn_blauto, LV_STATE_CHECKED);
-    else
-        lv_obj_clear_state(btn_blauto, LV_STATE_CHECKED);
     // Save to Flash
     if (meshcom_settings.node_persist_to_flash)
         lv_obj_add_state(btn_persist_to_flash, LV_STATE_CHECKED);
@@ -4557,6 +4768,7 @@ void tdeck_send_track_view()
         snprintf(ctrack, sizeof(ctrack), "\n\n\n\n        GPS\n   POSITION SENT\n");
 
     lv_textarea_set_text(track_ta, ctrack);
+    tdeckGpsSkyNotice("POS SENT");   // GPS-SKY: track_ta is hidden while the sky plot shows
 
     // show the message briefly, then restore the normal track view
     // delete any existing timer and create a new short one (2000ms)
@@ -4605,6 +4817,8 @@ void tdeck_refresh_track_view()
 {
     if (lv_tabview_get_tab_act(tv) != 4) // GPS screen not active
         return;
+
+    tdeckGpsSkyRefresh();   // GPS-SKY: no-op while the text view is shown
 
     int pos_seconds = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
 

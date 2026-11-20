@@ -68,7 +68,7 @@ void sub_page_login()
     web_client.println("<input type=\"password\" maxlength=\"20\" size=\"20\" id=\"nodepassword\" name=\"nodepassword\" "
                        "autocomplete=\"current-password\" autofocus>");
     web_client.println("<button type=\"submit\" style=\"justify-self:self-end;\">Login</button>");
-    web_client.println("<span id=\"loginerr\" style=\"color:#c0392b;min-height:1.2em;\"></span>");
+    web_client.println("<span id=\"loginerr\" style=\"color:var(--mcred);min-height:1.2em;\"></span>");
     web_client.println("</form></div></div>");
     // LOGIN-HTML-END
     web_client.println(); // The HTTP response ends with another blank line

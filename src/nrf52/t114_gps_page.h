@@ -1,15 +1,9 @@
 // Heltec T114: graphic GPS page (sky plot, fix/satellite/HDOP state) shown after the status page.
-// The satellites in view come from the NMEA GSV sentences of the L76K, which are parsed here
+// The satellites in view come from the NMEA GSV sentences of the L76K, which are parsed in gps_skyplot.cpp
 // (TinyGPSPlus only sees GGA/RMC). Whole file is compiled for BOARD_HELTEC_T114 only.
 #pragma once
 
 #if defined(BOARD_HELTEC_T114)
-
-// Feed every received GPS character (from WZ_GPS_Feed()). Collects GSV sentences.
-void t114GsvFeed(char c);
-
-// Number of satellites in view that were reported within the last seconds.
-int t114GpsSatsInView();
 
 bool t114GpsPageActive();
 void t114GpsPageOpen();      // draws the whole page and holds it (pageHold)

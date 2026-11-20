@@ -482,6 +482,8 @@ void blinkLED2();                                    // blink RED
 // gatewayService_*() likewise (C4 carve-out)
 #include "gateway_service.h"
 #include "gw_reg_runtime.h"
+#include "csma_timing.h"   // CSMA-03: csmaLoopDelayMs()
+#include "ping_budget.h"   // PING-NRF-01: pingBudgetOpen(), pingCountAfterSend()
 
 
 #if defined(ENABLE_RTC)
@@ -2808,25 +2810,57 @@ void nrf52loop()
     if (resendPing == 0)
         resendPing = millis();
 
-    if(meshcom_settings.node_pingtime > 29)
+    // LAST-PONG-01: armed after the last send; one more check tick gives it its fail verdict.
+    static bool pingFinalArmed = false;
+    const bool pingBudgetIsOpen = pingBudgetOpen(meshcom_settings.node_pingtime, meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
+
+    if(pingFailCheckDue(pingFinalArmed, pingBudgetIsOpen, (int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0))
+    {
+        pingFinalArmed = false;
+        // A target cleared since the last send (--pingcall none) gets no verdict.
+        if(bPingSend && meshcom_settings.node_pingcall[0] != 0x00)
+        {
+            printfdeb("[PONG]...fail from %s\n", meshcom_settings.node_pingcall);
+            PongFail(meshcom_settings.node_pingcall);
+        }
+        bPingSend = false;
+    }
+
+    if(pingBudgetIsOpen)
     {
         if((int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0)
         {
+            // PING-NRF-01: previous ping got no pong -> same fail path as ESP32
+            if(bPingSend)
+            {
+                printfdeb("[PONG]...fail from %s\n", meshcom_settings.node_pingcall);
+                PongFail(meshcom_settings.node_pingcall);
+            }
+
             resendPing = millis();
 
             if(bDisplayInfo)
                 printfdeb("[PING]...send Ping to %s\n", meshcom_settings.node_pingcall);
 
-            if(meshcom_settings.node_pingcall[0] != 0x00)
-            {
-                PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
+            PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
-                // Fehlschlag außerhalb von bDisplayInfo sichtbar machen, sonst verstummt
-                // der Knoten für jeden, der mit Info aus läuft, ohne jede Meldung.
-                // PING_INVALID_TARGET logs its own notice in sendPing().
-                if(pingResult != PING_QUEUED && pingResult != PING_INVALID_TARGET)
-                    printfdeb("[PING]...FAILED Ping to %s\n", meshcom_settings.node_pingcall);
-            }
+            // PING-FAIL-REPEAT-01: no new ping queued (refused ring, TRACK, invalid target): drop the
+            // stale flag so the unanswered ping is not reported again on the next tick. Cleared after
+            // sendPing(), not before: sendPing() draws "SENT" only while !bPingSend, and the
+            // "PONG FAILED" frame drawn just above must stay on the OLED.
+            if(pingResult != PING_QUEUED)
+                bPingSend = false;
+
+            // Fehlschlag außerhalb von bDisplayInfo sichtbar machen, sonst verstummt
+            // der Knoten für jeden, der mit Info aus läuft, ohne jede Meldung.
+            // PING_INVALID_TARGET logs its own notice in sendPing().
+            if(pingResult != PING_QUEUED && pingResult != PING_INVALID_TARGET)
+                printfdeb("[PING]...FAILED Ping to %s\n", meshcom_settings.node_pingcall);
+
+            // TRACK / INVALID_TARGET are no send attempt: budget untouched (as ESP32).
+            const int pingCountBefore = meshcom_settings.node_pingcount;
+            meshcom_settings.node_pingcount = pingCountAfterSend(meshcom_settings.node_pingcount, pingResult == PING_SUPPRESSED_TRACK, pingResult == PING_INVALID_TARGET);
+            pingFinalArmed = pingFinalArmAfterSend(pingCountBefore, meshcom_settings.node_pingcount, pingResult == PING_QUEUED);
         }
     }
 
@@ -2836,25 +2870,34 @@ void nrf52loop()
     #endif
 
     //  We are on FreeRTOS, give other tasks a chance to run
-    #if defined(BOARD_HELTEC_T114)
-    // The loop body is cheap (measured: ~0 ms), so this delay IS the loop period: the
-    // button was polled only every ~100 ms, which loses short clicks (double/triple click
-    // were hardly ever recognised). Poll it every 10 ms instead; the wait stays 100 ms.
-    for(int iBtnPoll = 0; iBtnPoll < 10; iBtnPoll++)
+    // CSMA-03: while a CAD runs or its result waits to be consumed, poll fast so the
+    // result is not 60-97 ms old when TX uses it.
     {
-        delay(10);
-        btn.tick();
-
-        // With GSV switched on for the GPS page the L76K sends ~1 kB per second in bursts;
-        // the 250 byte UART ring buffer would overflow within 100 ms. Empty it every 10 ms.
-        #if defined(ENABLE_GPS)
-        if(bGPSON && gpsDetected)
-            WZ_GPS_Feed();
+        taskENTER_CRITICAL();
+        bool _dl_ip = cad_in_progress;
+        bool _dl_df = cad_done_flag;
+        taskEXIT_CRITICAL();
+        unsigned long _dl_ms = csmaLoopDelayMs(_dl_ip, _dl_df);
+        #if defined(BOARD_HELTEC_T114)
+        // The loop body is cheap (measured: ~0 ms), so this delay IS the loop period: poll the
+        // button every 10 ms so double/triple clicks register (upstream #1265), and empty the
+        // GPS UART ring: with GSV on for the GPS page the L76K sends ~1 kB/s in bursts and the
+        // 250 byte ring would overflow within 100 ms (upstream #1266). The CSMA-03 period stays.
+        while(_dl_ms > 0)
+        {
+            unsigned long _dl_step = _dl_ms < 10UL ? _dl_ms : 10UL;
+            delay(_dl_step);
+            _dl_ms -= _dl_step;
+            btn.tick();
+            #if defined(ENABLE_GPS)
+            if(bGPSON && gpsDetected)
+                WZ_GPS_Feed();
+            #endif
+        }
+        #else
+        delay(_dl_ms);
         #endif
     }
-    #else
-    delay(100);
-    #endif
 
     yield();
 }

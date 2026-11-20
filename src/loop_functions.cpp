@@ -9,6 +9,7 @@
 #endif
 
 #include "loop_functions.h"
+#include "display_clock_gate.h"   // sendDisplayTime() redraw decision
 #include "gfx_charmap.h"   // national characters on the GFXfont displays (E290, WP, E213)
 #include "text_fold.h"     // CHARS-01: fold what the display font lacks
 #include "ack_attribution.h"
@@ -29,6 +30,7 @@
 #include "kiss_functions.h"
 #include "configuration.h"
 #include "loop_functions_extern.h"   // REMOTE_LED_PIN rule + RM LED levels
+#include "cet_age.h"   // CET-AGE-01: cetStepAllowed() (pure part only)
 #include "board_led.h"
 #if defined(ESP32)
 #include "esp32/esp32_pmu.h"   // chargeLedFitted()
@@ -114,6 +116,12 @@ int ifalseping = 0;
 
 int BOARD_HARDWARE = MODUL_HARDWARE;
 bool bUSER_BOARD_LED = false;
+
+// WEB-LED-01: stored mode, off / flash / steady (board_led.h); steady bit = node_sset4 0x4000
+int boardLedModeGet(void)
+{
+    return boardLedMode(bUSER_BOARD_LED, (meshcom_settings.node_sset4 & BOARD_LED_STEADY_BIT) != 0);
+}
 
 // LED-08/09/10 (design 6.1): which LEDs exist on this build/node, the one source for --info, BLE SN/SN1 and the web
 // GUI. Board LED = BOARD_LED pin or a NeoPixel-only heartbeat (LED_PIN with pixels, no BOARD_LED); charge LED =
@@ -235,6 +243,16 @@ static void boardLedWhitePulse(void)
             bLED_WEISS = true;   // lit edge only; the NeoPixel handler shows it and clears it again
     }
 }
+
+#if !defined(BOARD_LED)
+// WEB-LED-01: steady re-arm. CLEAR is ignored on purpose: after DELAYVAL the handler sets CLEAR, and a pending WEISS
+// wins over CLEAR there (white again, one show() per second); re-arming only after black would leave a dark gap.
+static void boardLedWhiteRearm(void)
+{
+    if (pixels_delay == 0 && boardLedSteadyRearm(BOARD_LED_MODE_STEADY, bLED_RED, bLED_GREEN, bLED_ORANGE, bLED_BLUE, bLED_CLEAR))
+        bLED_WEISS = true;
+}
+#endif
 #endif
 
 #if defined(BOARD_LED)
@@ -267,7 +285,8 @@ static void boardLedWrite(bool lit)
 
 void boardLedTick(void)
 {
-    if (!bUSER_BOARD_LED || !boardLedPinUsable())
+    const int mode = boardLedModeGet();   // WEB-LED-01: off / flash / steady
+    if (mode == BOARD_LED_MODE_OFF || !boardLedPinUsable())
     {
         if (boardLedLit)   // switched off (or OneWire took the pin) mid-flash: leave dark
         {
@@ -281,11 +300,20 @@ void boardLedTick(void)
         #endif
         return;
     }
-    const BoardLedStep st = boardLedPhase(millis(), boardLedTimer, boardLedLit);
+    // An active RM1 "led" override on the same pad wins until it is released (steady resumes after "led off")
+    bool rmHold = false;
+    #if defined(REMOTE_LED_PIN) && defined(BOARD_LED) && (REMOTE_LED_PIN == BOARD_LED)
+    rmHold = bRemoteLed;
+    #endif
+    const BoardLedStep st = boardLedDecide(mode, true, rmHold, millis(), boardLedTimer, boardLedLit);
     boardLedTimer = st.timer;
     boardLedLit = st.lit;
     if (st.changed)
         boardLedWrite(st.lit);
+    #if !defined(BOARD_LED)
+    if (mode == BOARD_LED_MODE_STEADY)   // NeoPixel-only: the pixel handler clears the white pulse, so re-arm it
+        boardLedWhiteRearm();
+    #endif
 }
 
 void boardLedForceOff(void)   // before deep sleep: LED dark, flasher phase reset
@@ -380,6 +408,8 @@ char LogCallsign[10] = {0};
 
 bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
+unsigned long heldFrameUntilMs = 0;   // PING-HOLD-01: clock-skip deadline of a ping/pong frame (0 = none)
+bool bHeldFrameDrawn = false;   // CLK-PING-01: a held full-screen frame was drawn (DisplayPong, hold text)
 bool bDisplayTrack = false;
 bool bOneButton = false;
 bool bEnterDfu = false;   // --dfu: beim naechsten faelligen rebootAuto in den UF2-Bootloader statt Neustart
@@ -1930,6 +1960,20 @@ void sendDisplayHead(bool bInit)
     bSetDisplay=false;
 }
 
+static void sendDisplayClockLine();
+
+// Time shown in the OLED / e-paper status line: never a few seconds back (display_clock_gate.h).
+static DispClkShown s_dispClkShown = {false, 0};
+static void dispClkShownHms(int *h, int *m, int *sec)
+{
+    const long now_sod = (long)meshcom_settings.node_date_hour * 3600L + (long)meshcom_settings.node_date_minute * 60L
+                       + (long)meshcom_settings.node_date_second;
+    const long sod = dispClkShownSod(s_dispClkShown, now_sod);
+    *h = (int)(sod / 3600L);
+    *m = (int)((sod / 60L) % 60L);
+    *sec = (int)(sod % 60L);
+}
+
 void sendDisplayTrack()
 {
     if(bSetDisplay)
@@ -1967,11 +2011,33 @@ void sendDisplayTrack()
         #endif
     }
 
-    iDisplayType=9;
-
-    // nur alle 15 sekunden
-    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty)
+    #if defined(BOARD_HELTEC_T114)
+    // In track mode a click opens the graphic GPS page and the next click closes it
+    // (onebutton_functions.cpp). Without this guard the per-second clock line below
+    // would re-send the track page buffer over the GPS page.
+    if(t114GpsPageActive())
     {
+        bSetDisplay=false;
+        t114GpsPageUpdate();
+        return;
+    }
+    #endif
+
+    // Seite nur alle 15 Sekunden neu aufbauen (Positions-/RATE-Daten). Dazwischen nur die Uhrzeile
+    // (CLK-01 W2, A1 "jede Seite"): sendDisplayClockLine() tauscht pageText[0] und uebertraegt den
+    // Seitenpuffer neu, ohne die Zeilen neu zu formatieren (auf E-Paper ohne Wirkung). iDisplayType
+    // wird erst beim Aufbau auf 9 gesetzt: eine geblaetterte Nachrichtenseite (Typ 0) behaelt so
+    // ihre Kopfzeile, die Uhr bleibt dort eingefroren (F1).
+    if(!(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty))
+    {
+        bSetDisplay=false;
+        sendDisplayClockLine();
+        return;
+    }
+
+    {
+        iDisplayType=9;
+
         bOneButton    = false;
         bDisplayDirty = false;
 
@@ -2135,24 +2201,47 @@ void sendDisplayTime()
     }
     #endif
 
+    sendDisplayClockLine();
+}
+
+// CLK-01 W2: draws the clock line of the current clock page (also called by sendDisplayTrack() on
+// the seconds between its 15 s page rebuilds). Own function so that the pageHold countdown of
+// sendDisplayTime() is not run a second time or from the track page.
+static void sendDisplayClockLine()
+{
+    // CLK-01: early returns as one pure decision (display_clock_gate.h): no display, off, message
+    // page (iDisplayType == 0: pageText[0] / TFT header bar hold the sender header, the clock stays
+    // frozen there, F1), a drawn held frame (ping/pong page, hold text, CLK-PING-01), draw in
+    // progress. No 15 s gate any more (F2). Board guards stay here as hasDisplay.
+    DispClkInputs dcIn;
+    dcIn.hasDisplay = true;
     #if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
         if(u8g2 == NULL)
-            return;
+            dcIn.hasDisplay = false;
     #endif
-
     #if defined (HAS_EPAPER) || defined (BOARD_T_DECK)  || defined (BOARD_T_DECK_PLUS) || defined (BOARD_T5_EPAPER)
-        return;
+        dcIn.hasDisplay = false;
     #endif
+    dcIn.displayIsOff = bDisplayIsOff;
+    dcIn.displayType  = iDisplayType;
+    dcIn.pageHold     = pageHold;
+    dcIn.setDisplay   = bSetDisplay;
+    dcIn.second       = meshcom_settings.node_date_second;
+    dcIn.oneButton    = bOneButton;
+    dcIn.displayDirty = bDisplayDirty;
+    const unsigned long dcNow = millis();   // one read: the expiry edge and the clear must see the same time
+    const bool heldFrameExpired = dispClkFrameExpired(bHeldFrameDrawn, heldFrameUntilMs, dcNow);   // PING-HOLD-02: before the call below clears it
+    (void)heldFrameExpired;   // used only on u8g2 boards (#if below); TFT/e-paper builds would warn -> -Werror
+    dcIn.holdActive   = dispClkHeldFrame(DisplayOffWait, bHeldFrameDrawn, dcNow, heldFrameUntilMs);   // CLK-PING-01: drawn held frame, no clock line
 
-    //TEST ONLY printfdeb("Time bDisplayOff:%i iDisplayType:%i bSetDisplay:%i\n", bDisplayOff, iDisplayType, bSetDisplay);
-
-    if(bDisplayIsOff)
-        return;
-
-    if(iDisplayType == 0)
-        return;
-
-    if(bSetDisplay)
+    const DispClkDecision dcDecision = dispClkDecide(dcIn);
+    #if !defined (BOARD_T5_EPAPER) && !defined (HAS_TFT) && !defined (HAS_TFT_114) && !defined (HAS_TFT_CONNECT)
+    // PING-HOLD-02: ping/pong frame expired on the message page: no clock line there (F1), but the stale frame
+    // must go; re-transfer the cached page buffer ("#N", pageText[0] untouched) once.
+    if(heldFrameExpired && dcDecision == DispClkDecision::SkipType0 && pageLineAnz > 0)
+        sendDisplay1306(false, true, 0, 0, (char*)"#N");
+    #endif
+    if(dcDecision != DispClkDecision::Draw)
         return;
 
     bSetDisplay = true;
@@ -2200,16 +2289,22 @@ void sendDisplayTime()
     if(!bGPSON && !bDisplayTrack)
         snprintf(cstatus, sizeof(cstatus),  "%-4.4s%-1.1s ", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
-    // nur alle 15 sekunden
-    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty)
+    // CLK-01 W2 (F2): Uhrzeile jede Sekunde auf Seiten mit Uhrzeile (Info/Position/Track/WX); nur
+    // pageText[0] wird getauscht und der Seitenpuffer neu uebertragen. Die Nachrichtenseite
+    // (iDisplayType 0) kommt nie bis hierher (SkipType0 oben): ihre Kopfzeile bleibt erhalten.
+    // Der Frame-CRC-Skip im OLED-Pfad bleibt.
     {
         bOneButton    = false;
         bDisplayDirty = false;
 
         #ifdef BOARD_T_ECHO
-        snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i   %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i   %s", dh, dm, ds, cbatt);
+        }
         #else
-        snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, dh, dm, ds, cbatt);
+        }
         #endif
 
         memcpy(pageText[0], msg_text, 20);
@@ -2221,7 +2316,10 @@ void sendDisplayTime()
         #elif defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT)
             displayTFT(msg_text);
         #else
-            sendDisplay1306(false, true, 3, dzeile[0], msg_text);
+            if(pageLineAnz > 0)
+                sendDisplay1306(false, true, 3, dzeile[0], (char*)"#N");   // pageText[0] ist aktualisiert: neu zeichnen, keine Zeile anhaengen
+            else
+                sendDisplay1306(false, true, 3, dzeile[0], msg_text);
         #endif
     }
 
@@ -2288,9 +2386,13 @@ void sendDisplayMainline()
     else
     {
         #ifdef BOARD_T_ECHO
-        snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i    %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i    %s", dh, dm, ds, cbatt);
+        }
         #else
-        snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, dh, dm, ds, cbatt);
+        }
         #endif
     }
 
@@ -2372,9 +2474,9 @@ void wpRefreshClock()
         snprintf(cstatus, sizeof(cstatus),  "%-4.4s%-1.1s ", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
     char st[40];
-    snprintf(st, sizeof(st), "%s%02i:%02i:%02i%s", cstatus,
-             meshcom_settings.node_date_hour, meshcom_settings.node_date_minute,
-             meshcom_settings.node_date_second, cbatt);
+    int dh, dm, ds;
+    dispClkShownHms(&dh, &dm, &ds);
+    snprintf(st, sizeof(st), "%s%02i:%02i:%02i%s", cstatus, dh, dm, ds, cbatt);
 
     if(bV11)
     {
@@ -2700,12 +2802,24 @@ void mainStartTimeLoop()
                         wpRefreshClock();
                     }
                     #else
-                    if(DisplayOffWait == 0)
+                    // TRACK-PING-01: a ping/pong/fail frame (DisplayOffWait = node_pingtime) is replaced by the
+                    // track page at its PING_FRAME_HOLD_MS deadline; DisplayOffWait keeps its full length.
+                    if(dispClkTrackMayDraw(DisplayOffWait, bHeldFrameDrawn, heldFrameUntilMs, millis()))
                     {
+                        const bool bPingFrameExpired = (DisplayOffWait != 0);   // released by the deadline, not by DisplayOffWait
+                        if(bPingFrameExpired)
+                            bDisplayDirty = true;   // rebuild the track page now, do not wait for the 15 s grid
+
                         if(iDisplayChange > 10)
                             sendDisplayWX(); // Show WX
                         else
                             sendDisplayTrack(); // Show Track
+
+                        if(bPingFrameExpired && !bSetDisplay)   // a setdisplay text blocked the draw: keep the hold
+                        {
+                            bHeldFrameDrawn  = false;   // frame consumed: the clock line is free again
+                            heldFrameUntilMs = 0;
+                        }
                     }
                     #endif
                 }
@@ -2718,8 +2832,10 @@ void mainStartTimeLoop()
                     if(!bDisplayIsOff && meshcom_settings.node_date_second % 10 == 0)
                         wpRefreshClock();
                     #else
-                    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-                        sendDisplayTime(); // Time only
+                    // CLK-PING-01: immer aufrufen (Button-Seiten-Haltezaehler in sendDisplayTime());
+                    // eine gehaltene, wirklich gezeichnete Vollbild-Seite (bHeldFrameDrawn) sperrt nur die Uhrzeile
+                    // (dispClkDecide: SkipHold), ein konfigurierter Ping nicht.
+                    sendDisplayTime(); // Time only
                     #endif
                 }
 
@@ -2935,8 +3051,33 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             if(Year > 2023)
             {
-                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
+                // CET-AGE-01 R1: stale second server stream must not step the clock back.
+                // delta = payload UTC - node clock UTC (node_date_* is local, minus node_utcoff).
+                static bool cetHaveLast = false;
+                static unsigned long cetLastAcceptMs = 0;
+                bool cetAllow = true;
+                uint32_t cetPlLocal = 0, cetNowLocal = 0;
+                const unsigned long cetSinceMs = millis() - cetLastAcceptMs;
+                if(cetEpochFromFields(Year, Month, Day, Hour, Minute, Second, &cetPlLocal) &&
+                   cetEpochFromFields((uint32_t)meshcom_settings.node_date_year, (uint32_t)meshcom_settings.node_date_month,
+                                      (uint32_t)meshcom_settings.node_date_day, (uint32_t)meshcom_settings.node_date_hour,
+                                      (uint32_t)meshcom_settings.node_date_minute, (uint32_t)meshcom_settings.node_date_second,
+                                      &cetNowLocal))
+                {
+                    const int32_t cetOffS = (int32_t)(meshcom_settings.node_utcoff * 3600.0f + (meshcom_settings.node_utcoff < 0 ? -0.5f : 0.5f));
+                    const long cetDeltaS = (long)((int32_t)cetPlLocal - ((int32_t)cetNowLocal - cetOffS));
+                    cetAllow = cetStepAllowed(cetDeltaS, cetHaveLast, cetSinceMs);
+                    if(!cetAllow)
+                        Serial.printf("[CET];skip;back_s;%ld;since_s;%lu\n", -cetDeltaS, cetSinceMs / 1000UL);
+                }
+
+                if(cetAllow)
+                {
+                    MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+                    snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
+                    cetHaveLast = true;
+                    cetLastAcceptMs = millis();
+                }
             }
         }
 
@@ -3923,6 +4064,8 @@ void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20])
             u8g2->drawStr(5, 60, line4);
         #endif
     } while (u8g2->nextPage());
+    bHeldFrameDrawn = true;   // CLK-PING-01: the clock line keeps off this frame for PING_FRAME_HOLD_MS
+    heldFrameUntilMs = dispClkFrameDeadline(millis(), dispClkPingHoldMs(meshcom_settings.node_pingtime));
 
     #endif
 }
@@ -4797,22 +4940,22 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
             mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), strMsg.c_str());
         else
         {
-        char cAckId[4] = {0};
-        snprintf(cAckId, sizeof(cAckId), "%03i", meshcom_settings.node_msgid);
-        snprintf(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), "%s{%s", strMsg.c_str(), cAckId);
+            char cAckId[4] = {0};
+            snprintf(cAckId, sizeof(cAckId), "%03i", meshcom_settings.node_msgid);
+            snprintf(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), "%s{%s", strMsg.c_str(), cAckId);
 
-        // 0.4: DM outcome counters (docs/dm-transport-impl-plan-20260913.md).
-        // nnn is the same node_msgid value just written into cAckId, before
-        // the increment below.
-        //
-        // P14/P15: nicht fuer ein {ping} -- die Gegenstelle antwortet mit
-        // {pong}, nie mit einem ACK, also stuende es fuer immer als
-        // sent-nie-acked in der DM-Statistik.
-        if(!bPingMsg)
-        {
-            dmstat_sent.fetch_add(1);
-            dmStatNoteSent((uint16_t)meshcom_settings.node_msgid, millis());
-        }
+            // 0.4: DM outcome counters (docs/dm-transport-impl-plan-20260913.md).
+            // nnn is the same node_msgid value just written into cAckId, before
+            // the increment below.
+            //
+            // P14/P15: nicht fuer ein {ping} -- die Gegenstelle antwortet mit
+            // {pong}, nie mit einem ACK, also stuende es fuer immer als
+            // sent-nie-acked in der DM-Statistik.
+            if(!bPingMsg)
+            {
+                dmstat_sent.fetch_add(1);
+                dmStatNoteSent((uint16_t)meshcom_settings.node_msgid, millis());
+            }
         }
     }
 

@@ -144,6 +144,77 @@ static inline void brightness_store_level(BlPeriod p, uint8_t level, int *day, i
         *day = level;
 }
 
+// Display mode of the T-Deck setup page: DAY (Light) = auto off, fixed day level; AUTO = day/night
+// switching; NIGHT (Dark) = auto off, fixed night level. Stored as node_bl_auto (bool) plus
+// node_bl_fnight (forced night); auto wins over a stale night flag, so old stores read as before.
+enum BlMode
+{
+    BL_MODE_DAY = 0,
+    BL_MODE_AUTO = 1,
+    BL_MODE_NIGHT = 2
+};
+
+// Exact lower case "auto" | "day" | "night"; anything else is -1.
+static inline int brightness_mode_parse(const char *arg)
+{
+    if (arg == NULL)
+        return -1;
+    static const char *const names[3] = {"day", "auto", "night"};
+    for (int i = 0; i < 3; i++)
+    {
+        const char *a = arg;
+        const char *n = names[i];
+        while (*a && *n && *a == *n)
+        {
+            a++;
+            n++;
+        }
+        if (*a == 0 && *n == 0)
+            return i;
+    }
+    return -1;
+}
+
+static inline const char *brightness_mode_name(int m)
+{
+    return m == BL_MODE_AUTO ? "auto" : (m == BL_MODE_NIGHT ? "night" : "day");
+}
+
+static inline int brightness_mode_resolve(bool auto_on, uint8_t forced_night)
+{
+    if (auto_on)
+        return BL_MODE_AUTO;
+    return forced_night ? BL_MODE_NIGHT : BL_MODE_DAY;
+}
+
+static inline void brightness_mode_flags(int mode, bool *auto_on, uint8_t *forced_night)
+{
+    *auto_on = (mode == BL_MODE_AUTO);
+    *forced_night = (mode == BL_MODE_NIGHT) ? 1 : 0;
+}
+
+// Setup page segments Auto | Light | Dark map to modes AUTO, DAY, NIGHT.
+static inline int brightness_mode_from_seg(unsigned seg)
+{
+    return seg == 1 ? BL_MODE_DAY : (seg == 2 ? BL_MODE_NIGHT : BL_MODE_AUTO);
+}
+
+static inline unsigned brightness_mode_to_seg(int mode)
+{
+    return mode == BL_MODE_DAY ? 1 : (mode == BL_MODE_NIGHT ? 2 : 0);
+}
+
+// The period whose level is applied: AUTO follows the sun period, DAY and NIGHT force their own.
+static inline BlPeriod brightness_period_for_mode(int mode, BlPeriod sun)
+{
+    if (mode == BL_MODE_NIGHT)
+        return BL_PERIOD_NIGHT;
+    if (mode == BL_MODE_DAY)
+        return BL_PERIOD_DAY;
+    return sun;
+}
+
+
 // SYM+B step table, descending, wraps 1 -> 16. A level off the table steps to the next lower
 // entry (10 -> 8, 3 -> 2); 0 (panel off) and anything above 16 step to 16.
 static inline uint8_t brightness_next_step(uint8_t cur)
