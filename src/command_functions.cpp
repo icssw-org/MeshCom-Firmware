@@ -14,6 +14,9 @@
 #include "command_toggles.h" // D2-06: the table-driven on/off toggles
 #include "command_setters.h" // D2-07: numeric argument parse/range/store
 #include "wx_pins.h"       // WX-01: wxPinAllowed() for --windpin
+#include "aprs_is_client.h" // MCFW-WX1: aprsWxSendNow(), aprsWxRearm(), aprsIsAbort()
+#include "aprs_is_format.h" // MCFW-WX1: aprsIsWxCall(), aprsIsCallValid()
+#include "wifi_start_gate.h" // MCFW-WX1: wifiAprsWxWantsStart() for the --aprswx on warning
 #ifdef ENABLE_LTR390
 #include "ltr390.h"        // WX-01: UV sensor driver
 #endif
@@ -546,6 +549,19 @@ static void tg_post_wind_on()
 }
 static void tg_post_wind_off() { windEnd(); }
 #endif
+#if defined(ESP32)
+// Review findings 3/4: say at "--aprswx on" what would make every cycle fail, instead of logging
+// fail:login or skip:noip every interval.
+static void tg_post_aprswx_on()
+{
+    aprsWxRearm();
+    if(meshcom_settings.node_aprsispass[0] == 0x00)
+        printfdeb("[APRS-IS] warning: no passcode set (--aprsis pass N): login as -1, the server drops every report\n");
+    if(!wifiAprsWxWantsStart(true, bWIFIAP, meshcom_settings.node_ssid))
+        printfdeb("[APRS-IS] warning: no Wi-Fi SSID or AP mode: Wi-Fi is not started for aprswx (--setssid, --wifiap off)\n");
+}
+static void tg_post_aprswx_off() { aprsIsAbort(); }
+#endif
 #if defined(ENABLE_AHT20)
 static void tg_post_aht20_on() { aht20_found = false; setupAHT20(false); }
 static void tg_post_aht20_off() { aht20_found = false; }
@@ -684,6 +700,11 @@ static const ToggleRow COMMAND_TOGGLES[] =
 #endif
 #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
     { "--gps on",             &bGPSON,               &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0040,       tg_post_gps_on,                TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE | TG_POST_FIRST },
+#endif
+#if defined(ESP32)
+    // MCFW-WX1: APRS-IS weather. node_aprswx is a plain 0/1 int; Wi-Fi comes up through the service block in esp32loop()
+    { "--aprswx on",          &bAPRSWX,              &meshcom_settings.node_aprswx,   0xFFFFFFFF,   0x0001,       tg_post_aprswx_on,             TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--aprswx off",         &bAPRSWX,              &meshcom_settings.node_aprswx,   0xFFFFFFFE,   0x00000000,   tg_post_aprswx_off,            TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
 #endif
 #if defined(ENABLE_LTR390)
     { "--uv on",              &bUVON,                &meshcom_settings.node_wx_flags, 0xFFFFFFFF,   0x0001,       tg_post_uv_on,                 TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
@@ -959,7 +980,12 @@ void commandAction(char *umsg_text, bool ble)
     bool bAnalogSetting=false;
 
     if(bBLEDEBUG && ble)
-        printfdeb("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
+    {
+        if(sVar.startsWith("--aprsis pass"))
+            printfdeb("commandAction [--aprsis pass ***] ble:%i\n", ble);
+        else
+            printfdeb("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
+    }
 
     if(memcmp(sVar.c_str(), "--", 2) != 0)
     {
@@ -993,6 +1019,18 @@ void commandAction(char *umsg_text, bool ble)
     {
         printfdeb("\n--board led refused: LED pin is used by OneWire/DHT (see --info, --owgpio)\n");
         return;
+    }
+#endif
+#if defined(ESP32)
+    // MCFW-WX1 (review finding 2, option B): the WX call must be set and differ from the node call. Refuse before the row saves.
+    if(commandMatches(msg_text+2, "aprswx on"))
+    {
+        char wxc[16];
+        if(!aprsIsWxCall(wxc, sizeof(wxc), meshcom_settings.node_aprswxcall, meshcom_settings.node_call))
+        {
+            printfdeb("\n--aprswx refused: set a separate WX call first (--aprswxcall CALL-SSID, not the node call)\n");
+            return;
+        }
     }
 #endif
     // Production lock: locked settings and the never-settable auto update mode are refused here,
@@ -1620,6 +1658,9 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--wind on/off           anemometer\n");
             #endif
             printdeb("--windpin 99            anemometer GPIO (ESP32)\n--windcal 2.4           km/h per Hz (ESP32)\n");
+            #if defined(ESP32)
+            printdeb("--aprswx on/off         APRS-IS weather over Wi-Fi (--aprswx = status)\n--aprswxint 10          minutes between reports (5..1440)\n--aprswxcall X          WX call-SSID, required, not the node call (- = clear)\n--aprsis server H|port P|pass N   APRS-IS server/port/passcode\n--sendaprswx            send one report now\n");
+            #endif
             printdeb("--gpiocontrol on/off    free GPIO control master (ESP32)\n--gpio list            free GPIOs and levels\n--gpio 13 on/off/in/release  drive, read, free a pin\n");
             #if defined(LPS33)
             printdeb("--lps33 on/off          LPS33\n");
@@ -2808,6 +2849,164 @@ void commandAction(char *umsg_text, bool ble)
         return;
     #endif
     }
+    // MCFW-WX1: APRS-IS weather over Wi-Fi (ESP32 only). The passcode is stored but never echoed.
+    #if defined(ESP32)
+    else
+    if(commandCheck(msg_text+2, (char*)"aprswx") == 0)
+    {
+        char wxc[16];
+        bool callok = aprsIsWxCall(wxc, sizeof(wxc), meshcom_settings.node_aprswxcall, meshcom_settings.node_call);
+        printfdeb("\naprswx:%s int:%i min call:%s server:%s:%i pass:%s\n", bAPRSWX ? "on" : "off", meshcom_settings.node_aprswxint,
+                  callok ? wxc : "(not set: --aprswxcall CALL-SSID)", meshcom_settings.node_aprsisserver, meshcom_settings.node_aprsisport,
+                  meshcom_settings.node_aprsispass[0] ? "***" : "(none: server drops reports)");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprswxint ") == 0)
+    {
+        int newInt = meshcom_settings.node_aprswxint;
+        CmdSetResult setres = cmdStoreInt(msg_text+12, &newInt, 5.0, 1440.0, &iVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("aprswxint", msg_text+12); return; }
+
+        if(setres == CMD_SET_RANGE)
+        {
+            printfdeb("aprswxint %i out of range (5..1440 min), ignored\n", iVar);
+            return;
+        }
+
+        meshcom_settings.node_aprswxint = newInt;
+        printfdeb("\naprswxint:%i min\n", newInt);
+        bReturn = true;
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprswxcall ") == 0)
+    {
+        // "-" (or nothing) clears it; aprswx then refuses to start a cycle (skip:nocall)
+        const char *arg = msg_text+13;
+        while(*arg == ' ') arg++;
+
+        if(arg[0] == 0x00 || strcmp(arg, "-") == 0)
+        {
+            meshcom_settings.node_aprswxcall[0] = 0x00;
+        }
+        else
+        {
+            size_t n = strlen(arg);
+            while(n > 0 && arg[n-1] == ' ') n--;
+
+            // Review finding 1: only a call that survives the APRS-IS header ("CALL>APRS,TCPIP*:") is stored
+            char wxc[16];
+            if(n == 0 || n >= sizeof(meshcom_settings.node_aprswxcall) || n >= sizeof(wxc))
+            {
+                printfdeb("aprswxcall: 1..9 characters (CALL or CALL-SSID), ignored\n");
+                return;
+            }
+            for(size_t i = 0; i < n; i++)
+                wxc[i] = (char)toupper((unsigned char)arg[i]);
+            wxc[n] = 0x00;
+
+            if(!aprsIsCallValid(wxc))
+            {
+                printfdeb("aprswxcall: letters/digits only, 1..6 plus optional -SSID (1..2), ignored\n");
+                return;
+            }
+            if(strcmp(wxc, meshcom_settings.node_call) == 0)
+            {
+                printfdeb("aprswxcall: must differ from the node call %s (the MeshCom server already reports that call), ignored\n", meshcom_settings.node_call);
+                return;
+            }
+            memcpy(meshcom_settings.node_aprswxcall, wxc, n + 1);
+        }
+
+        printfdeb("\naprswxcall:%s\n", meshcom_settings.node_aprswxcall[0] ? meshcom_settings.node_aprswxcall : "(not set)");
+        bReturn = true;
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprsis server ") == 0)
+    {
+        const char *arg = msg_text+16;
+        while(*arg == ' ') arg++;
+        size_t n = strlen(arg);
+        while(n > 0 && arg[n-1] == ' ') n--;
+
+        if(n == 0 || n >= sizeof(meshcom_settings.node_aprsisserver) || memchr(arg, ' ', n) != NULL)
+        {
+            printfdeb("aprsis server: 1..39 characters, no spaces\n");
+            return;
+        }
+        memcpy(meshcom_settings.node_aprsisserver, arg, n);
+        meshcom_settings.node_aprsisserver[n] = 0x00;
+
+        printfdeb("\naprsis server:%s\n", meshcom_settings.node_aprsisserver);
+        bReturn = true;
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprsis port ") == 0)
+    {
+        int newPort = meshcom_settings.node_aprsisport;
+        CmdSetResult setres = cmdStoreInt(msg_text+14, &newPort, 1.0, 65535.0, &iVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("aprsis port", msg_text+14); return; }
+
+        if(setres == CMD_SET_RANGE)
+        {
+            printfdeb("aprsis port %i out of range (1..65535), ignored\n", iVar);
+            return;
+        }
+
+        meshcom_settings.node_aprsisport = newPort;
+        printfdeb("\naprsis port:%i\n", newPort);
+        bReturn = true;
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprsis pass ") == 0)
+    {
+        // digits, optionally a leading '-' ("-1" = receive only); never echoed or logged
+        const char *arg = msg_text+14;
+        while(*arg == ' ') arg++;
+        size_t n = strlen(arg);
+        while(n > 0 && arg[n-1] == ' ') n--;
+
+        bool ok = n > 0 && n < sizeof(meshcom_settings.node_aprsispass);
+        for(size_t i = 0; ok && i < n; i++)
+            ok = isdigit((unsigned char)arg[i]) || (i == 0 && arg[i] == '-' && n > 1);
+
+        if(!ok)
+        {
+            printfdeb("aprsis pass: expected the numeric APRS-IS passcode (max 15 characters)\n");
+            return;
+        }
+        memcpy(meshcom_settings.node_aprsispass, arg, n);
+        meshcom_settings.node_aprsispass[n] = 0x00;
+
+        printfdeb("\naprsis pass:***\n");
+        bReturn = true;
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"sendaprswx") == 0)
+    {
+        if(aprsWxSendNow())
+            printfdeb("aprswx: sending\n");
+        return;
+    }
+    #else
+    // Not a commandCheck() rung on purpose (toggle_table_lint.py ignores #if guards)
+    else
+    if(commandMatches(msg_text+2, "aprswx on") || commandMatches(msg_text+2, "aprswx off") || commandMatches(msg_text+2, "aprswx")
+       || commandMatches(msg_text+2, "sendaprswx") || commandMatches(msg_text+2, "aprsis server ")
+       || commandMatches(msg_text+2, "aprsis port ") || commandMatches(msg_text+2, "aprsis pass ")
+       || commandMatches(msg_text+2, "aprswxint ") || commandMatches(msg_text+2, "aprswxcall "))
+    {
+        printfdeb("aprswx not supported on this board\n");
+        return;
+    }
+    #endif
     #if !defined(ENABLE_WIND)
     // Not a commandCheck() rung on purpose: toggle_table_lint.py ignores #if guards, and the
     // COMMAND_TOGGLES rows for this command exist only when the sensor code is built, so the
