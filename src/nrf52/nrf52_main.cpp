@@ -3301,8 +3301,9 @@ unsigned int getGPS(void)
         dlat = tinyGPSPlus.location.lat();
         dlon = tinyGPSPlus.location.lng();
 
-        meshcom_settings.node_lat = cround4(dlat);
-        meshcom_settings.node_lon = cround4(dlon);
+        // node_lat/node_lon hold magnitudes, the hemisphere is in node_lat_c/node_lon_c
+        meshcom_settings.node_lat = cround4abs(dlat);
+        meshcom_settings.node_lon = cround4abs(dlon);
 
         if(tinyGPSPlus.location.rawLat().negative)
             meshcom_settings.node_lat_c = 'S';
