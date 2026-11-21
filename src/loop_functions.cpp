@@ -59,6 +59,7 @@
 #include "dm_text_escape.h"   // P14/P15: {ping}/{SET}-Ausnahme vom Klammer-Escape
 #include "nbr_matrix.h"   // nbrMatrix, nbrBuildReport(), nbrLog -- sendNbrReport() unten
 #include "ping_target.h"   // One ping-target rule
+#include "pong_format.h"   // {pong} payload id as unsigned, display of last 3 digits
 #include "own_msg_status.h"   // durable delivery state of own text messages (web GUI ticks)
 
 bool gpsDetected = false;
@@ -2875,17 +2876,14 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     else
     if(mcStartsWith(aprsmsg.msg_payload, "{pong}") > 0)
     {
-        // R2-04: war msg_payload.substring(14,17). substring() KLEMMT, wenn die
-        // Zeichenkette kuerzer als 14 ist, und liefert "". Ein blankes
-        // `msg_payload + 14` tut das nicht -- die Wache oben prueft nur das
-        // Praefix "{pong}" (6 Zeichen), eine genau so lange Nutzlast wuerde also
-        // hinter dem Terminator weiterlesen. Innerhalb des Feldes, aber
-        // uninitialisiert: statt nichts stuende dort Muell. Die Klemmung bleibt.
-        const char *cPongId = (strlen(aprsmsg.msg_payload) > 14) ? aprsmsg.msg_payload + 14 : "";
+        // R2-04: pongDisplayId() never reads past the payload terminator (the guard
+        // above only checks the 6-char prefix); shows the last 3 id digits.
+        char cPongId[4];
+        pongDisplayId(aprsmsg.msg_payload, cPongId);
 
-        printfdeb("[PONG] from:%s <%.3s> rssi:%i snr:%i\n", aprsmsg.msg_source_call, cPongId, rssi, snr);
+        printfdeb("[PONG] from:%s <%s> rssi:%i snr:%i\n", aprsmsg.msg_source_call, cPongId, rssi, snr);
 
-        snprintf(cmsg, sizeof(cmsg), "PONG %.3s", cPongId);
+        snprintf(cmsg, sizeof(cmsg), "PONG %s", cPongId);
         snprintf(cset, sizeof(cset), "R:%i S:%i", rssi, snr);
 
         meshcom_settings.node_pingduration = millis() - meshcom_settings.node_pingduration;
@@ -4254,7 +4252,7 @@ void SendPong(String msg_call, unsigned int msg_id)
     mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), msg_call.c_str());
 
     memset(msg_text, 0x00, sizeof(msg_text));
-    snprintf(msg_text, sizeof(msg_text), "{pong}{%03i}", msg_id);
+    pongFormatPayload(msg_text, sizeof(msg_text), msg_id);
 
     mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), msg_text);
     
