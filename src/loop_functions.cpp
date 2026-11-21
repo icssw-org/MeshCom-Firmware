@@ -1,5 +1,6 @@
 #include "mc_text.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "node_position.h"   // nodeSignedLat/Lon: own position as signed degrees (#1279)
 #include "Arduino.h"
 
 #include <atomic>
@@ -3569,16 +3570,21 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
 
     // Display Distance, Direction
+    // signed degrees on both sides, otherwise course and distance are mirrored west/south (#1279)
     lat = conv_coord_to_dec(aprspos.lat);
+    if(aprspos.lat_c == 'S')
+        lat = -lat;
     lon = conv_coord_to_dec(aprspos.lon);
+    if(aprspos.lon_c == 'W')
+        lon = -lon;
 
     // d_dir_to wird weiter unten im HAS_EPAPER-Block (DrawDirection) genutzt - daher
     // immer deklarieren, nicht nur unter ENABLE_GPS. Sonst bricht ein E-Paper-Board
     // ohne GPS (z.B. Wireless Paper) die Kompilierung.
     float d_dir_to = 0;
-    d_dir_to = gps.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+    d_dir_to = gps.courseTo(nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c), lat, lon);
     dir_to = d_dir_to;
-    dist_to = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
+    dist_to = gps.distanceBetween(lat, lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c))/1000.0;
 
     sendDisplayMainline();
 

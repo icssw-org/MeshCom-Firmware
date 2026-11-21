@@ -5,6 +5,7 @@
 #include "mc_text.h"
 #include "msg_body.h"      // CHARS-01: strip only the trailing {NNN ACK marker
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "node_position.h"   // nodeSignedLat/Lon: own position as signed degrees (#1279)
 #include <Arduino.h>
 
 #include <configuration.h>
@@ -2044,7 +2045,7 @@ void sub_page_mheard()
         // (dieselbe Regel wie src/mh_phone.h fuer den App-Rahmen).
         double dist = -1.0;
         if (nbrPosKnown(v.lat, v.lon) && !(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0))
-            dist = gps.distanceBetween(v.lat, v.lon, meshcom_settings.node_lat, meshcom_settings.node_lon) / 1000.0;
+            dist = gps.distanceBetween(v.lat, v.lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c)) / 1000.0;
         if (dist >= 0.0)
             web_client.printf("<div><span class=\"font-bold\">Distance:</span><br><span>%.1lf km</span></div>", dist);
         else
