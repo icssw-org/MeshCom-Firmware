@@ -1,6 +1,6 @@
 # REVIEW.md -- Review Standard for MeshCom Firmware
 
-Status: 2026-11-02. This file is the review standard for every pull request against `dev`: for
+Status: 2026-11-21. This file is the review standard for every pull request against `dev`: for
 the author's self-review before opening the PR, and for anyone reviewing it (human or AI tool).
 AI review tools such as Claude Code `/code-review` read this file from the repository root.
 Forks may keep additional rules in `docs/review-*.md`; a reviewer reads those too.
@@ -46,10 +46,15 @@ interfaces. A fix that works on the author's board is half a fix if the same log
   that ESP32 sanitizes at load and nRF52 saves unsanitized from BLE is an R1 failure).
 - **Duplicated logic.** Formatters, parsers, callsign checks, JSON builders that exist more than
   once: diff the copies. The bug lives in the copy that did not get the fix.
+- **One value, two representations.** A value stored in two forms (signed degrees vs. magnitude
+  plus hemisphere letter, ms vs. s, raw vs. scaled) is read through one accessor. List every reader
+  and the form it expects. Example: the own position was stored signed on one platform and as a
+  magnitude elsewhere; course, distance and the TRACK beacon mixed the two west of Greenwich and
+  south of the equator.
 - **Display families.** OLED (u8g2, Heltec / T-Beam / TTGO), e-paper GFX (`src/Displays/`:
-  Vision Master E290 and E213, Wireless Paper), LVGL (T-Deck and T-Deck Plus in `src/t-deck/`,
-  T-Deck Pro in `src/t-deck-pro/`, T5 e-paper in `src/t5-epaper/`). A display change names each
-  family it touches and each it does not.
+  Vision Master E290 and E213, Wireless Paper), TFT on the Heltec T114 (`src/nrf52/t114_*`), LVGL
+  (T-Deck and T-Deck Plus in `src/t-deck/`, T-Deck Pro in `src/t-deck-pro/`, T5 e-paper in
+  `src/t5-epaper/`). A display change names each family it touches and each it does not.
 
 Method: grep the identifier, the user-visible string and the setting name across `src/`, not only
 the directory of the change. The scope of a review follows the call graph of the event, not the
@@ -74,7 +79,11 @@ folder structure.
   without the new flag compiles to the same code as before. `#if`/`#endif` counts match per file.
 - **New env or variant:** also update the CI workflow (`.github/workflows/`) and any flasher or
   release table that lists envs. A new env that CI does not know about is a release that ships
-  without that board.
+  without that board. Name for the new env: its release asset name, whether it gets an
+  `.autoupdate` twin (application images only, never bootloader or partition files), and a
+  bootloader built for its flash size (a shared bootloader with the wrong flash size header stops
+  the app at boot). A new support file in the release is checked against every step of the CI
+  that globs or counts release files.
 - **Native tests.** If the PR touches a unit that has a `[env:native_*]` test, run it
   (`pio test -e native_<name>`). Never run bare `pio test`: it walks the board envs and uploads to
   attached hardware.
@@ -88,20 +97,20 @@ same bytes differently.
 
 The PR description carries this table, with every row filled in:
 
-| Surface                     | Where (upstream/dev)                                                               | Typical question                                                    |
-| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| On-air encoder (chokepoint) | `encodePayloadAPRS()` in `aprs_functions.cpp`, `charset_filter.cpp`                | Does every composer still pass through the one filter?              |
-| On-air decoder              | `decodeAPRS()` in `aprs_functions.cpp`                                             | What does an old node send that this code now receives?             |
-| Web UI                      | `src/web_functions/` (HTML, JS, JSON endpoints)                                    | Escaped before `innerHTML`? Same length limit as the firmware?      |
-| OLED displays               | u8g2 paths in `loop_functions.cpp`                                                 | Does the font have the glyph? What is drawn when it does not?       |
-| E-paper GFX displays        | `src/Displays/` (E290, E213, Wireless Paper)                                       | Message pages and status lines (temperature, SSID, callsign)?       |
-| LVGL displays               | `src/t-deck/`, `src/t-deck-pro/`, `src/t5-epaper/`                                 | Font coverage per size, font flags vs `lv_conf.h`, input field max? |
-| BLE to the app              | `phone_commands.cpp`, `mh_phone.cpp`, BLE JSON (244-byte budget)                   | Frame layout unchanged? JSON still fits?                            |
-| Serial and network console  | `esp32_main.cpp` / `nrf52_main.cpp` command handling, `--` commands, `::` messages | Echo, help text, argument form unchanged?                           |
-| External UDP (EXTUDP, 1799) | `extudp_functions.cpp` (in and out JSON)                                           | Key set, length checks, consumers (MCApp, MCProxy, loggers)?        |
-| Server UDP (1990), APRS-IS  | gateway paths in `loop_functions.cpp`, `udp_functions`                             | Server-side parser and sanitizer, aprs.fi rendering?                |
-| Message store, mailbox      | `msgstore_*`                                                                       | Stored length limit equals the on-air limit?                        |
-| External consumers          | App, MCProxy, MCApp / mc-chat, mcmap, aprs.fi                                      | Does their sanitizer accept and strip the same code points?         |
+| Surface                     | Where (upstream/dev)                                                               | Typical question                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| On-air encoder (chokepoint) | `encodePayloadAPRS()` in `aprs_functions.cpp`, `charset_filter.cpp`                | Does every composer still pass through the one filter?               |
+| On-air decoder              | `decodeAPRS()` in `aprs_functions.cpp`                                             | What does an old node send that this code now receives?              |
+| Web UI                      | `src/web_functions/` (HTML, JS, JSON endpoints), generated `web_assets.h`          | Escaped before `innerHTML`? Same length limit? Browsers (rule below) |
+| OLED displays               | u8g2 paths in `loop_functions.cpp`                                                 | Does the font have the glyph? What is drawn when it does not?        |
+| E-paper GFX displays        | `src/Displays/` (E290, E213, Wireless Paper)                                       | Message pages and status lines (temperature, SSID, callsign)?        |
+| LVGL displays               | `src/t-deck/`, `src/t-deck-pro/`, `src/t5-epaper/`                                 | Font coverage per size, font flags vs `lv_conf.h`, input field max?  |
+| BLE to the app              | `phone_commands.cpp`, `mh_phone.cpp`, BLE JSON (244-byte budget)                   | Frame layout unchanged? JSON still fits?                             |
+| Serial and network console  | `esp32_main.cpp` / `nrf52_main.cpp` command handling, `--` commands, `::` messages | Echo, help text, argument form unchanged?                            |
+| External UDP (EXTUDP, 1799) | `extudp_functions.cpp` (in and out JSON)                                           | Key set, length checks, consumers (MCApp, MCProxy, loggers)?         |
+| Server UDP (1990), APRS-IS  | gateway paths in `loop_functions.cpp`, `udp_functions`                             | Server-side parser and sanitizer, aprs.fi rendering?                 |
+| Message store, mailbox      | `msgstore_*`                                                                       | Stored length limit equals the on-air limit?                         |
+| External consumers          | App, MCProxy, MCApp / mc-chat, mcmap, aprs.fi                                      | Does their sanitizer accept and strip the same code points?          |
 
 Rules:
 
@@ -116,9 +125,15 @@ Rules:
 - **Render proof per display family.** "Looks good on the T-Deck" covers the T-Deck. Each display
   family the PR claims needs a photo, screenshot or host render test; the others are listed under
   "not checked on hardware".
+- **Web UI across browsers and boards.** A web change is loaded with an empty cache in two browser
+  engines, once with classic (space-taking) scrollbars as on Linux and Windows, not only with the
+  overlay scrollbars of macOS and phones, and once on an Ethernet nRF52 board (RAK4631: few
+  sockets, parallel asset requests are refused). The regenerated `web_assets.h` is part of the
+  diff.
 - **Settings and commands** follow the same idea: a setting is read and written by the web UI, the
-  app (BLE JSON), the console and the JSON export; a command is spoken by the app, the web UI, the
-  console and scripts. A change to one names the others.
+  app (BLE JSON), the console and the JSON export; a command is spoken by the app, the web UI
+  (including the remote management page), the console, remote management over LoRa and scripts.
+  A change to one names the others.
 
 ### 1.4 R4: The LoRa length budget
 
@@ -169,20 +184,21 @@ Nodes from 4.35 to the current release run side by side in the field, many witho
 Every change to a frame, a settings bit or a command is checked against "an old node receives
 this" and "this node receives an old frame" first, and against "works on my bench" second.
 
-| ID   | Rule                                                                                                                                                                                                               |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| F-01 | **The LoRa frame layout is frozen** (section 1.4). Decoders tolerate a missing trailer; encoders always write it. No new header byte, no new type without a fallback for receivers that do not know it.            |
-| F-02 | **New information goes into an optional tag at the end of the payload** (`/R=`, `/U=`, `#name`). Unknown tags are ignored. Never parse with a plain `split('/')`.                                                  |
-| F-03 | **No flag-day changes.** A destination field with characters outside the callsign pattern is dropped by older nodes and not relayed: old nodes become relay holes.                                                 |
-| F-04 | **A settings bit is never "free"** because the current tree does not read it. Check `git log -S "0x2000" -- src`. Old bits stay set in flash; a default-off feature on a recycled bit is on after the update.      |
-| F-05 | **Masks are 16 bits wide.** Every new mask names each bit it touches.                                                                                                                                              |
-| F-06 | **Setting member names are the persistence contract.** Renaming a member or its NVS key silently resets the value to the default on the next boot. NVS keys are at most 15 characters.                             |
-| F-07 | **No `FLASH_STRUCT_VERSION` bump** without a real layout change and a migration note: it wipes callsign, WiFi and sensors of every updating node.                                                                  |
-| F-08 | **Commands are an API.** `--<cmd>` is used by the app, the web UI, the network console and scripts. No rename, no changed reply, no changed argument form without a before/after comparison of the console output. |
-| F-09 | **BLE frames and the BLE JSON are a contract with the app.** New keys go at the end; the 244-byte budget is stated in typical and worst case.                                                                      |
-| F-10 | **UDP schemas (server 1990, EXTUDP 1799) have external readers.** New keys go at the end; the consumer is named in the description.                                                                                |
-| F-11 | **Region and frequency.** A change to a send path checks the region tables and the APRS frequency handling on both platforms.                                                                                      |
-| F-12 | **What does the node do after the update, before anyone types a command?** Defaults, bits, new automatic frames. The answer is in the description.                                                                 |
+| ID   | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-01 | **The LoRa frame layout is frozen** (section 1.4). Decoders tolerate a missing trailer; encoders always write it. No new header byte, no new type without a fallback for receivers that do not know it.                                                                                                                                                                                                                                 |
+| F-02 | **New information goes into an optional tag at the end of the payload** (`/R=`, `/U=`, `#name`). Unknown tags are ignored. Never parse with a plain `split('/')`.                                                                                                                                                                                                                                                                       |
+| F-03 | **No flag-day changes.** A destination field with characters outside the callsign pattern is dropped by older nodes and not relayed: old nodes become relay holes.                                                                                                                                                                                                                                                                      |
+| F-04 | **A settings bit is never "free"** because the current tree does not read it. Check `git log -S "0x2000" -- src`. Old bits stay set in flash; a default-off feature on a recycled bit is on after the update.                                                                                                                                                                                                                           |
+| F-05 | **Masks are 16 bits wide.** Every new mask names each bit it touches.                                                                                                                                                                                                                                                                                                                                                                   |
+| F-06 | **Setting member names are the persistence contract.** Settings are stored by name (`meshcom_settings.h`, `settings_schema.h`). Renaming a member or its key silently resets the value to the default on the next boot. A new member gets a schema row, or it is never stored. Keys are at most 15 characters.                                                                                                                          |
+| F-07 | **No `FLASH_STRUCT_VERSION` bump** without a real layout change and a migration note: it wipes callsign, WiFi and sensors of every updating node. A new setting with a schema row is not a layout change.                                                                                                                                                                                                                               |
+| F-08 | **Commands are an API.** `--<cmd>` is used by the app, the web UI, the network console, remote management and scripts. No rename, no changed reply, no changed argument form without a before/after comparison of the console output. A command offered by the web UI or the app to other nodes must be known to the firmware those nodes run, or be refused cleanly there.                                                             |
+| F-09 | **BLE frames, the BLE JSON and the GATT services and UUIDs are a contract with the app.** New keys go at the end; the 244-byte budget is stated in typical and worst case. A service or UUID is removed only after checking every app that scans for it.                                                                                                                                                                                |
+| F-10 | **UDP schemas (server 1990, EXTUDP 1799) have external readers.** New keys go at the end; the consumer is named in the description.                                                                                                                                                                                                                                                                                                     |
+| F-11 | **Region and frequency.** A change to a send path checks the region tables and the APRS frequency handling on both platforms.                                                                                                                                                                                                                                                                                                           |
+| F-12 | **What does the node do after the update, before anyone types a command?** Defaults, bits, new automatic frames. The answer is in the description.                                                                                                                                                                                                                                                                                      |
+| F-13 | **Upgrade and downgrade both read flash.** Users go back to an older release with a flasher, and the NVS stays. Every value a release writes outside the settings (update state, counters, caches) states what an older release does with it, and what this release does with a value an older or newer one left behind. Example: an update guard that remembers "already installed" must not block the same release after a downgrade. |
 
 ---
 
@@ -190,24 +206,25 @@ this" and "this node receives an old frame" first, and against "works on my benc
 
 These classes caught real bugs in audits of this code base. Check them on every diff.
 
-| ID   | Check                                                                                                                                                                                     |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| H-01 | **Length comes from the producer**, validated against the destination buffer: every new `memcpy`, `snprintf`, `serializeJson`. A length prefix is wide enough for the largest payload.    |
-| H-02 | **The write index bounds the loop**, not a parallel counter. Validate length before decoding, not after.                                                                                  |
-| H-03 | **`read(buf, SIZE)` then `buf[len] = 0`** writes one past the end. Read `SIZE - 1` or size the buffer `+1`.                                                                               |
-| H-04 | **Untrusted multi-byte fields:** check the whole field width against the remaining length before any fixed-offset access. Boundary tests 0, 1, max, max+1.                                |
-| H-05 | **Format strings are literals.** Never `Serial.printf(buf)` with text that came from the mesh; a second emit of an already formatted buffer re-parses `%` from received text.             |
-| H-06 | **Security flags default to deny.** The reject path runs unconditionally, not inside a loop over attacker-sized data. Empty received secrets are rejected explicitly.                     |
-| H-07 | **Persist vs. apply.** A setting written to flash is also applied to the running subsystem, or the user is told a reboot is needed. A stored setting is applied at boot.                  |
-| H-08 | **Success means the work was done.** A handler that returns OK must have performed the side effect. Stubs and TODOs in reachable handlers are findings.                                   |
-| H-09 | **Checks before effects.** Auth, validation and gating happen before copy, echo, ring insert or reply. A function that can refuse returns a result, and the caller reads it.              |
-| H-10 | **Locks cover every reader and writer**, including the free/reset path and read-only reporters (web, JSON, console). One unlocked writer defeats every locked reader.                     |
-| H-11 | **nRF52 radio context.** Everything reachable from `OnRxDone` is lock-guarded, print-free and flash-write-free. No `%lld` on nRF52.                                                       |
-| H-12 | **Blocking calls on the loop or radio task** (`delay(`, `scanNetworks`, `hostByName`, SD access, long critical sections) name their task and their upper bound.                           |
-| H-13 | **Time arithmetic:** `(uint32_t)(now - t) >= X`; no `millis() + N` deadlines; no ids from `millis()`.                                                                                     |
-| H-14 | **Web output:** everything from the mesh (callsign, path, text) is escaped before `innerHTML`; hand-built JSON is escaped; HTML `maxlength` matches the server limit in bytes (R4).       |
-| H-15 | **Comments that claim safety are hypotheses.** "Never overlaps", "unchanged", "already sanitized": verify the code enforces it. A comment rewritten to make a bit look free is a blocker. |
-| H-16 | **Copy instead of call:** a function that copies 25 lines of another drops exactly the branches that are missed later. Use a shared helper, or say why not.                               |
+| ID   | Check                                                                                                                                                                                                                                                                      |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H-01 | **Length comes from the producer**, validated against the destination buffer: every new `memcpy`, `snprintf`, `serializeJson`. A length prefix is wide enough for the largest payload.                                                                                     |
+| H-02 | **The write index bounds the loop**, not a parallel counter. Validate length before decoding, not after.                                                                                                                                                                   |
+| H-03 | **`read(buf, SIZE)` then `buf[len] = 0`** writes one past the end. Read `SIZE - 1` or size the buffer `+1`.                                                                                                                                                                |
+| H-04 | **Untrusted multi-byte fields:** check the whole field width against the remaining length before any fixed-offset access. Boundary tests 0, 1, max, max+1.                                                                                                                 |
+| H-05 | **Format strings are literals.** Never `Serial.printf(buf)` with text that came from the mesh; a second emit of an already formatted buffer re-parses `%` from received text.                                                                                              |
+| H-06 | **Security flags default to deny.** The reject path runs unconditionally, not inside a loop over attacker-sized data. Empty received secrets are rejected explicitly.                                                                                                      |
+| H-07 | **Persist vs. apply.** A setting written to flash is also applied to the running subsystem, or the user is told a reboot is needed. A stored setting is applied at boot.                                                                                                   |
+| H-08 | **Success means the work was done.** A handler that returns OK must have performed the side effect. Stubs and TODOs in reachable handlers are findings.                                                                                                                    |
+| H-09 | **Checks before effects.** Auth, validation and gating happen before copy, echo, ring insert or reply. A function that can refuse returns a result, and the caller reads it.                                                                                               |
+| H-10 | **Locks cover every reader and writer**, including the free/reset path and read-only reporters (web, JSON, console). One unlocked writer defeats every locked reader.                                                                                                      |
+| H-11 | **nRF52 radio context.** Everything reachable from `OnRxDone` is lock-guarded, print-free and flash-write-free. No `%lld` on nRF52.                                                                                                                                        |
+| H-12 | **Blocking calls on the loop or radio task** (`delay(`, `scanNetworks`, `hostByName`, SD access, long critical sections) name their task and their upper bound.                                                                                                            |
+| H-13 | **Time arithmetic:** `(uint32_t)(now - t) >= X`; no `millis() + N` deadlines; no ids from `millis()`.                                                                                                                                                                      |
+| H-14 | **Web output:** everything from the mesh (callsign, path, text) is escaped before `innerHTML`; hand-built JSON is escaped; HTML `maxlength` matches the server limit in bytes (R4).                                                                                        |
+| H-15 | **Comments that claim safety are hypotheses.** "Never overlaps", "unchanged", "already sanitized": verify the code enforces it. A comment rewritten to make a bit look free is a blocker.                                                                                  |
+| H-16 | **Copy instead of call:** a function that copies 25 lines of another drops exactly the branches that are missed later. Use a shared helper, or say why not.                                                                                                                |
+| H-17 | **Command matching is by prefix and by order.** A new `--x on` row is checked against every earlier `--x` row that also matches it (status, help, a shorter name). Test that each new form reaches its own handler and sends the same reply to the app as similar toggles. |
 
 ---
 
@@ -269,6 +286,8 @@ The description covers, in this order:
 5. **R3 surfaces:** the table from 1.3.
 6. **R4 length budget:** the byte calculation, or "no change to any on-air length".
 7. **On the wire:** what changes on air, and what an old node does with it (section 2).
+   **Up and down:** what a node does after updating to this PR and after going back from it
+   (F-12, F-13).
 8. **Tests:** the regression test (red before, green after), native envs run.
 9. **Not checked on hardware:** paths and reasons.
 10. **Not in this PR:** related work left out.
