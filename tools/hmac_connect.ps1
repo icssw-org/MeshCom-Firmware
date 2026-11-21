@@ -8,12 +8,12 @@
     .\hmac_connect.ps1 192.168.1.100 MeinPasswort 2323
 #>
 param(
-    [Parameter(Mandatory)][string]$Host,
+    [Parameter(Mandatory)][string]$NodeHost,
     [string]$Password = "",
     [int]$Port = 2323
 )
 
-$tcp = [Net.Sockets.TcpClient]::new($Host, $Port)
+$tcp = [Net.Sockets.TcpClient]::new($NodeHost, $Port)
 $stream = $tcp.GetStream()
 $rd = [IO.StreamReader]::new($stream)
 $wr = [IO.StreamWriter]::new($stream)
