@@ -29,11 +29,11 @@ body {font-size:var(--fs-m);background:var(--mcbg);padding:0px;margin:0px 0px;he
 .no-wrap {white-space:nowrap;}
 .mw-600 {max-width:600px;}
 /* nav-bar definitions */
-/* WEB-NAV-01: the bar scrolls without a visible scrollbar; a shown bar ate up to 15 of its 42-60 px and squeezed the icons */
+/* WEB-NAV-01: the bar scrolls without a visible scrollbar (a shown bar ate up to 15 of its 42-60 px); the buttons are 75 % of the bar, right-aligned so the active one joins the content area; border and padding scale with the bar, or the icon shrinks to 7 px at --widthfactor 0.7 */
 #nav_layer {height:100%;width:calc(60px*var(--widthfactor));background-color:var(--navbg);position:fixed !important;overflow-x:hidden;overflow-y:auto;scrollbar-width:none;top:0px;}
 #nav_layer::-webkit-scrollbar {display:none;}
 #mc_logo {width:100%;aspect-ratio:1/1;margin:0px auto 75px auto;padding:5px 0px;display:block;background-color:#000;}
-.nav_button {background-color:var(--navbg);color:var(--navfg);border:solid 6px var(--navbg);box-shadow:none;border-radius:10px 0px 0px 10px;cursor:pointer; width:100%; aspect-ratio:1/1; margin:calc(20px*var(--widthfactor)) auto; display:block;}
+.nav_button {background-color:var(--navbg);color:var(--navfg);border:solid calc(6px*var(--widthfactor)) var(--navbg);padding:calc(1px*var(--widthfactor)) calc(6px*var(--widthfactor));box-shadow:none;border-radius:10px 0px 0px 10px;cursor:pointer; box-sizing:border-box; width:75%; aspect-ratio:1/1; margin:calc(20px*var(--widthfactor)) 0 calc(20px*var(--widthfactor)) auto; display:block;}
 .nav_button>svg {display:block;width:90%;height:90%;margin:auto auto;}
 .nav_button:hover {background-color:var(--navhov);border-color:var(--navhov);}
 .nav_button.nbactive {background-color:var(--navselbg);color:var(--navselfg);-webkit-transition:0.5s;transition:0.5s; border-color:var(--navselbg);}
