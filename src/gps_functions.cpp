@@ -31,6 +31,7 @@
 #include "gps_filter.h"
 #include "alt_fusion.h"
 #include "pos_pipeline.h"
+#include "node_position.h"   // nodeSignedLat/Lon for SmartBeaconing (#1279)
 
 #if defined(ENABLE_BMX280)
 #include "bmx280.h"
@@ -1347,8 +1348,10 @@ int WZ_GPS_Loop() {
             }
             #endif
 
-            // GPS-11: war cround4abs(roh), jetzt die gespeicherten (gefilterten) Betraege
-            igps = setSMartBeaconing(meshcom_settings.node_lat, meshcom_settings.node_lon);
+            // GPS-11: stored (filtered) position. setSMartBeaconing() needs signed degrees:
+            // the TRACK turn beacon takes the hemisphere from the sign (#1279).
+            igps = setSMartBeaconing(nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c),
+                                     nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c));
         }
         else
         {

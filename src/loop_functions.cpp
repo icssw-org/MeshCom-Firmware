@@ -5690,7 +5690,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
                     u8g2->drawStr(5, 30, (char*)"");
                     u8g2->drawStr(5, 40, (char*)"       TRACK");
                     u8g2->drawStr(5, 50, (char*)"   POSITION SENT");
-                    snprintf(cvers, sizeof(cvers), " %.4lf%c %.4lf%c", lat, lat_c, lon, lon_c);
+                    snprintf(cvers, sizeof(cvers), " %.4lf%c %.4lf%c", fabs(lat), lat_c, fabs(lon), lon_c);
                     u8g2->drawStr(5, 60, cvers);
                 } while (u8g2->nextPage());
             }
