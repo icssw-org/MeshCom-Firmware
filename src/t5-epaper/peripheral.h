@@ -33,7 +33,6 @@
 // Gleicher Wert, also kein Konflikt -- nur eine Dopplung, die erst mit dem
 // Include-Geflecht dieses Verzeichnisses aufloesbar ist.
 #define SYNC_WORD_SX127x 0x2b  // MeshCom Sync Word!!
-#define SYNC_WORD_SX127x_2BYTE 0x2b24 // MeshCom Sync Word!!
 
 #define LORA_MODE_SEND 0
 #define LORA_MODE_RECV 1

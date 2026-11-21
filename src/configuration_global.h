@@ -618,8 +618,6 @@ static inline bool flashLayoutCompatible(int stored)
 #define BLE_TEST 0
 
 #define SYNC_WORD_SX127x 0x2b  // MeshCom Sync Word!!
-#define SYNC_WORD_SX127x_2BYTE 0x2b24 // MeshCom Sync Word!!
-
 
 // common for all Boards:
 
