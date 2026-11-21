@@ -2239,8 +2239,8 @@ void tdeck_map_zoom(int dir)
     }
     if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
     {
-        sdmap_lastKnownLat = meshcom_settings.node_lat;
-        sdmap_lastKnownLon = meshcom_settings.node_lon;
+        sdmap_lastKnownLat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+        sdmap_lastKnownLon = nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c);
     }
     if (dir > 0) sdmap_zoom_in();
     else         sdmap_zoom_out();
@@ -2276,8 +2276,8 @@ void tdeck_map_pan(int dxPx, int dyPx)
     double lon = s_map_user_panned ? s_map_pan_lon : sdmap_lastKnownLon;
     if (lat == 0.0 && lon == 0.0)
     {
-        lat = meshcom_settings.node_lat;
-        lon = meshcom_settings.node_lon;
+        lat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+        lon = nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c);
     }
     sdmap_pan_latlon(&lat, &lon, dxPx, dyPx);
     s_map_pan_lat = lat;
@@ -2332,8 +2332,8 @@ void tdeck_map_recenter()
     }
     if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
     {
-        sdmap_lastKnownLat = meshcom_settings.node_lat;
-        sdmap_lastKnownLon = meshcom_settings.node_lon;
+        sdmap_lastKnownLat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+        sdmap_lastKnownLon = nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c);
     }
     sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon, "recenter");
     refresh_map(meshcom_settings.node_map);
@@ -4322,8 +4322,8 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
 
         if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
         {
-            sdmap_lastKnownLat = meshcom_settings.node_lat;
-            sdmap_lastKnownLon = meshcom_settings.node_lon;
+            sdmap_lastKnownLat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+            sdmap_lastKnownLon = nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c);
         }
 
         // TD-07: an incoming own-position beacon still updates the tracked

@@ -1,5 +1,6 @@
 #include "mc_text.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "node_position.h"   // nodeSignedLat/Lon: own position as signed degrees (#1279)
 #include "csma_timing.h"   // W0.6: CSMA back-off arithmetic, native-tested
 #include "mesh_policy.h"   // BL-01: meshTxAllowed(), --mesh off = nur kein Repeat fremder Frames
 #include "Arduino.h"
@@ -1263,8 +1264,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 nbrInit(nbrMatrix, meshcom_settings.node_call, now_min_hn);
 
             if(!nbrRowHasFlag(nbrMatrix, 0, NBR_FLAG_POS) && meshcom_settings.node_lat != 0.0)
-                nbrNotePos(nbrMatrix, meshcom_settings.node_call, (float)meshcom_settings.node_lat,
-                           (float)meshcom_settings.node_lon, bMESH, 0, now_min_hn);
+                nbrNotePos(nbrMatrix, meshcom_settings.node_call,
+                           (float)nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c),
+                           (float)nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c), bMESH, 0, now_min_hn);
             if(bGATEWAY)
                 nbrRowSetFlag(nbrMatrix, 0, NBR_FLAG_GW);
             else
@@ -1542,8 +1544,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 // bleibt die Reichweite der eigenen Zeile immer leer (Bench
                 // 2026-09-20, erste Seite nach dem Flash).
                 if(!nbrRowHasFlag(nbrMatrix, 0, NBR_FLAG_POS) && meshcom_settings.node_lat != 0.0)
-                    nbrNotePos(nbrMatrix, meshcom_settings.node_call, (float)meshcom_settings.node_lat,
-                               (float)meshcom_settings.node_lon, bMESH, 0, now_min);
+                    nbrNotePos(nbrMatrix, meshcom_settings.node_call,
+                               (float)nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c),
+                               (float)nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c), bMESH, 0, now_min);
                 if(bGATEWAY)
                     nbrRowSetFlag(nbrMatrix, 0, NBR_FLAG_GW);
                 else

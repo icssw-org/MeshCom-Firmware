@@ -7092,7 +7092,7 @@ void commandAction(char *umsg_text, bool ble)
             char distTxt[12];
             bool haveOwnPos = !(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0);
             if(nbrPosKnown(v.lat, v.lon) && haveOwnPos)
-                snprintf(distTxt, sizeof(distTxt), "%.1f", gps.distanceBetween(v.lat, v.lon, meshcom_settings.node_lat, meshcom_settings.node_lon) / 1000.0);
+                snprintf(distTxt, sizeof(distTxt), "%.1f", gps.distanceBetween(v.lat, v.lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c)) / 1000.0);
             else
                 snprintf(distTxt, sizeof(distTxt), "NA");
 

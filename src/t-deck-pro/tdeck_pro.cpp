@@ -664,8 +664,9 @@ unsigned int tdeck_get_gps()
         posinfo_fix = true;
         double dlat, dlon;
 
-        dlat = cround4abs(lat);
-        dlon = cround4abs(lon);
+        // signed degrees: the TRACK turn beacon takes the hemisphere from the sign (#1279)
+        dlat = cround4(lat);
+        dlon = cround4(lon);
 
         if(lat < 0)
         {

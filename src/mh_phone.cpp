@@ -18,6 +18,7 @@
 
 #include "mh_phone.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "node_position.h"   // nodeSignedLat/Lon: own position as signed degrees (#1279)
 #include "ble_json_frame.h"
 #include "configuration_global.h"   // BLE_JSON_PAYLOAD_MAX (unbedingt, board-unabhaengig)
 
@@ -237,7 +238,8 @@ void mhPhoneLive(int row, uint16_t now_min)
 
     uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
     uint16_t frame_len = mhJsonBuild(v, mhNodeEpoch(),
-                                      meshcom_settings.node_lat, meshcom_settings.node_lon,
+                                      nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c),
+                                      nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c),
                                       bleBuffer, sizeof(bleBuffer));
     if (frame_len > 0)
         addBLEOutBuffer(bleBuffer, frame_len);
@@ -327,7 +329,8 @@ void mhPhoneListStep(void)
 
         uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
         uint16_t frame_len = mhJsonBuild(v, mhNodeEpoch(),
-                                          meshcom_settings.node_lat, meshcom_settings.node_lon,
+                                          nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c),
+                                          nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c),
                                           bleBuffer, sizeof(bleBuffer));
         if (frame_len > 0)
             addBLEComToOutBuffer(bleBuffer, frame_len);
