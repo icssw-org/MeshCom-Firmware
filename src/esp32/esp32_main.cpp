@@ -5054,8 +5054,7 @@ void esp32loop()
                     }
                 }
 
-                if(dht_found)
-                    loop_onewire_dht();
+                loop_onewire_dht();   // DHT-PROBE-01: gates itself (found or probe tries left)
 
                 onewireTimeWait = millis() - lreduction;
 

@@ -18,6 +18,8 @@
 #include "bp_notice_frame.h"
 #include "dedup_functions.h"
 #include "beacon_rate.h"
+#include "autosymbol.h"   // GPS-AUTOSYM-02/03
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "hey_policy.h"     // F6: gateway keeps its HG alive through trickle suppression
 #include "nbr_views.h"
 #include "command_functions.h"
@@ -2072,7 +2074,7 @@ void sendDisplayTrack()
         snprintf(msg_text, sizeof(msg_text), "LON :%.4lf %c%4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
         sendDisplay1306(false, false, 3, dzeile[2], msg_text);
 
-        int pos_seconds = posinfo_interval - ((millis() - (int)posinfo_timer)) / 1000;
+        int pos_seconds = posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval);
 
         #if defined(BOARD_T_ECHO)
         snprintf(msg_text, sizeof(msg_text), "RATE:%5i", (int)posinfo_interval);
@@ -6602,6 +6604,33 @@ int GetHeadingDifference(int heading1, int heading2)
 
 unsigned int setSMartBeaconing(double dlat, double dlon)
 {
+    // Automatic symbol (GPS-AUTOSYM-02/03) is evaluated before the TRACK-off return and before the stationary
+    // return, so it also works with TRACK off and the symbol returns to the runner while the node stands still.
+    // It uses its own speed estimate (autoSymbolSpeed): posinfo_last_* is only maintained by the TRACK path and
+    // is stale with TRACK off, and the RAK4631 never feeds the global gps (no valid gps.speed there).
+    // No side effects on the TRACK state.
+    static AutoSymbolState s_autoSym;       // zero-init = nothing seen since boot
+    static AutoSymbolSpeed s_autoSpeed;     // previous sample, refreshed on every call
+
+    const uint32_t now_ms = (uint32_t)millis();
+    const double auto_mps = autoSymbolSpeed(&s_autoSpeed, gps.speed.isValid(), gps.speed.isValid() ? gps.speed.mps() : 0.0, dlat, dlon, now_ms);
+
+    // History is kept while the opt-in is off (switching it on mid-trip behaves as before).
+    autoSymbolNote(&s_autoSym, auto_mps, now_ms);
+
+    if(bGPSAutosymbol)
+    {
+        char target_symbol = autoSymbolPick(&s_autoSym, meshcom_settings.node_symid, meshcom_settings.node_symcd, now_ms);
+
+        if(meshcom_settings.node_symcd != target_symbol)
+        {
+            meshcom_settings.node_symcd = target_symbol;
+
+            if(iGPSDEBUG > 0)
+                printfdeb("Auto-Symbol switch to '%c'\n", target_symbol);
+        }
+    }
+
     // check TRACK Mode on
     if(!bDisplayTrack)
     {
@@ -6668,55 +6697,6 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     if(iGPSDEBUG > 0)
         printfdeb("%s [POSINFO]...dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, speed_mps, gps_refresh_intervall);
 
-    // Moving Logic & Symbol Switching with Hysteresis
-    static unsigned long last_car_speed_ts = 0;
-    static unsigned long last_bike_speed_ts = 0;
-
-    // Update timestamps based on current speed
-    if (speed_mps > 7.0) // > 25 km/h -> Car range
-    {
-        last_car_speed_ts = millis();
-        last_bike_speed_ts = millis(); // Also implies bike speed threshold passed
-    }
-    else if (speed_mps > 1.4) // > 5 km/h -> Bike range
-    {
-        last_bike_speed_ts = millis();
-    }
-
-    // Determine Symbol based on history (2 minutes hysteresis)
-    char target_symbol = 0;
-
-    // use APRS Symbol switching
-    if(bGPSAutosymbol)
-    {
-        if (meshcom_settings.node_symid == '/') // Only auto-switch if using primary table
-        {
-            // Check if we are currently using one of the auto-switchable symbols
-            if (meshcom_settings.node_symcd == '[' || meshcom_settings.node_symcd == 'b' || meshcom_settings.node_symcd == '>')
-            {
-                if ((millis() - last_car_speed_ts) < 120000) // Car speed seen in last 2 mins
-                {
-                    target_symbol = '>';
-                }
-                else if ((millis() - last_bike_speed_ts) < 120000) // Bike speed seen in last 2 mins
-                {
-                    target_symbol = 'b';
-                }
-                else
-                {
-                    target_symbol = '['; // Runner/Hiker default
-                }
-
-                if (target_symbol != 0 && meshcom_settings.node_symcd != target_symbol)
-                {
-                    meshcom_settings.node_symcd = target_symbol;
-
-                    if(iGPSDEBUG > 0)
-                        printfdeb("Auto-Symbol switch to '%c'\n", target_symbol);
-                }
-            }
-        }
-    }
     // WiFi Stationary Check
     // If connected to WiFi AND speed is low, we assume we are indoors/stationary to prevent GPS drift
     // But if moving (e.g. in car with hotspot), we still want updates.

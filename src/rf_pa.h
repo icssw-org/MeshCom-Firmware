@@ -9,16 +9,30 @@
 
 #include <stdint.h>
 
-#ifndef RF_PA_OPTIMIZE
-#if defined(BOARD_T_DECK_PRO)
-#define RF_PA_OPTIMIZE true
-#else
-#define RF_PA_OPTIMIZE false
-#endif
-#endif
+// T-Deck Pro pins RadioLib 7.1.2 (variants/t_deck_pro/platformio.ini): its SX1262 has only the
+// one-argument setOutputPower(), which applies the paOptTable. Every other ESP32 board uses
+// RadioLib 7.6.0 and gets the datasheet PA (optimize = false).
+
+// table path: one-argument overload (T-Deck Pro, RadioLib 7.1.2)
+template <typename Radio>
+inline int16_t rfApplyOutputPowerTable(Radio &r, int8_t power)
+{
+    return r.setOutputPower(power);
+}
+
+// datasheet path: optimize = false on SX1262/SX1268/LLCC68, forceRfo = false on SX127x
+template <typename Radio>
+inline int16_t rfApplyOutputPowerDatasheet(Radio &r, int8_t power)
+{
+    return r.setOutputPower(power, false);
+}
 
 template <typename Radio>
-inline int16_t rfApplyOutputPower(Radio &r, int8_t power, bool optimize = RF_PA_OPTIMIZE)
+inline int16_t rfApplyOutputPower(Radio &r, int8_t power)
 {
-    return r.setOutputPower(power, optimize);
+#if defined(BOARD_T_DECK_PRO)
+    return rfApplyOutputPowerTable(r, power);
+#else
+    return rfApplyOutputPowerDatasheet(r, power);
+#endif
 }

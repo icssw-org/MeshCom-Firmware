@@ -154,11 +154,25 @@ bool sanitize_dht_type(int &v, sanitize_log_fn log)
     return true;
 }
 
-bool dht_name_matches(const char *name, int type)
+void dht_probe_step(bool &found, uint8_t &tries_left, bool read_valid)
 {
-    if (name == NULL || !dht_type_valid(type))
-        return false;
-    return strcmp(name, type == 22 ? "DHT22" : "DHT11") == 0;
+    if (found)
+        return;
+    if (read_valid)
+    {
+        found = true;
+        tries_left = 0;
+        return;
+    }
+    if (tries_left > 0)
+        tries_left--;
+}
+
+const char *dht_status_word(bool found, bool last_read_ok, uint8_t tries_left)
+{
+    if (found)
+        return last_read_ok ? "found" : "read error";
+    return tries_left > 0 ? "probing" : "not found";
 }
 
 int resolve_tx_power(int stored, int board_default)

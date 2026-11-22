@@ -629,6 +629,25 @@ static inline const char *fwSafebootWhy(bool versionOk, bool nocap, bool bootQio
     return (versionOk && !nocap) ? "ok" : "old";
 }
 
+// OTA-SAFEBOOT-01 (#1300): a manual --ota-update (console, web button) on a Safeboot below the minimum WARNS and
+// proceeds (operator decision D1 b); it never refuses. sbVer < 0 (partition missing, unreadable, or a build
+// without the scanner) gives PROCEED: auRebootToSafeboot() already reports a missing partition.
+enum FwManualOtaVerdict : uint8_t
+{
+    FWOTA_PROCEED = 0,
+    FWOTA_WARN_OLD
+};
+// Same predicate as the web status (exceptions: version -1 proceeds silently, auRebootToSafeboot reports
+// the missing partition; DIO + nocap warns "old" here while the web says "dio"): warns when fwSafebootWhy() would say "old" (version below the
+// minimum, or nocap set after a failed handover). "dio" is not judged here (auRebootToSafeboot reports it).
+static inline FwManualOtaVerdict fwManualOtaDecide(int sbVer, int minVer, bool nocap)
+{
+    if (sbVer < 0)
+        return FWOTA_PROCEED;
+    const char *why = fwSafebootWhy(sbVer >= minVer, nocap, true);
+    return (why[0] == 'o' && why[1] == 'l' && why[2] == 'd' && why[3] == '\0') ? FWOTA_WARN_OLD : FWOTA_PROCEED;
+}
+
 struct FwGoReq
 {
     bool busy;               // a check or download job runs

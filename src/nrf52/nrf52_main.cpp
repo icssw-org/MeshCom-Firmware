@@ -799,6 +799,7 @@ void nrf52setup()
     bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
     bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;   // LED-07: --board led
+    bGPSAutosymbol = meshcom_settings.node_sset3 & 0x1000;   // --gps autosymbol (as on ESP32)
 
     bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
@@ -2624,8 +2625,7 @@ void nrf52loop()
                 if(one_found)
                     loop_onewire_ds18();
 
-                if(dht_found)
-                    loop_onewire_dht();
+                loop_onewire_dht();   // DHT-PROBE-01: probes itself (three tries), then reads only a found DHT
 
                 onewireTimeWait = millis();
 

@@ -4,6 +4,7 @@
  */
 #include "mc_text.h"
 #include "msg_body.h"      // CHARS-01: strip only the trailing {NNN ACK marker
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "node_position.h"   // nodeSignedLat/Lon: own position as signed degrees (#1279)
 #include <Arduino.h>
@@ -1910,7 +1911,7 @@ void sub_page_position()
     web_client.printf("<tr><td>Altitude</td><td>%i</td></tr>\n", meshcom_settings.node_alt);
     web_client.printf("<tr><td>Satellites</td><td>%i - %s - HDOP %i</td></tr>\n", (int)posinfo_satcount, (posinfo_fix ? "fix" : "nofix"), (int)fposinfo_hdop);
     web_client.printf("<tr><td>Rate</td><td>%i</td></tr>\n", (int)posinfo_interval);
-    web_client.printf("<tr><td>Next</td><td>%i sec</td></tr>\n", (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000));
+    web_client.printf("<tr><td>Next</td><td>%i sec</td></tr>\n", posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval));
     web_client.printf("<tr><td>Distance</td><td>%.0lf m</td></tr>\n", posinfo_distance);
     web_client.printf("<tr><td>Dir (current)</td><td>%i&deg;</td></tr>\n", (int)posinfo_direction);
     web_client.printf("<tr><td>Dir (last)</td><td>%i&deg;</td></tr>\n", (int)posinfo_last_direction);

@@ -1,5 +1,6 @@
 //2025-09-16 23:036
 #include "command_functions.h"
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "netmode_label.h" // RAK-NETMODE-01: --info NETWORK label
 #include "capture_functions.h"
@@ -1510,6 +1511,12 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"ota-update") == 0)
     {
+        // OTA-SAFEBOOT-01 (#1300), operator D1 (b): an old Safeboot is reported, the update proceeds
+        if(fwManualOtaDecide(fwNetSafebootVersion(), AU_SAFEBOOT_MIN, fwNetSafebootOld()) == FWOTA_WARN_OLD)
+        {
+            Serial.printf("[AU];ota-update;note;safeboot_too_old;ver;%d;need;%d;nocap;%d;proceeding\n", fwNetSafebootVersion(), AU_SAFEBOOT_MIN, fwNetSafebootOld() ? 1 : 0);
+            Serial.printf("[AU];note;flash once with the web flasher to install the new Safeboot\n");
+        }
         auRebootToSafeboot();   // returns only without a safeboot partition (or AU-16: DIO bootloader, already reported)
 
         return;
@@ -3071,6 +3078,7 @@ void commandAction(char *umsg_text, bool ble)
         bONEWIRE=false;
         one_found=false;
         dht_found=false;
+        dht_probe_left = 0;   // DHT-PROBE-01: no probe while one-wire is off
         
         meshcom_settings.node_sset2 &= ~0x0001;
 
@@ -7599,11 +7607,11 @@ void commandAction(char *umsg_text, bool ble)
                 snprintf(cSHT21, sizeof(cSHT21), " (%s)",  (sht21_found?"found":"error"));
 
             char cone[10]={0};
-            char cdht[10]={0};
+            char cdht[16]={0};
             if(bONEWIRE)
             {
                 snprintf(cone, sizeof(cone), " (%s)",  (one_found?"found":"error"));
-                snprintf(cdht, sizeof(cdht), " (%s)",  (dht_found?"found":"error"));
+                snprintf(cdht, sizeof(cdht), " (%s)",  dht_status_word(dht_found, dht_ok, dht_probe_left));
             }
 
             printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...AHT20: %s%s\n...SHT21: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
@@ -8144,7 +8152,7 @@ void commandAction(char *umsg_text, bool ble)
             {
                 printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %.1f\n...RATE: %i postime..%i\n...NEXT: %i sec\n...DIST: %.0lfm\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i %s [%s]\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-                (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), fposinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
+                (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), fposinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
                 meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource);
 
                 printfdeb("...SYMB: %c %c ..Auto %s\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n...SOFTSERREAD: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSAutosymbol?"on":"off"), (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID, (bSOFTSERREAD?"on":"off"));
@@ -8310,7 +8318,7 @@ void sendGpsJson()
     pdoc["SFIX"] = posinfo_fix;
     pdoc["HDOP"] = (int)fposinfo_hdop;
     pdoc["RATE"] = (int)posinfo_interval;
-    pdoc["NEXT"] = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
+    pdoc["NEXT"] = posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval);
     pdoc["DIST"] = posinfo_distance;
     pdoc["DIRn"] = (int)posinfo_direction;
     pdoc["DIRo"] = (int)posinfo_last_direction;

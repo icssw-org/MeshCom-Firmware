@@ -10,6 +10,7 @@
  */
 
 #include "lv_obj_functions.h"
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include <configuration.h>
 #include <aprs_structures.h>
@@ -4832,7 +4833,7 @@ void tdeck_refresh_track_view()
 
     tdeckGpsSkyRefresh();   // GPS-SKY: no-op while the text view is shown
 
-    int pos_seconds = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
+    int pos_seconds = posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval);
 
     char cDatum[20];
     snprintf(cDatum, sizeof(cDatum), "%04i-%02i-%02i",

@@ -10,6 +10,7 @@
 #include "loop_functions.h"
 #include "gps_functions.h"
 #include "loop_functions_extern.h"
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "nbr_views.h"       // MeshCom-5-Topologie Welle 4: Quelle fuer ui_mheard_disp()
 #include "time_functions.h"  // convertUNIXtoString()
 #include <command_functions.h>
@@ -2136,7 +2137,7 @@ void ui_track_disp(bool bSend)
     }
 
 
-    int pos_seconds = posinfo_interval - ((millis() - (int)posinfo_timer)) / 1000;
+    int pos_seconds = posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval);
 
     char cDatum[20];
     sprintf(cDatum, "%04i-%02i-%02i",
