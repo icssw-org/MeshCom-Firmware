@@ -2852,7 +2852,7 @@ void commandAction(char *umsg_text, bool ble)
     // MCFW-WX1: APRS-IS weather over Wi-Fi (ESP32 only). The passcode is stored but never echoed.
     #if defined(ESP32)
     else
-    if(commandCheck(msg_text+2, (char*)"aprswx") == 0)
+    if(commandMatchesBare(msg_text+2, "aprswx"))   // bare status only: "aprswx on/off" are TG_BRETURN toggle rows (#1288)
     {
         char wxc[16];
         bool callok = aprsIsWxCall(wxc, sizeof(wxc), meshcom_settings.node_aprswxcall, meshcom_settings.node_call);

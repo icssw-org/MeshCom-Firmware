@@ -91,4 +91,22 @@ inline bool commandMatches(const char *msg, const char *command)
 	return tail == '\0' || tail == ' ' || tail == '\r' || tail == '\n';
 }
 
+// True only when `msg` is exactly `command`, with nothing but blanks, CR or LF
+// after it: the bare status form. commandMatches() lets "aprswx on" through a
+// "aprswx" rung (a space ends the token); a status rung that sits next to
+// on/off toggle rows uses this instead, so it cannot catch them (upstream #1288).
+inline bool commandMatchesBare(const char *msg, const char *command)
+{
+	if (!commandMatches(msg, command))
+		return false;
+
+	for (const char *p = msg + strlen(command); *p != '\0'; ++p)
+	{
+		if (*p != ' ' && *p != '\r' && *p != '\n')
+			return false;
+	}
+
+	return true;
+}
+
 #endif // COMMAND_MATCH_H
