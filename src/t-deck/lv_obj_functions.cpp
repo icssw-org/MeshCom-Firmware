@@ -367,6 +367,8 @@ static void tab_icons_recolor(void)
         lv_obj_set_style_text_color(tab_menu_icon_label, lv_color_hex(tab_menu_visible ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
     if(tab_kbl_icon_label != NULL)
         lv_obj_set_style_text_color(tab_kbl_icon_label, lv_color_hex(meshcom_settings.node_kbllightlock ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
+    if(header_lock_icon != NULL)   // TD-LOCK-01: the lock stands in for the keyboard symbol, same colour rule
+        lv_obj_set_style_img_recolor(header_lock_icon, lv_color_hex(meshcom_settings.node_kbllightlock ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
     if(tab_standby_icon_label != NULL)
         lv_obj_set_style_text_color(tab_standby_icon_label, lv_color_hex(meshcom_settings.node_backlightlock ? p.hdr_on : p.hdr_off), LV_PART_MAIN);
 }
@@ -787,10 +789,11 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_center(tab_standby_icon_label);
     tab_icons_recolor();   // initial state colours of the three header icons
 
-    // keyboard-lock glyph: header content starts at x=4 (pad), the three 32 px buttons end at x=100; glyph at x=106 (14x16)
-    header_lock_icon = lv_img_create(tab_menu_header);
+    // TD-LOCK-01: keyboard-lock glyph (14x16) inside the keyboard button, shown instead of the keyboard symbol while
+    // the keys are locked. The header has no free slot right of the three buttons: the BT icon starts at x~106.
+    header_lock_icon = lv_img_create(tab_kbl_button);
     lv_img_set_src(header_lock_icon, &mc_lock_img);
-    lv_obj_align_to(header_lock_icon, tab_standby_button, LV_ALIGN_OUT_RIGHT_MID, 6, 0);
+    lv_obj_center(header_lock_icon);
     lv_obj_add_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
     save_node_keyboardlock = -1;
     tdeck_update_header_standby();   // applies colour and visibility
@@ -2677,18 +2680,27 @@ void tdeck_update_header_bt(void)
 bool save_node_backlightlock=false;
 bool save_node_kbllightlock=false;
 
-// Keyboard-lock glyph (mc_lock_img) in the header, right of the three icon buttons; -1 = not yet applied.
+// TD-LOCK-01: keyboard-lock glyph (mc_lock_img) inside the keyboard button; while locked it replaces the keyboard
+// symbol, coloured like it (keyboard backlight on/off), so it never overlaps the BT icon.
 
 static void header_lock_apply(bool locked)
 {
     if(header_lock_icon == NULL)
         return;
-    lv_obj_set_style_img_recolor(header_lock_icon, lv_color_hex(tdeck_theme_pal().hdr_on), LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(header_lock_icon, LV_OPA_COVER, LV_PART_MAIN);
+    tab_icons_recolor();
     if(locked)
+    {
         lv_obj_clear_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+        if(tab_kbl_icon_label != NULL)
+            lv_obj_add_flag(tab_kbl_icon_label, LV_OBJ_FLAG_HIDDEN);
+    }
     else
+    {
         lv_obj_add_flag(header_lock_icon, LV_OBJ_FLAG_HIDDEN);
+        if(tab_kbl_icon_label != NULL)
+            lv_obj_clear_flag(tab_kbl_icon_label, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 // TD-THEME-01: the header indicators compare against the cached state; after a theme change force the
