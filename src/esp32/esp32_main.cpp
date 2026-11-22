@@ -21,6 +21,7 @@
 #include "loop_breadcrumb.h" // F3: always-on LAST_LOOP_SECTION breadcrumb for TASK_WDT forensics
 #include "track_warning.h" // TRK-01: Warnhinweis bei aktivem Track
 #include <maxhop.h>         // CS-01: plausibility of the persisted text hop limit
+#include "rf_pa.h"          // TBEAM1W-PWR-01: shared SX126x PA setup (boot + runtime)
 #include <RadioLib.h>
 
 #include <Wire.h>               
@@ -2217,19 +2218,11 @@ void esp32setup()
         save_settings();
         printfdeb("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
-        #if defined(BOARD_T_DECK_PRO)
-        if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        if (rfApplyOutputPower(radio, tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
             printlndeb(F("Selected output power is invalid for this module!"));
             Serial.printf("[LoRa] radio config failed, restarting\n");
             esp_restart();
         }
-        #else
-        if (radio.setOutputPower(tx_power, false) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
-            printlndeb(F("Selected output power is invalid for this module!"));
-            Serial.printf("[LoRa] radio config failed, restarting\n");
-            esp_restart();
-        }
-        #endif
 
         // set over current protection limit (accepted range is 0 - 140 mA)
         // NOTE: set value to 0 to disable overcurrent protection

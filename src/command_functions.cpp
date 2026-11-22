@@ -1,6 +1,7 @@
 //2025-09-16 23:036
 #include "command_functions.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "netmode_label.h" // RAK-NETMODE-01: --info NETWORK label
 #include "capture_functions.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
@@ -1371,7 +1372,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            printfdeb("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..Callsign <%s> not valid%s\n", sVar.c_str(), callRejectHint(sVar).c_str());
             return;
         }
 
@@ -1439,8 +1440,8 @@ void commandAction(char *umsg_text, bool ble)
     else
     #endif
     #if defined(NRF52_SERIES)
-    // --dumpsettings: print the raw contents of the nRF52 keyed settings
-    // store file to the console. Bench diagnostic for the boot-2 settings
+    // --dumpsettings: print the contents of the nRF52 keyed settings
+    // store file to the console (passwords and bt_code masked, SEC-DUMP-01). Bench diagnostic for the boot-2 settings
     // loss investigated in docs/w3-settings-verdict.md -- DO_DEBUG 0
     // compiles out every DEBUG_MSG on the migration/save/load path, so this
     // is currently the only way to see what actually reached flash, as
@@ -1540,7 +1541,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--wifistat              WiFi link/counters\n--udpstat               MeshCom UDP RX/TX counters\n");
             #endif
             #if defined(NRF52_SERIES)
-            printdeb("--ethstat               Ethernet link/counters\n--dumpsettings          dump raw settings store\n");
+            printdeb("--ethstat               Ethernet link/counters\n--dumpsettings          dump settings store (secrets masked)\n");
             #endif
             delay(100);
 
@@ -4307,7 +4308,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            printfdeb("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..Callsign <%s> not valid%s\n", sVar.c_str(), callRejectHint(sVar).c_str());
             return;
         }
 
@@ -4356,7 +4357,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            printfdeb("\n[ERR]..UDP-Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..UDP-Callsign <%s> not valid%s\n", sVar.c_str(), callRejectHint(sVar).c_str());
             return;
         }
 
@@ -8053,11 +8054,16 @@ void commandAction(char *umsg_text, bool ble)
             }
 
             printdeb("...NETWORK Mode:");
-            if(meshcom_settings.node_netmode == 0)
-                printlndeb("WiFi");
-            else
-            if(meshcom_settings.node_netmode == 1)
-                printlndeb("ETH");
+            // RAK-NETMODE-01 (#1289): on nRF52 the uplink is fixed by the build, not node_netmode.
+#if defined(NRF52_SERIES)
+#if defined(BOARD_RAK4630) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO)   // RAK4631 (+ RAK13800)
+            printlndeb(infoNetModeLabel(meshcom_settings.node_netmode, true, true));
+#else
+            printlndeb(infoNetModeLabel(meshcom_settings.node_netmode, true, false));
+#endif
+#else
+            printlndeb(infoNetModeLabel(meshcom_settings.node_netmode, false, false));
+#endif
 
             printfdeb("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             printfdeb("...MTU          : %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);

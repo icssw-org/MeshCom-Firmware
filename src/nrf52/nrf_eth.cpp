@@ -19,6 +19,7 @@
 #include <extudp_functions.h>
 
 #include "ntp_async.h"
+#include "eth_dns.h"   // RAK-ETH-DNS-01: own DNS on static IP
 #include <time.h>
 
 #include "printfdeb_functions.h"
@@ -270,10 +271,7 @@ void NrfETH::initethfixIP()
   // händische IP Vergabe
   snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
   snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
-  if(memcmp(meshcom_settings.node_ownip, "44", 2) == 0)
-    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"44.143.0.10");
-  else
-    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"8.8.8.8");
+  snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", ethStaticDns(meshcom_settings.node_owndns, meshcom_settings.node_ownip));
   snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
 
   // Set your Static IP address
@@ -640,10 +638,7 @@ static bool nrfStaticReapplyNoReset(const IPAddress &cfg, uint32_t link_wait_ms)
 {
   snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
   snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
-  if(memcmp(meshcom_settings.node_ownip, "44", 2) == 0)
-    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"44.143.0.10");
-  else
-    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"8.8.8.8");
+  snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", ethStaticDns(meshcom_settings.node_owndns, meshcom_settings.node_ownip));
   snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
 
   IPAddress dns(8, 8, 8, 8);

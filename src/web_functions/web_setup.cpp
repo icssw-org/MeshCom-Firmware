@@ -959,7 +959,7 @@ void webSetup_getParam(setupStruct *setupData){
         return;
     } else
 
-    if(setupData->paramName.equals("tempoffsetindoor")) {
+    if(setupData->paramName.equals("tempoffsetoutdoor")) {
         setupData->returnValue = String(meshcom_settings.node_tempo_off);    
         return;
     } else

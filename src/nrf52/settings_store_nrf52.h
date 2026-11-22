@@ -79,7 +79,8 @@ SettingsLoadResult settingsStoreLoad();
 // format().
 bool settingsStoreRemove();
 
-// Prints the raw contents of the keyed store to Serial, for bench diagnosis.
+// Prints the contents of the keyed store to Serial, for bench diagnosis. Secret rows
+// (passwords, bt_code) are masked, see settings_dump_mask.h (SEC-DUMP-01).
 // Returns false if the file does not exist or cannot be read.
 bool settingsStoreDump(void);
 

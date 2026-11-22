@@ -20,6 +20,7 @@
 using namespace Adafruit_LittleFS_Namespace;
 
 #include "WisBlock-API.h" // extern s_meshcom_settings meshcom_settings;
+#include "settings_dump_mask.h" // settingsDumpMaskLine() for settingsStoreDump()
 #include "settings_schema.h" // settings_schema::fields() / fieldCount()
 
 namespace
@@ -422,7 +423,17 @@ bool settingsStoreDump(void)
 	// is text ("key=value\n" lines, settings_store.h), and printf is the one Serial primitive every
 	// build of this codebase already relies on (including the native test double, which stubs only
 	// printf -- see test/test_nrf52_settings_paths/stubs).
+	//
+	// SEC-DUMP-01: the file is assembled into lines and each line goes through settingsDumpMaskLine(),
+	// so passwords and the BLE PIN never reach the console. A line that fills the buffer without a
+	// newline is decided on its key prefix: secret key -> masked form printed once, rest discarded
+	// (fail closed); other key -> buffer flushed and the rest streamed raw.
 	char chunk[64];
+	char line[192];
+	char masked[sizeof(line) + 1];
+	size_t line_len = 0;
+	bool discard = false; // over-long secret line: skip until newline
+	bool stream = false;  // over-long non-secret line: pass through until newline
 	uint32_t remaining = stored_size;
 	bool read_error = false;
 	while (remaining > 0)
@@ -434,8 +445,59 @@ bool settingsStoreDump(void)
 			read_error = true;
 			break;
 		}
-		Serial.printf("%.*s", got, chunk);
+		for (int i = 0; i < got; i++)
+		{
+			const char c = chunk[i];
+			if (c == '\n')
+			{
+				if (!discard && !stream)
+				{
+					size_t m = settingsDumpMaskLine(line, line_len, masked, sizeof(masked));
+					Serial.printf("%.*s", (int)m, masked);
+				}
+				Serial.printf("\n");
+				line_len = 0;
+				discard = stream = false;
+			}
+			else if (discard)
+			{
+				// dropped
+			}
+			else if (stream)
+			{
+				Serial.printf("%c", c);
+			}
+			else if (line_len < sizeof(line))
+			{
+				line[line_len++] = c;
+			}
+			else
+			{
+				// Buffer full without a newline: decide on the key prefix.
+				size_t eq = 0;
+				while (eq < line_len && line[eq] != '=')
+					eq++;
+				if (eq < line_len && settingsDumpKeyIsSecret(line, eq))
+				{
+					size_t m = settingsDumpMaskLine(line, line_len, masked, sizeof(masked));
+					Serial.printf("%.*s", (int)m, masked);
+					discard = true;
+				}
+				else
+				{
+					Serial.printf("%.*s", (int)line_len, line);
+					Serial.printf("%c", c);
+					stream = true;
+				}
+			}
+		}
 		remaining -= (uint32_t)got;
+	}
+	if (line_len > 0 && !discard && !stream)
+	{
+		// Unterminated last line.
+		size_t m = settingsDumpMaskLine(line, line_len, masked, sizeof(masked));
+		Serial.printf("%.*s", (int)m, masked);
 	}
 	settings_store_file.close();
 
