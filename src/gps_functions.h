@@ -37,6 +37,9 @@ unsigned long detectBaudrate();
 //bool GPS_Init(int iGpsBaud);
 //unsigned int GPS_Loop();     // Non-blocking! In jedem loop()-Durchlauf aufrufen
 bool WZ_GPS_HasFix();
+// CET-SCATTER-01: true while the GPS module delivers a valid, plausible date and time that is
+// fresh (< 5 s), with or without a position fix. Only reads; sets no clock.
+bool WZ_GPS_TimeLive();
 String WZ_GPS_GetMaidenhead();  // Maidenhead-Locator (fuer Amateurfunk)
 
 // GPS-01: drain the GPS UART into the parser. Call every loop pass; the

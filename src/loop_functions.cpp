@@ -33,12 +33,14 @@
 #include "loop_functions_extern.h"   // REMOTE_LED_PIN rule + RM LED levels
 #include "cet_age.h"   // CET-AGE-01: back-step limits used by cet_filter.h
 #include "cet_filter.h" // CET-SCATTER-01 Part A: forward-only {CET} filter
+#include "time_rank.h"  // CET-SCATTER-01 Part B: time-source rank with holdover
 #include "board_led.h"
 #if defined(ESP32)
 #include "esp32/esp32_pmu.h"   // chargeLedFitted()
 #endif
 
 #include "TinyGPSPlus.h"
+#include "gps_functions.h"   // WZ_GPS_TimeLive() ({CET} rank gate)
 
 #include "printfdeb_functions.h"
 
@@ -63,7 +65,14 @@
 #include "pong_format.h"   // {pong} payload id as unsigned, display of last 3 digits
 #include "own_msg_status.h"   // durable delivery state of own text messages (web GUI ticks)
 
+static TimeRankState s_timeRank;   // CET-SCATTER-01 Part B
 static CetFilter s_cetFilter;   // CET-SCATTER-01 Part A (zero-initialised; Part B needs file scope)
+// Called by CLK_SRC() at every set site (clock.h). A higher source also references the
+// {CET} filter, so a later beacon is filtered instead of taken as FIRST.
+void timeRankNoteSrc(const char *src)
+{
+    timeRankNoteRef(&s_timeRank, &s_cetFilter, timeRankOf(src), millis());
+}
 bool gpsDetected = false;
 bool gpsInitDone = false;
 
@@ -3028,8 +3037,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     else
     if(mcStartsWith(aprsmsg.msg_payload, "{CET}") > 0)
     {
-        // CET Meldungen nur annehmen wenn nichr GPS, RTC oder Handyverbindung vorhanden ist
-        if(!bRTCON && !posinfo_fix && !bNTPDateTimeValid) // !!!! erst aktivieren wenn PHone regelmässig zeit liefert  && !bPhoneTimeValid)
+        // CET-SCATTER-01 Part B: rank gate inside the filter call below (cetBeaconGate); a higher
+        // source (live flag or holdover) holds the beacon.
         {
             uint16_t Year=2000;
             uint16_t Month=1;
@@ -3056,31 +3065,42 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 // a forward step never overshoots; a step back needs a quorum of stale beacons.
                 // delta = payload UTC - node clock UTC (node_date_* is local, minus node_utcoff).
                 static unsigned long cetLastAcceptMs = 0;
-                CetVerdict cetV = CET_V_FIRST;
                 long cetDeltaS = 0;
                 uint32_t cetPlLocal = 0, cetNowLocal = 0;
                 const unsigned long cetSinceMs = millis() - cetLastAcceptMs;
-                if(cetEpochFromFields(Year, Month, Day, Hour, Minute, Second, &cetPlLocal) &&
-                   cetEpochFromFields((uint32_t)meshcom_settings.node_date_year, (uint32_t)meshcom_settings.node_date_month,
+                const bool cetPlOk = cetEpochFromFields(Year, Month, Day, Hour, Minute, Second, &cetPlLocal);
+                const bool cetNowOk = cetEpochFromFields((uint32_t)meshcom_settings.node_date_year, (uint32_t)meshcom_settings.node_date_month,
                                       (uint32_t)meshcom_settings.node_date_day, (uint32_t)meshcom_settings.node_date_hour,
                                       (uint32_t)meshcom_settings.node_date_minute, (uint32_t)meshcom_settings.node_date_second,
-                                      &cetNowLocal))
+                                      &cetNowLocal);
+                if(cetPlOk && cetNowOk)
                 {
                     const int32_t cetOffS = (int32_t)(meshcom_settings.node_utcoff * 3600.0f + (meshcom_settings.node_utcoff < 0 ? -0.5f : 0.5f));
                     cetDeltaS = (long)((int32_t)cetPlLocal - ((int32_t)cetNowLocal - cetOffS));
-                    cetV = cetFilterDecide(&s_cetFilter, (int32_t)cetDeltaS, millis());
                 }
-                else
-                    cetFilterNoteRef(&s_cetFilter);   // clock never set: first beacon sets it
+                // live rank: NTP > GPS (fix, or valid module time without fix) > RTC
+                bool cetGpsLive = posinfo_fix;
+                #ifdef ENABLE_GPS
+                if(!cetGpsLive) cetGpsLive = WZ_GPS_TimeLive();
+                #endif
+                TimeRank cetLive = bNTPDateTimeValid ? TR_NTP : (cetGpsLive ? TR_GPS : (bRTCON ? TR_RTC : TR_NONE));
+                TimeRankState *cetRank = &s_timeRank;
+                const CetGateOut cetG = cetBeaconGate(cetRank, &s_cetFilter, cetLive, cetPlOk, cetNowOk, (int32_t)cetDeltaS, millis());
+                const CetVerdict cetV = cetG.v;
 
-                if(cetV == CET_V_BACK)
+                if(cetG.action == CETG_HOLD_RANK)
+                    Serial.printf("[CET];hold;why;rank;by;%s;held_s;%lu;src;%s;ms;%lu\n", timeRankName(cetG.by), (unsigned long)cetG.held_s, aprsmsg.msg_source_call, (unsigned long)millis());
+                else if(cetG.action == CETG_BAD_PAYLOAD)
+                    Serial.printf("[CET];skip;why;bad_payload;src;%s;ms;%lu\n", aprsmsg.msg_source_call, (unsigned long)millis());
+                else if(cetV == CET_V_BACK)
                     Serial.printf("[CET];skip;back_s;%ld;since_s;%lu;quorum;%u;src;%s;ms;%lu\n", -cetDeltaS, cetSinceMs / 1000UL, (unsigned)s_cetFilter.n_back, aprsmsg.msg_source_call, (unsigned long)millis());
                 else if(cetV == CET_V_BAND)
                     Serial.printf("[CET];hold;why;band;delta_s;%ld;src;%s;ms;%lu\n", cetDeltaS, aprsmsg.msg_source_call, (unsigned long)millis());
 
-                if(cetVerdictApplies(cetV))
+                if(cetG.action == CETG_FILTER && cetVerdictApplies(cetV))
                 {
                     Serial.printf("[CET];apply;why;%s;delta_s;%ld;src;%s;ms;%lu\n", cetVerdictName(cetV), cetDeltaS, aprsmsg.msg_source_call, (unsigned long)millis());
+                    CLK_SRC("CET");
                     MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                     snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
                     cetLastAcceptMs = millis();

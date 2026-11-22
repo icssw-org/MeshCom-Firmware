@@ -1253,6 +1253,7 @@ void commandAction(char *umsg_text, bool ble)
 
             if(Year > 2023)
             {
+                CLK_SRC("CMD");
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"HAND");
             }

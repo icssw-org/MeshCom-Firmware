@@ -24,6 +24,12 @@
 
 #include "time.h"
 
+// CET-SCATTER-01 Part B: every clock set site names its source (NTP, GPS, RTC, PHONE, CMD, SER, CET) right
+// before MyClock.setCurrentTime(); loop_functions.cpp keeps the time-source rank, so {CET} beacons are only
+// taken while no higher source is live or recent.
+void timeRankNoteSrc(const char *src);
+#define CLK_SRC(s) timeRankNoteSrc(s)
+
 #pragma once
 
 class Clock {

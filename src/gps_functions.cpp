@@ -1215,6 +1215,7 @@ int WZ_GPS_Loop() {
                && gpsDatePlausible((int)gpsData.year, (int)gpsData.month, (int)gpsData.day)
                && gpsTimePlausible((int)gpsData.hour, (int)gpsData.minute, (int)gpsData.second))
             {
+                CLK_SRC("GPS");
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, gpsData.year, gpsData.month, gpsData.day, gpsData.hour, gpsData.minute, gpsData.second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
             }
@@ -1367,6 +1368,7 @@ int WZ_GPS_Loop() {
                && gpsDatePlausible((int)gpsData.year, (int)gpsData.month, (int)gpsData.day)
                && gpsTimePlausible((int)gpsData.hour, (int)gpsData.minute, (int)gpsData.second))
             {
+                CLK_SRC("GPS");
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, gpsData.year, gpsData.month, gpsData.day, gpsData.hour, gpsData.minute, gpsData.second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
                 
@@ -1423,6 +1425,15 @@ bool WZ_GPS_AltConverged()
  */
 bool WZ_GPS_HasFix() {
     return gpsInitDone && gpsData.valid && gpsData.age_ms < 5000;
+}
+
+// CET-SCATTER-01: same validity tests as the no-fix clock branch in WZ_GPS_Loop(), plus freshness.
+// gpsData.* holds the last copy; TinyGPS date/time accessors are not read here (year() clears isUpdated).
+bool WZ_GPS_TimeLive() {
+    return bGPSON && gpsDetected && gps.date.isValid() && gps.time.isValid() && gps.time.age() < 5000
+        && gpsData.year > 2023
+        && gpsDatePlausible((int)gpsData.year, (int)gpsData.month, (int)gpsData.day)
+        && gpsTimePlausible((int)gpsData.hour, (int)gpsData.minute, (int)gpsData.second);
 }
 
 /**
