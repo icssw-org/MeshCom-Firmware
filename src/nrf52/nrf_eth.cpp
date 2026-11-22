@@ -821,6 +821,9 @@ int NrfETH::resetDHCP()
 void NrfETH::initETH_HW()
 {
   EthStall st("hw_init");
+  // ETH-06: the reset below wipes every socket in the chip. Drop the EXTUDP socket first, or the next datagram
+  // waits forever in socketSendUDP() (DB0AIS-12, 2026-11-14). No-op at boot (no socket open yet).
+  externUdpChipReset();
   pinMode(WB_IO2, OUTPUT);
   digitalWrite(WB_IO2, HIGH); // Enable power supply.
 
