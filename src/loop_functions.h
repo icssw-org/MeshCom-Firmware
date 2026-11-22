@@ -96,6 +96,11 @@ int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
                         int retryCountIn = -1, bool clearSlotFirst = false,
                         uint8_t kind = 0, const NbrMask *need = nullptr, const NbrMask *alone = nullptr);
 
+// RM-LOSTREPLY-01 (D2): own RM1 reply. Like addTxRingEntryOnce(), but on a full
+// ring it may evict the oldest QUEUED (DONE, not in-flight) ACK when nothing of
+// lower priority can be evicted. Everything else keeps the tail-drop rule.
+int addTxRingEntryRmReply(const uint8_t* frame, uint16_t len, const char* source);
+
 // checkOwnRx()/checkServerRx() werden jetzt in dedup_functions.h deklariert.
 int checkOwnTx(unsigned int msg_id);
 void insertOwnTx(unsigned int id);

@@ -5007,7 +5007,12 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
         user_msg_status = 0xFF; // non-text frames: no retransmission (unchanged)
     }
 
-    int w = bUseOnce ? addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "user_msg", 0)
+    int w;
+    // own replies only: a KISS client's frame (src_override) never gets the ACK eviction
+    if(bUseOnce && bDM && !(src_override && src_override[0]) && dmTextIsRm1Reply(aprsmsg.msg_payload))
+        w = addTxRingEntryRmReply(msg_buffer, (uint16_t)aprsmsg.msg_len, "user_msg");   // RM-LOSTREPLY-01
+    else
+        w = bUseOnce ? addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "user_msg", 0)
                       : addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, user_msg_status, "user_msg", 0);
 
     if(bDisplayRetx && w >= 0)
