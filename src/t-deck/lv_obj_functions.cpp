@@ -11,6 +11,7 @@
 
 #include "lv_obj_functions.h"
 #include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
+#include "batt_label.h"   // TDECK-VOLT-01: shared battery label formatter
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include <configuration.h>
 #include <aprs_structures.h>
@@ -2576,8 +2577,10 @@ static void update_header_batt_indicator(float batt, int proz)
     }
 
     int clamped_proz = clamp_int(proz, 0, 100);
+    // TDECK-VOLT-01 (#1312): --volt shows "%.1fV", otherwise the clamped percent.
     char percent_text[8];
-    snprintf(percent_text, sizeof(percent_text), "%d%%", clamped_proz);
+    batt_label_format(percent_text, sizeof(percent_text), batt, clamped_proz, bDisplayVolt,
+                      false, 0, 1, "USB", true);
     label_set_if_changed(header_batt_label, percent_text);
 
     const char *icon = LV_SYMBOL_BATTERY_EMPTY;

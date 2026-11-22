@@ -26,10 +26,10 @@
 #include "nrf52_functions.h"
 #endif
 
+#include "page_ring.h"   // DISP-PAGE-01/03: click walk over the message ring; WP_MSG_BROWSE_MAX (the last 4)
+
 #if defined(WP_DISP)
-// Anzahl der per 1x-Klick durchblaetterbaren letzten Nachrichten (Wireless Paper + E213,
-// gemeinsamer 2.13"-Display-Pfad): die letzten 4 (original-kompatibel).
-#define WP_MSG_BROWSE_MAX 4
+extern bool wpLiveNewest;   // loop_functions.cpp: the panel shows the newest message of an arrival no click has stepped from
 #endif
 
 void singleClick()
@@ -116,9 +116,9 @@ void singleClick()
         return;
       }
 
-      // End of the stored messages (the status slot 5, or an empty slot): the status page
+      // End of the stored messages (an empty slot): the status page
       // first, a click while it is shown opens the GPS page.
-      if(pagePointer == 5 || pageLastLineAnz[pagePointer] == 0)
+      if(pageLastLineAnz[pagePointer] == 0)
       {
         if(t114StatusAt != 0 && (millis() - t114StatusAt) < 6000)
         {
@@ -146,102 +146,47 @@ void singleClick()
     // (PAGE_MAX=10) koennte mehr, aus Kompatibilitaet zeigen wir aber nur die letzten 4.
     {
       static bool wpStatusStep = false;                 // naechster Klick zeigt die Status-Seite
-      int wpNewest = pageLastPointer - 1;               // Slot der neuesten Nachricht
-      if(wpNewest < 0) wpNewest += PAGE_MAX;
 
-      // KEINE Nachricht im Ringpuffer: Original/PR -> Statusschirm; Preview -> "No Message".
-      if(pageLastLineAnz[wpNewest] == 0)
+      // DISP-PAGE-03: die Klick-Logik (Status-Schritt, Fenster, Rang) steckt in page_ring.h
+      // (wpBrowseClick); liveNewest = die frisch eingetroffene Nachricht ist schon auf dem Panel,
+      // der erste Klick geht daher zur naechstaelteren.
+      WpBrowseState wpState = { wpStatusStep, wpLiveNewest, pagePointer };
+      const WpBrowseResult wpRes = wpBrowseClick(pageLastLineAnz, PAGE_MAX, pageLastPointer, WP_MSG_BROWSE_MAX, wpState);
+
+      if(bDisplayCont)
+          Serial.printf("[WPBROWSE];slot;%d;rank;%d;live;%d\n", wpRes.status ? -1 : wpRes.slot, wpRes.rank, wpLiveNewest ? 1 : 0);
+
+      wpStatusStep = wpRes.next.statusStep;
+      pagePointer  = wpRes.next.pointer;
+      wpLiveNewest = false;
+
+      if(wpRes.status)
       {
-        sendDisplayHead(true);
-        wpStatusStep = false;
-        pagePointer  = wpNewest;
-        return;
+          sendDisplayHead(true);
+          return;
       }
-
-      // Status-Schritt (nach dem Fensterrand/der aeltesten) -> Statusschirm, dann Loop
-      if(wpStatusStep)
-      {
-        sendDisplayHead(true);
-        wpStatusStep = false;
-        pagePointer  = wpNewest;
-        return;
-      }
-
-      if(pageLastLineAnz[pagePointer] == 0)             // Sicherheit: aktueller Slot leer -> neueste
-        pagePointer = wpNewest;
-
-      // Anzahl gespeicherter Nachrichten (zusammenhaengend ab der neuesten)
-      int wpN = 0;
-      {
-        int s = wpNewest;
-        for(int n = 0; n < PAGE_MAX; n++)
-        {
-          if(pageLastLineAnz[s] == 0) break;
-          wpN++;
-          s--; if(s < 0) s += PAGE_MAX;
-        }
-      }
-      // sichtbares Fenster = min(vorhanden, WP_MSG_BROWSE_MAX)
-      int wpShow  = (wpN < WP_MSG_BROWSE_MAX) ? wpN : WP_MSG_BROWSE_MAX;
-      // Schritte unterhalb der neuesten (0 = neueste); ausserhalb Fenster -> auf neueste zuruecksetzen
-      int wpSteps = (wpNewest - pagePointer + PAGE_MAX) % PAGE_MAX;
-      if(wpSteps >= wpShow) { pagePointer = wpNewest; wpSteps = 0; }
-
-      // Index oben rechts: neueste = wpShow (max 4) ... Fensterrand = 1; 0 = Home/Status.
-      int wpRank = wpShow - wpSteps;
 
       // Nachricht anzeigen (Helper in loop_functions.cpp; kompaktes Layout + Voll-Refresh).
-      wpShowStoredMessage(pagePointer, wpRank);
-
-      // naechste (aeltere) bestimmen; am Fensterrand (wpSteps+1 >= wpShow) ODER aelteste erreicht
-      // (naechster Slot leer) -> naechster Klick zeigt Status, danach wieder bei der neuesten.
-      int wpNext = pagePointer - 1;
-      if(wpNext < 0) wpNext += PAGE_MAX;
-      if((wpSteps + 1) >= wpShow || pageLastLineAnz[wpNext] == 0)
-        wpStatusStep = true;
-      else
-        pagePointer = wpNext;
+      wpShowStoredMessage(wpRes.slot, wpRes.rank);
 
       return;
     }
     #endif
 
-    int pageNo = pagePointer + 1;   // number shown top right
-
-    #if defined(BOARD_E290)
+    // DISP-PAGE-01: click order newest -> ... -> oldest -> status page -> newest, on every board; the
+    // walk ends at the first empty slot of the ring (page_ring.h), not at the absolute slot 5. Number
+    // top right = rank among the stored messages (newest = highest, like E290 and Wireless Paper).
+    // An empty ring or an out-of-range pointer (boot) is the status page, never an index below 0.
+    const PageClickStep clickStep = pageClickStep(pageLastLineAnz, PAGE_MAX, pageLastPointer, pagePointer);
+    if(clickStep.kind == PageClickKind::Status)
     {
-      // E290: ring of PAGE_MAX slots, the slot after the newest message is always empty.
-      // Click order: newest -> ... -> oldest -> status page -> newest ...
-      // Number top right = position among the stored messages (newest = highest, like Wireless Paper).
-      int e290Newest = pageLastPointer - 1;
-      if(e290Newest < 0) e290Newest += PAGE_MAX;
-
-      if(pageLastLineAnz[pagePointer] == 0)      // past the oldest message (or none stored)
-      {
-        pagePointer = e290Newest;
+        pagePointer = clickStep.nextPointer;
         sendDisplayHead(true);
         return;
-      }
+    }
 
-      int e290Count = 0, e290Slot = e290Newest;
-      for(int n = 0; n < PAGE_MAX; n++)
-      {
-        if(pageLastLineAnz[e290Slot] == 0) break;
-        e290Count++;
-        e290Slot--; if(e290Slot < 0) e290Slot += PAGE_MAX;
-      }
-      pageNo = e290Count - ((e290Newest - pagePointer + PAGE_MAX) % PAGE_MAX);
-    }
-    #else
-    if(pagePointer == 5)
-    {
-      sendDisplayHead(true);
-      return;
-    }
-    #endif
-      
-    if(pageLastLineAnz[pagePointer] == 0)
-      pagePointer = pageLastPointer-1;
+    pagePointer = clickStep.slot;
+    int pageNo = clickStep.rank;   // number shown top right
 
     bDisplayIsOff=false;
 
@@ -305,9 +250,7 @@ void singleClick()
       sendDisplay1306(false, true, 0, 0, (char*)"#N");
     #endif
 
-    pagePointer--;
-    if(pagePointer < 0)
-        pagePointer=PAGE_MAX-1;
+    pagePointer = clickStep.nextPointer;
 
     pageHold=5;
   }
@@ -519,6 +462,24 @@ void init_onebutton()
   {
       Serial.printf("[OBUT]...One Button GPIO(%i) not activated\n", iButtonPin);
   }
+}
+
+// BTN-OFF-01 (P-0345): "--button off" detaches every handler init_onebutton() attached (OneButton
+// ignores a null callback), so the button stops acting at once instead of at the next reboot.
+// btn.tick() stays unguarded at its call sites, and the INSTRUMENT "--btn" hook still reaches
+// the handlers directly. Keep this list in step with init_onebutton().
+void deinit_onebutton()
+{
+    btn.attachClick(nullptr);
+    btn.attachDoubleClick(nullptr);
+    btn.attachMultiClick(nullptr);
+    btn.attachLongPressStart(nullptr);
+    #if defined(MC_TBEAM_VERYLONG_SLEEP)
+    btn.attachDuringLongPress(nullptr);
+    #endif
+    btn.reset();   // drop a half-finished gesture
+
+    Serial.printf("[OBUT]...One Button GPIO(%i) detached\n", iButtonPin);
 }
 // setup
 

@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 void init_onebutton(void);
+void deinit_onebutton(void);   // BTN-OFF-01: --button off detaches the handlers
 
 #include <OneButton.h>
 extern OneButton btn;

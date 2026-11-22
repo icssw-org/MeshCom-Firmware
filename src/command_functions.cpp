@@ -46,6 +46,8 @@
 #include "board_led.h"       // LED-04/09/10: boardLedPinFree, ledFitted, ledNotFittedList
 #include "charge_led_mode.h"  // CHG-01/02: SSET2_CHGLED_CFG marker for the charge LED rows
 #include "rm_commands.h"      // RM_NAME_MAX / RM_ATXT_MAX: the --setname / --atxt clip lengths
+#include "pos_text_budget.h"  // APRS-TXT-03: --info beacon text drop line
+#include "charset_filter.h"   // charset_utf8_safe_truncate / charset_wire_field: the --atxt clip and the on-air notice
 #include "rm_validate.h"      // RM GUI W1b: one password validator for --passwd, the web field and the sender
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
@@ -461,6 +463,7 @@ static void gpioFnWins(PinFunc f)
 #endif
 }
 static void tg_post_button_on() { gpioFnWins(PIN_FN_BUTTON); init_onebutton(); }
+static void tg_post_button_off() { deinit_onebutton(); }   // BTN-OFF-01 (P-0345): detach now, not at the next reboot
 static void tg_post_680_off() { bme680_found = false; }
 static void tg_post_811_off() { mcu811_found = false; }
 // EXT-02 (second half): --extudp off used to leave hasExternIPaddress (and
@@ -629,7 +632,7 @@ static const ToggleRow COMMAND_TOGGLES[] =
     { "--shortpath off",      &bSHORTPATH,           &meshcom_settings.node_sset,     0x00007BFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_LN },
     { "--shortpath on",       &bSHORTPATH,           &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0400,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_F },
     { "--button on",          &bButtonCheck,         &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0010,       tg_post_button_on,             TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
-    { "--button off",         &bButtonCheck,         &meshcom_settings.node_sset,     0x00007FEF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--button off",         &bButtonCheck,         &meshcom_settings.node_sset,     0x00007FEF,   0x00000000,   tg_post_button_off,            TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
     { "--nomsgall on",        &bNoMSGtoALL,          &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0002,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
     { "--390 off",            &bBMP3ON,              &meshcom_settings.node_sset3,    0xFFFFFFEF,   0x00000000,   nullptr,                       TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
     { "--680 off",            &bBME680ON,            &meshcom_settings.node_sset2,    0xFFFFFFFB,   0x00000000,   tg_post_680_off,               TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
@@ -1607,7 +1610,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
             delay(100);
 
-            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--track on/off          SmartBeaconing\n");
+            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt), up to 39 bytes stored, first 25 bytes go on air\n--aprsmc <call>         APRS destination call (default APRSMC)\n--track on/off          SmartBeaconing\n");
             #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
             printdeb("--gps on/off            GPS chip\n");
             #ifndef BOARD_T_DECK_PRO
@@ -1876,6 +1879,8 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
 
         save_settings();
+
+        pageHold = 0;   // P-0384: a browse click holds the page for 5 s; --display off must not wait for it
 
         sendDisplayHead(false);
 
@@ -4289,10 +4294,20 @@ void commandAction(char *umsg_text, bool ble)
         if(sVar == "none")
             sVar = "";
 
+        // APRS-TXT-02: byte cap, but never inside a UTF-8 sequence
         if(sVar.length() > RM_ATXT_MAX)
-            sVar = sVar.substring(0, RM_ATXT_MAX);
+            sVar = sVar.substring(0, charset_utf8_safe_truncate(sVar.c_str(), sVar.length(), RM_ATXT_MAX));
 
         snprintf(meshcom_settings.node_atxt, sizeof(meshcom_settings.node_atxt), "%s", sVar.c_str());
+
+        // APRS-TXT-02 (D3 A): up to 39 bytes are stored, APRS_ATXT_WIRE_MAX go on air
+        {
+            char cwire[sizeof(meshcom_settings.node_atxt)];
+            size_t icut = 0;
+            charset_wire_field(meshcom_settings.node_atxt, cwire, sizeof(cwire), APRS_ATXT_WIRE_MAX, &icut);
+            if(icut > 0)
+                printfdeb("\n[ATXT] %u bytes stored, only the first %u bytes go on air\n", (unsigned)strlen(meshcom_settings.node_atxt), (unsigned)strlen(cwire));
+        }
 
         if(ble)
         {
@@ -7896,6 +7911,13 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...APRSMC: %s\n...ATXT: %s\n...NAME: %s\n...BLE : %s %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_aprsmc, meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"), bleTxStats, (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
+
+            // APRS-TXT-03 (D4 B0): only while the beacon is dropping comment and/or name
+            {
+                char _ptxt[80];
+                if(posTextInfoLine(_ptxt, sizeof(_ptxt), POS_TEXT_BUDGET) > 0)
+                    printfdeb("...%s\n", _ptxt);
+            }
 
             // BLC-03: BLE link counters (connects, disconnects by class, failed connects, advertising restarts).
             char bleLinkStats[128];

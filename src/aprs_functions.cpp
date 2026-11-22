@@ -1265,14 +1265,11 @@ uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10
     msg_buffer[2]=0x01;
 
     // CHR-02: strip APRS structure separators and truncate on a UTF-8
-    // boundary at the same 25-byte cap decodeAPRSPOS() applies on receive
-    // (aprs_functions.cpp:632), so a receiver's byte-counting parser never
-    // inherits a split multi-byte sequence.
+    // boundary at APRS_ATXT_WIRE_MAX bytes (the cap decodeAPRSPOS() applies on
+    // receive), so a receiver's byte-counting parser never inherits a split
+    // multi-byte sequence.
     char catxt[sizeof(meshcom_settings.node_atxt)];
-    snprintf(catxt, sizeof(catxt), "%s", meshcom_settings.node_atxt);
-    size_t iatxt = charset_filter_apply(catxt, strlen(catxt), CHARSET_FILTER_STRIP_SEPARATORS);
-    iatxt = charset_utf8_safe_truncate(catxt, iatxt, 25);
-    catxt[iatxt] = 0x00;
+    charset_wire_field(meshcom_settings.node_atxt, catxt, sizeof(catxt), APRS_ATXT_WIRE_MAX, nullptr);
 
     snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt);
 
@@ -1380,13 +1377,10 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
     strtmp.trim();
 
     // CHR-02: strip APRS structure separators and truncate on a UTF-8
-    // boundary -- replaces the previous byte-blind substring(0,16), which
-    // could cut a multi-byte sequence in half.
+    // boundary at APRS_ATXT_WIRE_MAX bytes (APRS-TXT-01: was 16, now the same
+    // cap as the mesh position; no #name in this frame, D2).
     char catxt[sizeof(meshcom_settings.node_atxt)];
-    snprintf(catxt, sizeof(catxt), "%s", strtmp.c_str());
-    size_t iatxt = charset_filter_apply(catxt, strlen(catxt), CHARSET_FILTER_STRIP_SEPARATORS);
-    iatxt = charset_utf8_safe_truncate(catxt, iatxt, 16);
-    catxt[iatxt] = 0x00;
+    charset_wire_field(strtmp.c_str(), catxt, sizeof(catxt), APRS_ATXT_WIRE_MAX, nullptr);
 
     // WIDE1-1 wie in encodeLoRaAPRS()/encodeLoRaAPRSText(): LoRa-APRS-Digipeater
     // wiederholen nur Frames mit diesem Alias (#1174).

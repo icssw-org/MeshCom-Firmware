@@ -11,6 +11,7 @@
 
 #include "loop_functions.h"
 #include "display_clock_gate.h"   // sendDisplayTime() redraw decision
+#include "page_ring.h"           // DISP-PAGE-01/03: ring count, WP browse window
 #include "gfx_charmap.h"   // national characters on the GFXfont displays (E290, WP, E213)
 #include "text_fold.h"     // CHARS-01: fold what the display font lacks
 #include "ack_attribution.h"
@@ -48,6 +49,7 @@
 
 #include "via_functions.h"
 #include "charset_filter.h"
+#include "pos_text_budget.h"
 #include "msgid_counter.h"
 #include <counters_store.h>
 #include "setlog_lines.h"
@@ -611,6 +613,10 @@ bool bWpCompactLayout = false;
 // 0 = kein Index (Home/Status, frische Nachricht). Wird in wpRefreshClock mitgezeichnet, damit
 // der 10-s-Statuszeilen-Refresh die Ziffer nicht wegloescht.
 int wpMsgIdx = 0;
+// DISP-PAGE-03: true exactly while the panel shows the newest message of an arrival that no click has
+// stepped from (set where the slot is stored in sendDisplay1306, cleared by wpShowStoredMessage and
+// sendDisplayHead). The first click then goes to the next older message, not to the same one.
+bool wpLiveNewest = false;
 
 
 void wpApplyLayout(bool compact)
@@ -1420,6 +1426,10 @@ static bool e290FullRefreshDue()
 }
 #endif
 
+#if defined(WP_DISP)
+static void wpDrawMsgIdx();   // defined below; DISP-PAGE-03 draws the counter on the live render
+#endif
+
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
@@ -1572,6 +1582,15 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     bool bE290Full = e290FullRefreshDue();
                     if(bE290Full)
                         epaper_display.fastmodeOff();
+                    #endif
+                    #if defined(WP_DISP)
+                    if(iDisplayType == 0 && bNeu)
+                    {
+                        // DISP-PAGE-03: a fresh message shows its counter (= first click's rank). The slot was
+                        // written above, pageLastPointer has not advanced yet: the newest is pageLastPointer.
+                        wpMsgIdx = wpBrowseShow(pageRingCount(pageLastLineAnz, PAGE_MAX, (pageLastPointer + 1) % PAGE_MAX), WP_MSG_BROWSE_MAX);
+                        wpDrawMsgIdx();
+                    }
                     #endif
                     epaper_display.update();
                     #if defined(BOARD_E290)
@@ -1790,6 +1809,9 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         if(iDisplayType == 0 && bNeu)
         {
             pagePointer=pageLastPointer;
+            #if defined(WP_DISP)
+            wpLiveNewest = true;   // DISP-PAGE-03: the panel shows the newest message, no click has stepped from it
+            #endif
 
             pageLastPointer++;
             if(pageLastPointer >= PAGE_MAX)
@@ -1820,6 +1842,8 @@ void oledStat()
                   , (unsigned long)oled_last_crc, (unsigned long)oled_skipped);
 }
 
+#include "batt_label.h"     // TDECK-VOLT-01: shared battery label (OLED, TFT, T-Deck)
+
 #if defined(BOARD_HELTEC_T114)
 #include "t114_gps_page.h"
 extern bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr);   // nrf52_main.cpp
@@ -1827,13 +1851,14 @@ extern bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr);   // nrf52_main.cpp
 
 void sendDisplayHead(bool bInit)
 {
-    if((bSetDisplay || pageHold > 0) && !bInit)
+    if(dispHeadBlocked(bSetDisplay, pageHold, bInit))
         return;
 
     bSetDisplay=true;
 
     #if defined(WP_DISP)
     wpMsgIdx = 0;       // Home/Info-Seite -> keine Nachrichten-Ziffer oben rechts
+    wpLiveNewest = false;
     #endif
 
     #ifdef BOARD_T5_EPAPER
@@ -2269,21 +2294,11 @@ static void sendDisplayClockLine()
     char cbatt[10];
     char cstatus[10];
 
+    // TDECK-VOLT-01 (#1312): one label helper for OLED, TFT and T-Deck; OLED output unchanged
     #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT) || defined(BOARD_T_ECHO)
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 4, 1, " USB", false);
     #else
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
-
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "   USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 5, 2, "   USB", false);
     #endif
 
     #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T_CONNECT_PRO)
@@ -2355,21 +2370,11 @@ void sendDisplayMainline()
     char cstatus[10];
     char nodetype[5];
 
+    // TDECK-VOLT-01 (#1312): one label helper for OLED, TFT and T-Deck; OLED output unchanged
     #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT) || defined(BOARD_T_ECHO)
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 4, 1, " USB", false);
     #else
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
-
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "   USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 5, 2, "   USB", false);
     #endif
 
     if(bGPSON)
@@ -2469,13 +2474,7 @@ void wpRefreshClock()
     char cbatt[10];
     char cstatus[10];
 
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
-
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "   USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 5, 2, "   USB", false);   // TDECK-VOLT-01
 
     if(bGPSON)
         snprintf(cstatus, sizeof(cstatus), "G  ");
@@ -2561,6 +2560,7 @@ void wpShowStoredMessage(int slot, int idx)
     // 0 = Home-Screen. Global merken, damit der 10-s-wpRefreshClock die Ziffer NICHT wegloescht
     // (er zeichnet sie via wpDrawMsgIdx() jedes Mal mit).
     wpMsgIdx = idx;
+    wpLiveNewest = false;            // DISP-PAGE-03: ein Klick hat die Anzeige bewegt
     wpDrawMsgIdx();                  // VOR dem Voll-Refresh in den Framebuffer
 
     epaper_display.fastmodeOff();   // Voll-Refresh nachschieben -> Status-Screen physisch weg
@@ -2798,13 +2798,7 @@ void mainStartTimeLoop()
                         if(pageLastLineAnz[wpNewest] != 0)
                         {
                             // Index oben rechts = N (neueste Meldung): Anzahl belegter Slots
-                            int wpRank = 0, s = wpNewest;
-                            for(int n = 0; n < PAGE_MAX; n++)
-                            {
-                                if(pageLastLineAnz[s] == 0) break;
-                                wpRank++;
-                                s--; if(s < 0) s += PAGE_MAX;
-                            }
+                            const int wpRank = pageRingCount(pageLastLineAnz, PAGE_MAX, pageLastPointer);
                             wpShowStoredMessage(wpNewest, wpRank);
                         }
                         else
@@ -5325,14 +5319,11 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
     {
         // CHR-02: strip APRS structure separators and truncate on a UTF-8
-        // boundary at the same 25-byte cap decodeAPRSPOS() applies on
-        // receive (aprs_functions.cpp:632) -- otherwise a receiver's
-        // byte-counting parser can inherit a split multi-byte sequence.
+        // boundary at APRS_ATXT_WIRE_MAX bytes, the cap decodeAPRSPOS()
+        // applies on receive -- otherwise a receiver's byte-counting parser
+        // can inherit a split multi-byte sequence.
         char catxt_src[sizeof(meshcom_settings.node_atxt)];
-        snprintf(catxt_src, sizeof(catxt_src), "%s", meshcom_settings.node_atxt);
-        size_t iatxt = charset_filter_apply(catxt_src, strlen(catxt_src), CHARSET_FILTER_STRIP_SEPARATORS);
-        iatxt = charset_utf8_safe_truncate(catxt_src, iatxt, 25);
-        catxt_src[iatxt] = 0x00;
+        charset_wire_field(meshcom_settings.node_atxt, catxt_src, sizeof(catxt_src), APRS_ATXT_WIRE_MAX, nullptr);
 
         snprintf(catxt,  sizeof(catxt), "%s", catxt_src);
     }
@@ -5537,18 +5528,20 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     strncat(strconcat, cdigital, sizeof(strconcat) - strlen(strconcat) - 1);
     strncat(strconcat, ctele, sizeof(strconcat) - strlen(strconcat) - 1);
 
-    // wenn die concatenation zu lang ist, dann catxt und cname löschen
-    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 100)
+    // Tags + Kommentar + Name sind auf POS_TEXT_BUDGET Bytes begrenzt: zuerst entfaellt
+    // der Kommentar, dann der Name (pos_text_budget.h). APRS-TXT-03: nicht mehr still,
+    // sondern mit Marker, einmal je Wechsel des Ergebnisses (Rohes Serial.printf wie bei
+    // [POS];shot, damit der Marker auch bei --debug off sichtbar ist).
     {
-        catxt[0]=0x00;
+        const PosTextFit txtFit = posTextFit(strlen(strconcat), catxt, cname, POS_TEXT_BUDGET);
+        if(posTextDropRecord(txtFit, strlen(strconcat)))
+        {
+            char cmark[64];
+            if(posTextDropMarker(cmark, sizeof(cmark), txtFit, strlen(strconcat), POS_TEXT_BUDGET) > 0)
+                Serial.print(cmark);
+        }
     }
 
-    // wenn die concatenation zu lang ist, dann catxt und cname löschen
-    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 100)
-    {
-        cname[0]=0x00;
-    }
-    
     snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, strconcat);
 
     return String(msg_start);

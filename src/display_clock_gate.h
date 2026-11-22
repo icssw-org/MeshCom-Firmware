@@ -48,6 +48,14 @@ static inline DispClkDecision dispClkDecide(const DispClkInputs &in)
     return DispClkDecision::Draw;
 }
 
+// DISP-PAGE-02: the guard at the top of sendDisplayHead(): a draw in progress (setDisplay) or the 5 s
+// browse hold after a button click (pageHold > 0) makes it return, except for an init call. The
+// "display off" handler therefore has to clear pageHold itself before sendDisplayHead(false).
+static inline bool dispHeadBlocked(bool setDisplay, int pageHold, bool init)
+{
+    return (setDisplay || pageHold > 0) && !init;
+}
+
 // CLK-PING-01: the clock line is skipped only while a held full-screen frame was really drawn
 // (DisplayOffWait running AND heldFrameDrawn, set by DisplayPong's u8g2 branch and the hold-text
 // frame). DisplayOffWait alone is not enough: it is also set on boards whose DisplayPong draws

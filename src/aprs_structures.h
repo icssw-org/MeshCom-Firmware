@@ -56,6 +56,9 @@
 #define MC_PATH_MAX_CHARS (MC_PATH_LEN - 2)   // laengster decodierbarer Quellpfad (119)
 #define MC_CALL_LEN_Z   21     // MAX_CALL_LEN + 1
 #define MC_PAYLOAD_LEN  256    // UDP_TX_BUF_SIZE + 1
+// APRS comment (node_atxt) on air, BYTES (UTF-8-safe cut): mesh position, LoRa-APRS
+// plain and Track frame alike. Receiver region of decodeAPRSPOS() is sized for it.
+#define APRS_ATXT_WIRE_MAX 25
 
 struct aprsMessage
 {
