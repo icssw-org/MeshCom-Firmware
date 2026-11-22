@@ -1,7 +1,7 @@
 #ifndef _GW_PHONE_ROUTE_H_
 #define _GW_PHONE_ROUTE_H_
 
-// GW-GROUP-01 / GW-DM-01 (docs/plan-gateway-routing-20261121.md): what a server
+// GW-GROUP-01 / GW-DM-01: what a server
 // text frame may show and hand to the phone link (BLE, AppLink). Mirrors the LoRa
 // rule in lora_functions.cpp: only "*" (unless --nomsgall), the own call or an own
 // group. The relay to LoRa and the gateway ack are not decided here.

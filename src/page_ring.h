@@ -1,4 +1,4 @@
-// DISP-PAGE-01 / DISP-PAGE-03 (#1294, docs/plan-display-paging-20261121.md) -- the message page ring
+// DISP-PAGE-01 / DISP-PAGE-03 (#1294) -- the message page ring
 // and the button click walk over it, as pure functions for host tests (no Arduino dependency).
 //
 // Ring: pageLastLineAnz[pageMax] (0 = empty slot), `last` = pageLastPointer = the slot the NEXT

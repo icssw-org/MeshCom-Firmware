@@ -466,7 +466,7 @@ void init_onebutton()
   }
 }
 
-// BTN-OFF-01 (P-0345): "--button off" detaches every handler init_onebutton() attached (OneButton
+// BTN-OFF-01 (#1294): "--button off" detaches every handler init_onebutton() attached (OneButton
 // ignores a null callback), so the button stops acting at once instead of at the next reboot.
 // btn.tick() stays unguarded at its call sites, and the INSTRUMENT "--btn" hook still reaches
 // the handlers directly. Keep this list in step with init_onebutton().

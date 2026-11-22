@@ -6,7 +6,7 @@
 // Hamnet resolver for an own IP starting with "44", else 8.8.8.8. Stricter than ESP32 (length >= 7)
 // on purpose. Returns ownDns itself or a string literal.
 //
-// Pure C++, no Arduino includes: test/test_eth_dns/ runs it on the host.
+// Pure C++, no Arduino includes (host-testable).
 
 #include <cstdint>
 #include <cstring>

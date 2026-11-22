@@ -1,8 +1,7 @@
 // settings_dump_mask.h -- masking of secret rows for the nRF52 `--dumpsettings` output (SEC-DUMP-01, #1291).
 //
 // Header-only and free of platform includes, so any native env can compile it. The key table mirrors the
-// secret rows of the persisted schema (config_json.h); test_dump_secret_list_covers_schema_names guards
-// against drift.
+// secret rows of the persisted schema (config_json.h); keep both in step.
 
 #pragma once
 

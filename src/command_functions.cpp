@@ -469,7 +469,7 @@ static void gpioFnWins(PinFunc f)
 #endif
 }
 static void tg_post_button_on() { gpioFnWins(PIN_FN_BUTTON); init_onebutton(); }
-static void tg_post_button_off() { deinit_onebutton(); }   // BTN-OFF-01 (P-0345): detach now, not at the next reboot
+static void tg_post_button_off() { deinit_onebutton(); }   // BTN-OFF-01 (#1294): detach now, not at the next reboot
 static void tg_post_680_off() { bme680_found = false; }
 static void tg_post_811_off() { mcu811_found = false; }
 // EXT-02 (second half): --extudp off used to leave hasExternIPaddress (and
@@ -1895,7 +1895,7 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
-        pageHold = 0;   // P-0384: a browse click holds the page for 5 s; --display off must not wait for it
+        pageHold = 0;   // DISP-PAGE (#1294): a browse click holds the page for 5 s; --display off must not wait for it
 
         sendDisplayHead(false);
 

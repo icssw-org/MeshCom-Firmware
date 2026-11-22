@@ -1,7 +1,7 @@
 #pragma once
 // POSINFO-NEXT-01: seconds until the next position beacon is due, clamped at 0.
 // The old unsigned expression wrapped to ~4,294,967 (or small negatives on the OLED) while overdue.
-// Pure, no Arduino dependency: tested by test/test_posinfo_next.
+// Pure, no Arduino dependency (host-testable).
 #include <stdint.h>
 
 static inline int posinfoNextSeconds(uint32_t now_ms, uint32_t timer_ms, uint32_t interval_s)

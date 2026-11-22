@@ -1,6 +1,6 @@
 #pragma once
 // GPS-AUTOSYM-02/03: automatic APRS symbol (runner / bike / car) with 120 s hysteresis.
-// Pure, no Arduino dependency: tested by test/test_autosymbol. Used by setSMartBeaconing().
+// Pure, no Arduino dependency (host-testable). Used by setSMartBeaconing().
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>

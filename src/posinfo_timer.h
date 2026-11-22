@@ -4,7 +4,7 @@
 // loops refreshed it on every pass in which no beacon was due, so the minimum
 // spacing always started when the beacon became due and every beacon went out
 // ~30 s late.
-// Pure, no Arduino dependency, uint32_t rollover-safe: tested by test/test_posinfo_timer.
+// Pure, no Arduino dependency, uint32_t rollover-safe (host-testable).
 #include <stdint.h>
 
 // beacon is due: interval elapsed, first-fix window, or one-shot request
