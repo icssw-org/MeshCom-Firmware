@@ -59,6 +59,7 @@ To set a parameter to the node, use:
 	/setparam/?utcoffset=X.X			Sets the UTC offset (e.G. 1.5 or -3.0)
 	/setparam/?maxv=X.XXX				Sets the maxV-parameter (ToDo: define what it is good for)
 	/setparam/?display=on|off			Set permanent activated display to on or off
+	/setparam/?msgwake=on|off			An incoming message turns an off display on (on) or keeps it dark (off)
 	/setparam/?small=on|off				Set if displayed content should be reduced to fit small displays
 	/setparam/?volt=on|off				If set to on, battery SOC will be displayed as voltage instead of percentage
 	/setparam/?mesh=on|off				Enables mesh / forwarding of received LoRa messages via radio

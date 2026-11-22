@@ -3286,6 +3286,7 @@ void sub_page_setup()
     _create_setup_switch_element("display", "Display", "keep display active permanently", !bDisplayOff);        // create Switch-Element inclucing Label and Description
     //NOT USED _create_setup_switch_element("small", "small Display", "reduce content for small displays", bSMALLDISPLAY); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("volt", "Voltage", "show batt. voltage, not percent", bDisplayVolt);           // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("msgwake", "Message wake", "an incoming message turns an off display on", bMsgWake);   // T114-DARK-01 (#1314)
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("via", "Via", "enable via", bVIA);    // create Switch-Element inclucing Label and Description
     { // LED-08: only on a node that has the LED (the info page says "not fitted" otherwise); same console row as --charge led.
@@ -4100,6 +4101,7 @@ void sub_page_info()
     web_client.printf("<tr><td>Display</td><td>");
     web_client.printf("Display: %s<br>", (!bDisplayOff ? "on" : "off"));
     web_client.printf("Voltage: %s<br>", (bDisplayVolt ? "on" : "off"));
+    web_client.printf("Message wake: %s<br>", (bMsgWake ? "on" : "off"));   // T114-DARK-01 (#1314)
     web_client.printf("</td></tr>\n");
 
     web_client.printf("<tr><td>Network</td><td>");

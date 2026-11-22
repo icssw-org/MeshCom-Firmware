@@ -770,6 +770,7 @@ void nrf52setup()
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bDisplayCont =  meshcom_settings.node_sset & 0x4000;
+    bMsgWake = (meshcom_settings.node_sset & 0x8000) == 0;   // T114-DARK-01: --msgwake, stored inverted (set = off)
 
     // TRK-01: Warnhinweis einmal beim Boot, wenn Track aus den Settings aktiv geladen wurde
     if(bDisplayTrack)
@@ -789,7 +790,7 @@ void nrf52setup()
     //free !! meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
-    //xxxxx = meshcom_settings.node_sset2 & 0x2000;
+    bDisplayDark = (meshcom_settings.node_sset2 & 0x2000) != 0;   // T114-DARK-01: --theme dark (T114; other boards never set the bit)
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  meshcom_settings.node_sset3 & 0x0001;

@@ -76,6 +76,7 @@ struct WpBrowseState
     bool statusStep;    // the next click shows the status page
     bool liveNewest;    // the panel shows the newest message of an arrival that no click has stepped from
     int  pointer;       // pagePointer
+    bool arrived;       // a message arrived since the last click (also a store-only one, --msgwake off)
 };
 
 struct WpBrowseResult
@@ -97,8 +98,8 @@ static inline WpBrowseResult wpBrowseClick(const int *lineAnz, int pageMax, int 
     const int newest = pageRingNewest(last, pageMax);
     WpBrowseResult r = { true, -1, 0, { false, false, newest } };
 
-    if (st.liveNewest)
-        st.statusStep = false;      // a fresh arrival supersedes a pending status step
+    if (st.liveNewest || st.arrived)
+        st.statusStep = false;      // a fresh arrival (shown or stored only) supersedes a pending status step
 
     if (lineAnz[newest] == 0)       // nothing stored -> status page
         return r;

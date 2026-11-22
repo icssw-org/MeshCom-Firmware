@@ -23,6 +23,7 @@
 #include "tdeck_helpers.h"
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include <loop_functions_extern.h>
+#include "display_clock_gate.h"   // dispMsgWakes (T114-DARK-01)
 #include <math.h>
 #include <cstring>
 #include "msg_input_budget.h"   // TD-25 byte budget of the message input
@@ -4728,8 +4729,10 @@ static void msg_focus_and_alert(bool bWithAudio)
 {
     if (bDEBUG)
         Serial.println("[TDECK]...msg_focus_and_alert: Called");
-    // Always wake up display on message, even if keyboard is locked
-    tft_on();
+    // Wake the display on a message, even if the keyboard is locked -- unless --msgwake off keeps a dark
+    // panel dark (T114-DARK-01, #1314); the message is still stored and shown on the next wake.
+    if (dispMsgWakes(bMsgWake, tft_is_sleeping || current_brightness_level == 0))
+        tft_on();
 
     // Only switch to MSG tab if it's an important message (with audio/alert)
     // This prevents System messages (bWithAudio=false) from hijacking the view

@@ -29,6 +29,7 @@
 #include "page_ring.h"   // DISP-PAGE-01/03: click walk over the message ring; WP_MSG_BROWSE_MAX (the last 4)
 
 #if defined(WP_DISP)
+extern bool wpArrived;     // loop_functions.cpp: a message arrived since the last click (T114-DARK-01)
 extern bool wpLiveNewest;   // loop_functions.cpp: the panel shows the newest message of an arrival no click has stepped from
 #endif
 
@@ -150,7 +151,7 @@ void singleClick()
       // DISP-PAGE-03: die Klick-Logik (Status-Schritt, Fenster, Rang) steckt in page_ring.h
       // (wpBrowseClick); liveNewest = die frisch eingetroffene Nachricht ist schon auf dem Panel,
       // der erste Klick geht daher zur naechstaelteren.
-      WpBrowseState wpState = { wpStatusStep, wpLiveNewest, pagePointer };
+      WpBrowseState wpState = { wpStatusStep, wpLiveNewest, pagePointer, wpArrived };
       const WpBrowseResult wpRes = wpBrowseClick(pageLastLineAnz, PAGE_MAX, pageLastPointer, WP_MSG_BROWSE_MAX, wpState);
 
       if(bDisplayCont)
@@ -159,6 +160,7 @@ void singleClick()
       wpStatusStep = wpRes.next.statusStep;
       pagePointer  = wpRes.next.pointer;
       wpLiveNewest = false;
+      wpArrived    = false;
 
       if(wpRes.status)
       {

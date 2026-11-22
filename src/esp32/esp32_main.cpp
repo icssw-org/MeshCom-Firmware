@@ -1470,6 +1470,7 @@ void esp32setup()
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bDisplayCont = meshcom_settings.node_sset & 0x4000;
+    bMsgWake = (meshcom_settings.node_sset & 0x8000) == 0;   // T114-DARK-01: --msgwake, stored inverted (set = off)
 
     // TRK-01: Warnhinweis einmal beim Boot, wenn Track aus den Settings aktiv geladen wurde
     if(bDisplayTrack)
@@ -1500,7 +1501,7 @@ void esp32setup()
     // NOTE: externalRadioSetup() runs later, AFTER lora_setcountry() has applied
     // the effective freq/bw/sf/cr/preamble, so the bridge config snapshot is built
     // from the same effective radio settings the local radio path would use.
-    //xxxxxxx   = meshcom_settings.node_sset2 & 0x2000;
+    // node_sset2 0x2000 = T114 --theme dark (read in nrf52_main.cpp only; no ESP32 board uses it)
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;

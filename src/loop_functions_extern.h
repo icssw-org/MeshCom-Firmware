@@ -119,6 +119,8 @@ extern bool bPingSend;
 extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayIsOff;
+extern bool bMsgWake;       // T114-DARK-01: --msgwake (default true)
+extern bool bDisplayDark;   // T114-DARK-01: --theme dark on the T114 (default false = light)
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
 extern bool bDisplayVia;

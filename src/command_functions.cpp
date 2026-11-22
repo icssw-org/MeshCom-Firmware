@@ -144,6 +144,12 @@ extern TinyGPSPlus gps;
 #include <esp_partition.h>
 #endif
 
+// T114-DARK-01: --theme on the T114 reuses the T-Deck parser (pure header) and redraws the GPS page
+#if defined(HAS_TFT_114)
+#include <t-deck/tdeck_palette.h>
+#include "t114_gps_page.h"
+#endif
+
 // libs for T-Deck view refresh
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions.h>
@@ -623,16 +629,16 @@ static const ToggleRow COMMAND_TOGGLES[] =
 {
     { "--setinfo off",        &bDisplayInfo,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_ECHO_LN },
     { "--setinfo on",         &bDisplayInfo,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_ECHO_LN },
-    { "--setcont off",        &bDisplayCont,         &meshcom_settings.node_sset,     0x00003FFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F },
+    { "--setcont off",        &bDisplayCont,         &meshcom_settings.node_sset,     0x0000BFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F },
     { "--setcont on",         &bDisplayCont,         &meshcom_settings.node_sset,     0xFFFFFFFF,   0x4000,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_LN },
     { "--setlog off",         &bDisplayLog,          &meshcom_settings.node_sset4,    0x00007FFB,   0x00000000,   tg_post_setlog_off,            TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F | TG_POST_FIRST },
     { "--setlog on",          &bDisplayLog,          &meshcom_settings.node_sset4,    0xFFFFFFFF,   0x0004,       tg_post_setlog_off,            TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_LN | TG_POST_FIRST },
     { "--setretx off",        &bDisplayRetx,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_ECHO_LN },
     { "--setretx on",         &bDisplayRetx,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_ECHO_LN },
-    { "--shortpath off",      &bSHORTPATH,           &meshcom_settings.node_sset,     0x00007BFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_LN },
+    { "--shortpath off",      &bSHORTPATH,           &meshcom_settings.node_sset,     0x0000FBFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_LN },
     { "--shortpath on",       &bSHORTPATH,           &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0400,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_F },
     { "--button on",          &bButtonCheck,         &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0010,       tg_post_button_on,             TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
-    { "--button off",         &bButtonCheck,         &meshcom_settings.node_sset,     0x00007FEF,   0x00000000,   tg_post_button_off,            TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--button off",         &bButtonCheck,         &meshcom_settings.node_sset,     0x0000FFEF,   0x00000000,   tg_post_button_off,            TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
     { "--nomsgall on",        &bNoMSGtoALL,          &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0002,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
     { "--390 off",            &bBMP3ON,              &meshcom_settings.node_sset3,    0xFFFFFFEF,   0x00000000,   nullptr,                       TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
     { "--680 off",            &bBME680ON,            &meshcom_settings.node_sset2,    0xFFFFFFFB,   0x00000000,   tg_post_680_off,               TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
@@ -669,6 +675,12 @@ static const ToggleRow COMMAND_TOGGLES[] =
     { "--nbrreport off",      &bNBRRPTOFF,           &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x0100,       tg_post_nbrreport_off,         TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
     { "--nbrreport auto",     nullptr,               &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x00000000,   tg_post_nbrreport_auto,        TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
     { "--nbrreport on",       &bNBRRPTON,            &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x0200,       tg_post_nbrreport_on,          TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    // --msgwake on|off (T114-DARK-01, D3): 0x8000 in node_sset, inverted ("off" sets the bit), so an
+    // existing node starts with msgwake on = today's behaviour. Off: a message does not light a display
+    // that is switched off (dispMsgWakes(), sendDisplayText()); it is still stored and read by button/app.
+    // Every literal AND-mask on node_sset keeps bit 15 for this reason (0x7xxx -> 0xFxxx).
+    { "--msgwake on",         &bMsgWake,             &meshcom_settings.node_sset,     0xFFFF7FFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--msgwake off",        &bMsgWake,             &meshcom_settings.node_sset,     0xFFFFFFFF,   0x8000,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
     { "--viadebug on",        &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_BLE_ECHO },
     { "--viadebug off",       &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_BLE_ECHO },
     // Upstream d93c05a0/31ef8648: the phone gets SN + SN1, not a text echo the
@@ -1350,7 +1362,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         bDisplayVolt = false;
 
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FFE;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFFFE;
 
         if(ble)
         {
@@ -1703,7 +1715,10 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("\n== Telemetry ==\n--parm tm1,..,tm5       value names (unused: blank)\n--unit tm1,..,tm5       units (unused: blank)\n--format 1,1,1,1,1      decimals (unused: 0)\n--eqns 0,1,0,...        equations, 15 values\n--values press,hum,temp,onewire,co2  value sources\n--ptime 5..120          telemetry interval min\n");
             delay(100);
 
-            printdeb("\n== Display ==\n--display on/off        display\n--nomsgall on/off       hide '*' messages\n--contrast 1-255        OLED contrast\n");
+            printdeb("\n== Display ==\n--display on/off        display\n--nomsgall on/off       hide '*' messages\n--contrast 1-255        OLED contrast\n--msgwake on/off        message wakes an off display\n");
+            #if defined(HAS_TFT_114)
+            printdeb("--theme auto|dark|light  display theme (auto = light)\n");
+            #endif
             #if defined(WP_DISP) or defined(BOARD_E290)
             printdeb("--rotate 0/90/180/270   e-ink rotation\n");
             #endif
@@ -1823,7 +1838,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bPosDisplay=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FFB;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFFFB;
 
         if(ble)
         {
@@ -1843,7 +1858,7 @@ void commandAction(char *umsg_text, bool ble)
         bDisplayIsOff=false;
         bPosDisplay=true;
 
-        meshcom_settings.node_sset = (meshcom_settings.node_sset & 0x7FFD) | 0x0004;   // both off + set bDisplyOff
+        meshcom_settings.node_sset = (meshcom_settings.node_sset & 0xFFFD) | 0x0004;   // both off + set bDisplyOff
 
         if(ble)
         {
@@ -2415,7 +2430,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bDisplayTrack=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FDF;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFFDF;
 
         if(ble)
         {
@@ -2494,7 +2509,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bBLElong=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x77FF;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xF7FF;
 
         save_settings();
 
@@ -2555,7 +2570,7 @@ void commandAction(char *umsg_text, bool ble)
             bmx_found = false;
             
             meshcom_settings.node_sset |= 0x0080;
-            meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7EFF;   // BME280 off
+            meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFEFF;   // BME280 off
 
             save_settings();
 
@@ -2586,7 +2601,7 @@ void commandAction(char *umsg_text, bool ble)
             bmx_found = false;
             
             meshcom_settings.node_sset |= 0x0100;
-            meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7F7F;   // BMP280 off
+            meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFF7F;   // BMP280 off
 
             save_settings();
 
@@ -2682,7 +2697,7 @@ void commandAction(char *umsg_text, bool ble)
         bmx_found=false;
         bmp3_found=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFE7F;   // BME280/BMP280 off
         meshcom_settings.node_sset3 &= ~0x0010;   // BMP390 off (only bit 0x0010; 0x8000 NOPMOTHER and the upper bits stay)
 
         // N-28: "--bmx" ist das Sammelkommando, und die Hilfe sagt seit jeher
@@ -6352,6 +6367,48 @@ void commandAction(char *umsg_text, bool ble)
 
         return;
     }
+    #if defined(HAS_TFT_114)
+    // T114-DARK-01 (D1): --theme auto|dark|light on the T114. Same parser as the T-Deck (tdeck_theme_parse,
+    // exact lower case); auto = light (no light sensor). Stored as node_sset2 0x2000 (set = dark), applied
+    // live: the GPS page is redrawn, a clock/status page on the next draw.
+    if(commandCheck(msg_text+2, (char*)"theme ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 6;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        const int t = tdeck_theme_parse(arg);
+        if(t < 0)
+        {
+            printfdeb("[TFT];theme;error;arg;%s;allowed;auto|dark|light\n", arg);
+            return;
+        }
+        bDisplayDark = (t == THEME_DARK);
+        if(bDisplayDark)
+            meshcom_settings.node_sset2 |= 0x2000;
+        else
+            meshcom_settings.node_sset2 &= ~0x2000;
+        save_settings();
+        if(t114GpsPageActive())
+            t114GpsPageRedraw();
+        else
+            if(!bDisplayIsOff && iDisplayType != 0)
+                sendDisplayHead(false);
+        // auto = light on the T114 (no light sensor): echo what is applied, the same word a later bare --theme prints
+        printfdeb("[TFT];theme;%s;dark;%d\n", (t == THEME_AUTO) ? "auto (light)" : tdeck_theme_name((uint8_t)t), bDisplayDark ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"theme") == 0)
+    {
+        printfdeb("[TFT];theme;%s;dark;%d\n", bDisplayDark ? "dark" : "light", bDisplayDark ? 1 : 0);
+        return;
+    }
+    #endif
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     // T-Deck field switches: mute and the three position-persistence flags.
     // Until 2026-09-13 they sat in the INSTRUMENT_ENABLED block below and were
@@ -7911,6 +7968,11 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...APRSMC: %s\n...ATXT: %s\n...NAME: %s\n...BLE : %s %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_aprsmc, meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"), bleTxStats, (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
+
+            printfdeb("...MSGWAKE %s\n", (bMsgWake?"on":"off"));   // T114-DARK-01
+            #if defined(HAS_TFT_114)
+            printfdeb("...THEME %s\n", (bDisplayDark?"dark":"light"));
+            #endif
 
             // APRS-TXT-03 (D4 B0): only while the beacon is dropping comment and/or name
             {

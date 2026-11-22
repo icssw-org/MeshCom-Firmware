@@ -418,6 +418,7 @@
 // 
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
+#include "t114_theme.h"
 
     extern Adafruit_ST7789 tft1;
 
@@ -425,9 +426,9 @@
     {
         //Serial.println("[DISP]...1 Line");
 
-        tft1.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft1.fillRect(0, 0, TFT_HEIGHT, 30, t114Palette(bDisplayDark).header);
         tft1.setCursor(4, 6);
-        tft1.setTextColor(ST77XX_WHITE);
+        tft1.setTextColor(t114Palette(bDisplayDark).headerText);
         tft1.setTextSize(2); //2... 12*16
         tft1.println(header);
     }
@@ -436,15 +437,15 @@
     {
         //Serial.println("[DISP]...2 Lines");
 
-        tft1.fillScreen(ST77XX_WHITE);
+        tft1.fillScreen(t114Palette(bDisplayDark).body);
 
-        tft1.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft1.fillRect(0, 0, TFT_HEIGHT, 30, t114Palette(bDisplayDark).header);
         tft1.setCursor(4, 6);
-        tft1.setTextColor(ST77XX_WHITE);
+        tft1.setTextColor(t114Palette(bDisplayDark).headerText);
         tft1.setTextSize(2); //2... 12*16
         tft1.println(header);
 
-        tft1.setTextColor(ST77XX_BLACK);
+        tft1.setTextColor(t114Palette(bDisplayDark).bodyText);
         tft1.setTextWrap(true);
         tft1.setTextSize(2); //2... 12*16
         tft1.setCursor(0, 32);
@@ -456,15 +457,15 @@
     {
         //Serial.println("[DISP]...5 Lines");
 
-        tft1.fillScreen(ST77XX_WHITE);
+        tft1.fillScreen(t114Palette(bDisplayDark).body);
 
-        tft1.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft1.fillRect(0, 0, TFT_HEIGHT, 30, t114Palette(bDisplayDark).header);
         tft1.setCursor(0, 0);
-        tft1.setTextColor(ST77XX_WHITE);
+        tft1.setTextColor(t114Palette(bDisplayDark).headerText);
         tft1.setTextSize(3); //2... 12*16
         tft1.println(header);
 
-        tft1.setTextColor(ST77XX_BLACK);
+        tft1.setTextColor(t114Palette(bDisplayDark).bodyText);
         tft1.setTextSize(2); //2... 12*16
         tft1.println("");
         tft1.println(line1);
@@ -483,15 +484,15 @@
     {
         //Serial.println("[DISP]...6 Lines");
 
-        tft1.fillScreen(ST77XX_WHITE);
+        tft1.fillScreen(t114Palette(bDisplayDark).body);
 
-        tft1.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft1.fillRect(0, 0, TFT_HEIGHT, 30, t114Palette(bDisplayDark).header);
         tft1.setCursor(4, 6);
-        tft1.setTextColor(ST77XX_WHITE);
+        tft1.setTextColor(t114Palette(bDisplayDark).headerText);
         tft1.setTextSize(2); //2... 12*16
         tft1.println(header);
 
-        tft1.setTextColor(ST77XX_BLACK);
+        tft1.setTextColor(t114Palette(bDisplayDark).bodyText);
         tft1.setCursor(0, 32);
         tft1.println(line1);
         tft1.println(line2);

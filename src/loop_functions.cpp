@@ -415,6 +415,8 @@ bool bCHECKMESH = false;
 bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayIsOff = false;
+bool bMsgWake = true;       // T114-DARK-01 (D2): --msgwake, false = a message does not wake an off display (node_sset 0x8000 set)
+bool bDisplayDark = false;  // T114-DARK-01 (D1): --theme dark on the T114 (node_sset2 0x2000); auto = light
 bool bDisplayVolt = false;
 bool bDisplayInfo = false;
 bool bDisplayVia = false;
@@ -617,6 +619,7 @@ int wpMsgIdx = 0;
 // stepped from (set where the slot is stored in sendDisplay1306, cleared by wpShowStoredMessage and
 // sendDisplayHead). The first click then goes to the next older message, not to the same one.
 bool wpLiveNewest = false;
+bool wpArrived = false;        // T114-DARK-01: a message arrived since the last click (also one stored with --msgwake off)
 
 
 void wpApplyLayout(bool compact)
@@ -1430,6 +1433,37 @@ static bool e290FullRefreshDue()
 static void wpDrawMsgIdx();   // defined below; DISP-PAGE-03 draws the counter on the live render
 #endif
 
+// T114-DARK-01 (D2) store-only mode: an incoming message that may not wake the display (--msgwake off and the
+// display is off) is stored in the page ring exactly as usual, but pushed to NO panel: no u8g2 page loop,
+// no e-paper clear()/update(), no TFT draw or backlight call, no "#C" re-blank afterwards. Set only for the
+// duration of one sendDisplayText() call (DispStoreOnlyScope); consulted at every push point of
+// sendDisplay1306() and sendDisplayText().
+static bool bDispStoreOnly = false;
+struct DispStoreOnlyScope
+{
+    bool prev;
+    explicit DispStoreOnlyScope(bool on) : prev(bDispStoreOnly) { bDispStoreOnly = on; }
+    ~DispStoreOnlyScope() { bDispStoreOnly = prev; }
+};
+
+#if !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS)
+// the ring write every panel branch of sendDisplay1306() does while it draws: same slot, same 25-byte copy
+static void dispStoreRingLines(bool bNeu)
+{
+    if(iDisplayType != 0 || !bNeu)
+        return;
+
+    for(int its=0; its<pageLineAnz; its++)
+    {
+        pageLastLineAnz[pageLastPointer] = pageLineAnz;
+        pageLastLine[pageLastPointer][its][0] = pageLine[its][0];
+        pageLastLine[pageLastPointer][its][1] = pageLine[its][1];
+        pageLastLine[pageLastPointer][its][2] = pageLine[its][2];
+        memcpy(pageLastText[pageLastPointer][its], pageText[its], 25);
+    }
+}
+#endif
+
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
@@ -1444,9 +1478,14 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
     {
         #if defined(BOARD_T_ECHO)
+            if(!bDispStoreOnly)
+            {
             epaper_display.fillScreen(GxEPD_WHITE);
             epaper_display.setFont(&FreeMonoBold9pt7b);
+            }
         #elif defined(HAS_EPAPER)
+            if(!bDispStoreOnly)
+            {
             epaper_display.clearMemory();
 
         	if(memcmp(text, "#F", 2) == 0)
@@ -1463,6 +1502,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             #else
             epaper_display.setFont(&FreeMonoBold12pt7b);
             #endif
+            }
         #elif defined(BOARD_HELTEC_T114) || defined(BOARD_T_CONNECT_PRO)
         #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined(BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO)
         #else
@@ -1503,6 +1543,10 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     if(bTransfer)
     {
         //printlndeb("Transfer");
+        if(bDispStoreOnly)
+            dispStoreRingLines(bNeu);   // store-only: the ring write below, no panel push
+        if(!bDispStoreOnly)
+        {
         #if defined HAS_EPAPER
             if(pageLineAnz > 0)
             {
@@ -1805,12 +1849,16 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         }
         
         #endif
+        }   // !bDispStoreOnly
 
         if(iDisplayType == 0 && bNeu)
         {
             pagePointer=pageLastPointer;
             #if defined(WP_DISP)
-            wpLiveNewest = true;   // DISP-PAGE-03: the panel shows the newest message, no click has stepped from it
+            // DISP-PAGE-03: the panel shows the newest message, no click has stepped from it; a store-only
+            // (suppressed) message is NOT on the panel, so the first click must show it
+            wpLiveNewest = dispArrivalLiveNewest(bDispStoreOnly);
+            wpArrived = true;   // every arrival cancels a pending status step, shown or not
             #endif
 
             pageLastPointer++;
@@ -3124,11 +3172,19 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     ///////////////////////////////////////////////////////////
     // text immer 30 sec stehenlassen und Display immer ON
-    DisplayOffWait = millis() + (30 * 1000); // 30 seconds
-    bDisplayIsOff=false;
+    // T114-DARK-01 (D2): the single wake site of every display board. With --msgwake off an OFF display
+    // stays off: no timer, flag stays, nothing is pushed to any panel (bDispStoreOnly); the message is
+    // still stored in the page ring below and the next button press shows it.
+    const bool bMsgWakes = dispMsgWakes(bMsgWake, bDisplayIsOff);
+    const DispStoreOnlyScope storeOnlyScope(!bMsgWakes);   // suppressed: stored only, nothing is pushed to a panel
+    if(bMsgWakes)
+    {
+        DisplayOffWait = millis() + (30 * 1000); // 30 seconds
+        bDisplayIsOff=false;
+    }
 
     #if defined(BOARD_HELTEC_T114)
-    t114GpsPageClose();   // the message is drawn over the GPS page
+    t114GpsPageClose();   // draws nothing: the GPS page must be inactive so the next click shows the message
     #endif
 
     #if defined(WP_DISP)
@@ -3213,8 +3269,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
 
-    epaper_display.setCursor(0, dzeile[1]);
-    epaper_display.setFont(WP_FONT9);
+    if(!bDispStoreOnly)
+    {
+        epaper_display.setCursor(0, dzeile[1]);
+        epaper_display.setFont(WP_FONT9);
+    }
 
     String strPath = String("M* <") + aprsmsg.msg_source_call + ">";
     // DM
@@ -3238,9 +3297,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     msg_text[20]=0x00;
-    epaper_display.println(msg_text);
+    if(!bDispStoreOnly)
+    {
+        epaper_display.println(msg_text);
 
-    epaper_display.setCursor(0, dzeile[2]);
+        epaper_display.setCursor(0, dzeile[2]);
+    }
 
     String strAscii = "";//aprsmsg.msg_payload;
 
@@ -3259,10 +3321,16 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #if defined(WP_DISP)
     // Nachrichtentext mit kompakter Schrift (enger Zeilenabstand 15 statt 22) -> bis zu 160
     // Zeichen passen auf das Panel. Gleicher Font wie beim Durchblaettern -> Browse == Live.
-    epaper_display.setFont(wpMsgFont());
+    if(!bDispStoreOnly)
+    {
+        epaper_display.setFont(wpMsgFont());
+    }
     #endif
 
-    epaper_display.println(strAscii);
+    if(!bDispStoreOnly)
+    {
+        epaper_display.println(strAscii);
+    }
 
     strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
     pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
@@ -3272,8 +3340,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #if defined(WP_DISP)
     // Neue Nachricht per Voll-Refresh aufbauen -> gestochen scharf, tiefschwarz,
     // kein Ghosting. Die schnellen Partial-Updates (Uhrzeit) bleiben unberuehrt.
-    epaper_display.fastmodeOff();
+    if(!bDispStoreOnly)
+    {
+        epaper_display.fastmodeOff();
+    }
     #endif
+    if(!bDispStoreOnly)   // store-only: no refresh at all (the ring slots above are already written)
+    {
     #if defined(BOARD_E290)
     bool bE290Full = e290FullRefreshDue();   // E290: partial refresh, full one only now and then
     if(bE290Full)
@@ -3284,6 +3357,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     if(bE290Full)
         epaper_display.fastmodeOn();   // back to fastmode ON, see sendDisplay1306
     #endif
+    }
 
     #elif defined (BOARD_T5_EPAPER)
     // extra source
@@ -3325,7 +3399,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
     pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
-    displayTFT(strPath, strAscii);
+    if(!bDispStoreOnly)
+    {
+        displayTFT(strPath, strAscii);
+    }
 
     #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     
