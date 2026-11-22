@@ -5837,7 +5837,7 @@ void commandAction(char *umsg_text, bool ble)
             else if(_au.staged && _au.availTag[0] != '\0' && strcmp(_au.stagedTag, _au.availTag) == 0)
             {
                 // before the availNewer test: staging records the tag as installed, so the
-                // next CHECK reports "not newer" and this case would otherwise be unreachable
+                // next CHECK can report "not newer" (undated running image) and this case would otherwise be unreachable
                 Serial.printf("[AU];install;already_staged;%s\n", _au.stagedTag);
             }
             else if(_auNewer && !_au.installable)
