@@ -3,93 +3,256 @@
 hmac_connect.py — Connect to the MeshCom HMAC console (port 2323).
 
 Usage:
-    python3 hmac_connect.py <ip>                   # no password
-    python3 hmac_connect.py <ip> <password>         # with HMAC auth
-    python3 hmac_connect.py <ip> <password> <port>  # custom port
+    python3 hmac_connect.py <host>                       # no password
+    python3 hmac_connect.py <host> -p 2323               # custom port, no password
+    python3 hmac_connect.py <host>:2323                  # same, host:port form
+    python3 hmac_connect.py <host> <password>            # with HMAC auth
+    python3 hmac_connect.py <host> <password> <port>     # legacy positional form
+    python3 hmac_connect.py <host> --ask                 # prompt for password
+    python3 hmac_connect.py <host> --log                 # write session log next to this script
+    python3 hmac_connect.py <host> --log /some/dir       # write session log into a directory
+    python3 hmac_connect.py <host> --log my.log          # write session log to a file
+
+Log file default name: hmac_<host>_<YYYYmmdd-HHMMSS>.log
+Each received line is prefixed with a local timestamp; sent lines are
+marked with ">>". Use --no-timestamps to log the raw stream only.
 
 Protocol:
-    <- "NONCE: <32 hex chars>\\r\\n"
-    -> "<64 hex HMAC-SHA256(password, nonce)>\\r\\n"
-    <- "OK\\r\\n<banner>"  or  "FAIL\\r\\n"
+    password set:
+        <- "NONCE: <32 hex chars>\\r\\n"
+        -> "<64 hex HMAC-SHA256(password, nonce)>\\r\\n"
+        <- "OK\\r\\n<banner>"  or  "FAIL\\r\\n"
+    no password set:
+        <- "OK\\r\\n<banner>"
     -- bidirectional plaintext afterwards --
 
 Requires: Python 3.6+, no external dependencies.
 """
 
-import sys
-import socket
-import hmac
+import argparse
+import codecs
+import datetime
+import getpass
 import hashlib
-import threading
+import hmac
 import os
+import re
+import socket
+import sys
+import threading
+
+DEFAULT_PORT = 2323
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+class SessionLog:
+    """Thread-safe line-oriented session logger."""
+
+    def __init__(self, path, timestamps=True):
+        self.path = path
+        self.timestamps = timestamps
+        self.fh = open(path, "a", encoding="utf-8", buffering=1)
+        self.lock = threading.Lock()
+        self.partial = ""
+        self.closed = False
+
+    def _stamp(self):
+        return datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S.%f")[:-3] + "] "
+
+    def rx(self, text):
+        with self.lock:
+            if self.closed:
+                return
+            if not self.timestamps:
+                self.fh.write(text)
+                return
+            self.partial += text.replace("\r\n", "\n").replace("\r", "\n")
+            *lines, self.partial = self.partial.split("\n")
+            for ln in lines:
+                self.fh.write(self._stamp() + ln + "\n")
+
+    def tx(self, text):
+        with self.lock:
+            if self.closed:
+                return
+            self._flush_partial()
+            prefix = self._stamp() if self.timestamps else ""
+            self.fh.write(prefix + ">> " + text + "\n")
+
+    def note(self, text):
+        with self.lock:
+            if self.closed:
+                return
+            self._flush_partial()
+            prefix = self._stamp() if self.timestamps else ""
+            self.fh.write(prefix + "## " + text + "\n")
+
+    def _flush_partial(self):
+        if self.timestamps and self.partial:
+            self.fh.write(self._stamp() + self.partial + "\n")
+            self.partial = ""
+
+    def close(self):
+        with self.lock:
+            if self.closed:
+                return
+            self._flush_partial()
+            self.fh.close()
+            self.closed = True
+
+
+def log_path_for(host, log_arg):
+    safe_host = re.sub(r"[^A-Za-z0-9._-]", "_", host)
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    name = f"hmac_{safe_host}_{stamp}.log"
+    if log_arg is None or log_arg == "":
+        return os.path.join(SCRIPT_DIR, name)
+    log_arg = os.path.expanduser(log_arg)
+    if os.path.isdir(log_arg) or log_arg.endswith(os.sep):
+        os.makedirs(log_arg, exist_ok=True)
+        return os.path.join(log_arg, name)
+    return log_arg
+
+
+def parse_args():
+    ap = argparse.ArgumentParser(
+        description="Connect to the MeshCom net console (HMAC auth, port 2323).")
+    ap.add_argument("host", help="IP or hostname, optionally host:port")
+    ap.add_argument("password", nargs="?", default=None,
+                    help="console password (omit if none is set)")
+    ap.add_argument("legacy_port", nargs="?", type=int, default=None,
+                    metavar="port", help="port (legacy positional form)")
+    ap.add_argument("-p", "--port", type=int, default=None,
+                    help=f"TCP port (default {DEFAULT_PORT})")
+    ap.add_argument("-a", "--ask", action="store_true",
+                    help="prompt for the password (not visible in shell history)")
+    ap.add_argument("-l", "--log", nargs="?", const="", default=None, metavar="PATH",
+                    help="write a session log; PATH may be a file or directory "
+                         "(default: script directory)")
+    ap.add_argument("--no-timestamps", action="store_true",
+                    help="log the raw stream without per-line timestamps")
+    args = ap.parse_args()
+
+    host = args.host
+    port = args.port or args.legacy_port
+    # host:port (but not a bare IPv6 address)
+    if host.count(":") == 1:
+        h, p = host.rsplit(":", 1)
+        if p.isdigit():
+            host, port = h, port or int(p)
+    args.host = host
+    args.port = port or DEFAULT_PORT
+    return args
+
 
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <ip> [password] [port]", file=sys.stderr)
-        sys.exit(1)
+    args = parse_args()
+    host, port = args.host, args.port
 
-    host     = sys.argv[1]
-    password = sys.argv[2].encode() if len(sys.argv) > 2 else b""
-    port     = int(sys.argv[3]) if len(sys.argv) > 3 else 2323
+    password = args.password
+    if args.ask:
+        password = getpass.getpass("Console password: ")
+    password_b = password.encode() if password else b""
+
+    log = None
+    if args.log is not None:
+        path = log_path_for(host, args.log)
+        log = SessionLog(path, timestamps=not args.no_timestamps)
+        log.note(f"session start {host}:{port}")
+        print(f"Logging to {path}", flush=True)
 
     print(f"Connecting to {host}:{port} ...", flush=True)
     s = socket.create_connection((host, port), timeout=10)
     s.settimeout(35)
 
-    f = s.makefile("r", newline="\n")
+    rxbuf = bytearray()
 
-    # Read challenge line
-    line = f.readline()
+    def readline():
+        """Read one line from the socket; leftover bytes stay in rxbuf."""
+        while b"\n" not in rxbuf:
+            chunk = s.recv(1024)
+            if not chunk:
+                break
+            rxbuf.extend(chunk)
+        idx = rxbuf.find(b"\n")
+        if idx < 0:
+            out = bytes(rxbuf)
+            rxbuf.clear()
+        else:
+            out = bytes(rxbuf[:idx + 1])
+            del rxbuf[:idx + 1]
+        return out.decode("utf-8", errors="replace")
+
+    line = readline()
     if not line:
         print("Connection closed before challenge.", file=sys.stderr)
         sys.exit(1)
-
     line = line.strip()
 
-    if password:
-        # Expect "NONCE: <hex>"
-        if not line.upper().startswith("NONCE:"):
-            print(f"Unexpected server response: {line!r}", file=sys.stderr)
-            sys.exit(1)
-        nonce_hex = line.split()[1].strip()
-        nonce     = bytes.fromhex(nonce_hex)
-        response  = hmac.new(password, nonce, hashlib.sha256).hexdigest()
+    if line.upper().startswith("NONCE:"):
+        if not password_b:
+            if not sys.stdin.isatty():
+                print("Server requires a password.", file=sys.stderr)
+                sys.exit(1)
+            password_b = getpass.getpass("Server requires a password: ").encode()
+        nonce = bytes.fromhex(line.split()[1].strip())
+        response = hmac.new(password_b, nonce, hashlib.sha256).hexdigest()
         s.sendall((response + "\n").encode())
 
-        # Read OK / FAIL
-        result = f.readline().strip()
+        result = readline().strip()
         if result != "OK":
             print(f"Authentication failed: {result!r}", file=sys.stderr)
+            if log:
+                log.note(f"authentication failed: {result!r}")
+                log.close()
             sys.exit(1)
         print("Authentication OK.", flush=True)
+        if log:
+            log.note("authentication OK")
+    elif line == "OK":
+        if password_b:
+            msg = "Note: server has no password set; the given password was ignored."
+            if password and password.isdigit():
+                msg += f" (Did you mean the port? Use -p {password})"
+            print(msg, file=sys.stderr, flush=True)
+        print("Connected (no password).", flush=True)
+        if log:
+            log.note("connected, no password required")
     else:
-        # No password — server sends banner directly
-        print(line, flush=True)
+        print(f"Unexpected server response: {line!r}", file=sys.stderr)
+        if log:
+            log.note(f"unexpected server response: {line!r}")
+            log.close()
+        sys.exit(1)
 
-    # Read banner lines until empty line or prompt
-    s.settimeout(1.0)
-    try:
-        while True:
-            banner_line = f.readline()
-            if not banner_line:
-                break
-            print(banner_line, end="", flush=True)
-    except socket.timeout:
-        pass
+    # Interactive bidirectional I/O (banner is printed by the receive loop)
     s.settimeout(None)
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
-    # Interactive bidirectional I/O
+    def emit(text):
+        if not text:
+            return
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        if log:
+            log.rx(text)
+
     def recv_loop():
         try:
+            if rxbuf:
+                emit(decoder.decode(bytes(rxbuf)))
+                rxbuf.clear()
             while True:
-                data = s.recv(256)
+                data = s.recv(1024)
                 if not data:
                     break
-                sys.stdout.write(data.decode(errors="replace"))
-                sys.stdout.flush()
+                emit(decoder.decode(data))
         except Exception:
             pass
         print("\n[Disconnected]", flush=True)
+        if log:
+            log.note("disconnected by remote")
+            log.close()
         os._exit(0)
 
     t = threading.Thread(target=recv_loop, daemon=True)
@@ -97,12 +260,18 @@ def main():
 
     try:
         while True:
-            line = input()
-            s.sendall((line + "\r\n").encode())
+            cmd = input()
+            if log:
+                log.tx(cmd)
+            s.sendall((cmd + "\r\n").encode())
     except (EOFError, KeyboardInterrupt):
         pass
 
+    if log:
+        log.note("session closed by user")
+        log.close()
     s.close()
+
 
 if __name__ == "__main__":
     main()
