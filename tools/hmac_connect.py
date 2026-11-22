@@ -37,6 +37,7 @@ import hashlib
 import hmac
 import os
 import re
+import signal
 import socket
 import sys
 import threading
@@ -145,8 +146,22 @@ def parse_args():
     return args
 
 
-def main():
-    args = parse_args()
+class Session:
+    """Holds the resources that must be released on exit."""
+
+    def __init__(self):
+        self.sock = None
+        self.log = None
+        self.rx_thread = None
+        self.stop = threading.Event()
+        self.close_reason = "session closed by user"
+
+
+def _raise_keyboard_interrupt(signum, frame):
+    raise KeyboardInterrupt
+
+
+def run(args, sess):
     host, port = args.host, args.port
 
     password = args.password
@@ -154,15 +169,15 @@ def main():
         password = getpass.getpass("Console password: ")
     password_b = password.encode() if password else b""
 
-    log = None
     if args.log is not None:
         path = log_path_for(host, args.log)
-        log = SessionLog(path, timestamps=not args.no_timestamps)
-        log.note(f"session start {host}:{port}")
+        sess.log = SessionLog(path, timestamps=not args.no_timestamps)
+        sess.log.note(f"session start {host}:{port}")
         print(f"Logging to {path}", flush=True)
+    log = sess.log
 
     print(f"Connecting to {host}:{port} ...", flush=True)
-    s = socket.create_connection((host, port), timeout=10)
+    s = sess.sock = socket.create_connection((host, port), timeout=10)
     s.settimeout(35)
 
     rxbuf = bytearray()
@@ -183,17 +198,20 @@ def main():
             del rxbuf[:idx + 1]
         return out.decode("utf-8", errors="replace")
 
+    def fail(msg):
+        print(msg, file=sys.stderr)
+        sess.close_reason = msg
+        return 1
+
     line = readline()
     if not line:
-        print("Connection closed before challenge.", file=sys.stderr)
-        sys.exit(1)
+        return fail("Connection closed before challenge.")
     line = line.strip()
 
     if line.upper().startswith("NONCE:"):
         if not password_b:
             if not sys.stdin.isatty():
-                print("Server requires a password.", file=sys.stderr)
-                sys.exit(1)
+                return fail("Server requires a password.")
             password_b = getpass.getpass("Server requires a password: ").encode()
         nonce = bytes.fromhex(line.split()[1].strip())
         response = hmac.new(password_b, nonce, hashlib.sha256).hexdigest()
@@ -201,11 +219,7 @@ def main():
 
         result = readline().strip()
         if result != "OK":
-            print(f"Authentication failed: {result!r}", file=sys.stderr)
-            if log:
-                log.note(f"authentication failed: {result!r}")
-                log.close()
-            sys.exit(1)
+            return fail(f"Authentication failed: {result!r}")
         print("Authentication OK.", flush=True)
         if log:
             log.note("authentication OK")
@@ -219,15 +233,12 @@ def main():
         if log:
             log.note("connected, no password required")
     else:
-        print(f"Unexpected server response: {line!r}", file=sys.stderr)
-        if log:
-            log.note(f"unexpected server response: {line!r}")
-            log.close()
-        sys.exit(1)
+        return fail(f"Unexpected server response: {line!r}")
 
     # Interactive bidirectional I/O (banner is printed by the receive loop)
     s.settimeout(None)
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    main_tid = threading.main_thread().ident
 
     def emit(text):
         if not text:
@@ -242,35 +253,77 @@ def main():
             if rxbuf:
                 emit(decoder.decode(bytes(rxbuf)))
                 rxbuf.clear()
-            while True:
+            while not sess.stop.is_set():
                 data = s.recv(1024)
                 if not data:
                     break
                 emit(decoder.decode(data))
-        except Exception:
+        except OSError:
             pass
-        print("\n[Disconnected]", flush=True)
-        if log:
-            log.note("disconnected by remote")
-            log.close()
-        os._exit(0)
+        if not sess.stop.is_set():
+            # Remote side closed: wake the main thread out of input()
+            sess.close_reason = "disconnected by remote"
+            print("\n[Disconnected by remote]", flush=True)
+            signal.pthread_kill(main_tid, signal.SIGINT)
 
-    t = threading.Thread(target=recv_loop, daemon=True)
-    t.start()
+    sess.rx_thread = threading.Thread(target=recv_loop, name="rx")
+    sess.rx_thread.start()
 
-    try:
-        while True:
+    while True:
+        try:
             cmd = input()
-            if log:
-                log.tx(cmd)
+        except EOFError:
+            return 0
+        if log:
+            log.tx(cmd)
+        try:
             s.sendall((cmd + "\r\n").encode())
-    except (EOFError, KeyboardInterrupt):
-        pass
+        except OSError as e:
+            sess.close_reason = f"send failed: {e}"
+            return 1
 
-    if log:
-        log.note("session closed by user")
-        log.close()
-    s.close()
+
+def cleanup(sess):
+    # From here on, ignore further Ctrl-C so cleanup cannot be interrupted
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    sess.stop.set()
+    if sess.sock is not None:
+        try:
+            # Graceful TCP close (FIN) so the node frees its console slot;
+            # also unblocks recv() in the receive thread.
+            sess.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+    if sess.rx_thread is not None:
+        sess.rx_thread.join(timeout=3)
+    if sess.sock is not None:
+        sess.sock.close()
+    if sess.log is not None:
+        sess.log.note(sess.close_reason)
+        sess.log.close()
+
+
+def main():
+    args = parse_args()
+    for sig in (signal.SIGINT, signal.SIGTERM, getattr(signal, "SIGHUP", None)):
+        if sig is not None:
+            signal.signal(sig, _raise_keyboard_interrupt)
+
+    sess = Session()
+    rc = 0
+    try:
+        rc = run(args, sess)
+    except KeyboardInterrupt:
+        if sess.close_reason == "session closed by user":
+            print("\n[Closed]", flush=True)
+            sess.close_reason = "session closed by user (interrupt)"
+    except (OSError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sess.close_reason = f"error: {e}"
+        rc = 1
+    finally:
+        cleanup(sess)
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
