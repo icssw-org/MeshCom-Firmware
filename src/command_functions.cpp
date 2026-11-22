@@ -10,6 +10,7 @@
 #include "printfdeb_functions.h"
 #include "mc_board_id.h" // F4-1a: --id board marker
 #include "command_match.h" // D2-10: commandMatches(), the ladder's matching rule
+#include "command_dash.h"  // CMD-DASH-01: look-alike dashes (U+2212, U+2013, U+2014) -> "--"
 #include "blocked_calls.h" // BLK-01: --blockcall
 #include "command_toggles.h" // D2-06: the table-driven on/off toggles
 #include "command_setters.h" // D2-07: numeric argument parse/range/store
@@ -796,6 +797,10 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     if(iphone == 1)
         ble=true;
 
+    // CMD-DASH-01: before the splitter looks for "--". Writes only when a non-ASCII dash is present,
+    // so the (char*)"--..." literals some callers pass are never touched.
+    commandFoldDashes(msg_text);
+
     // loop more commands from one string
     // --setcall OE3WAS-10 --setpwd 12345678 --setssid Drei_H288A_24G_yAFG --webserver on --button gpio 12 --button on ......
     if(bDisplayCont && bDisplayInfo)
@@ -960,6 +965,8 @@ void commandAction(char *umsg_text, bool ble)
                            // must never reach a persisted setting -- see
                            // src/command_setters.h.
     float fVar=0.0;
+
+    commandFoldDashes(umsg_text);   // CMD-DASH-01: callers that skip the splitter (web GUI, RM, T-Deck)
 
     String sVar = umsg_text;
     sVar.trim();
