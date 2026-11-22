@@ -382,6 +382,19 @@ void tripleClick()
   sendDisplayHead(false);
 }
 
+#if defined(BOARD_TBEAM) || defined(BOARD_SX1262) || defined(BOARD_SX1268) || defined(BOARD_TBEAM_V3) || defined(BOARD_TBEAM_1W)
+// All five T-Beam envs (ttgo_tbeam, ttgo_tbeam_SX1262/SX1268, ttgo_tbeam_supreme, LilyGo_T-Beam-1W).
+#define MC_TBEAM_VERYLONG_SLEEP 1
+#define TBEAM_SLEEP_PRESS_MS 3000
+static bool bTBeamDisplayOffBeforeLong = false;
+static bool bTBeamDisplayIsOffBeforeLong = false;
+static bool bTBeamPosDisplayBeforeLong = false;
+static int uTBeamSsetBeforeLong = 0;
+static bool bTBeamSleepFired = false;
+void save_settings(void);
+void TBeamDuringLongPress();
+#endif
+
 void PressLong()
 {
   if(bDisplayCont)
@@ -430,6 +443,14 @@ void PressLong()
         Serial.println("[BOARD_T_ECHO]... PWR OFF");
         boardPWROff();
       #else
+        #if defined(MC_TBEAM_VERYLONG_SLEEP)
+        // Display state before this press: a press held on to deep sleep restores it (TBeamDuringLongPress).
+        bTBeamDisplayOffBeforeLong = bDisplayOff;
+        bTBeamDisplayIsOffBeforeLong = bDisplayIsOff;
+        bTBeamPosDisplayBeforeLong = bPosDisplay;
+        uTBeamSsetBeforeLong = meshcom_settings.node_sset;
+        bTBeamSleepFired = false;
+        #endif
         if(!bDisplayOff)
         {
             commandAction((char*)"--display off", isPhoneReady, false);
@@ -442,6 +463,31 @@ void PressLong()
 
   #endif
 }
+
+#if defined(MC_TBEAM_VERYLONG_SLEEP)
+// T-Beam: the long press (0.8 s) keeps toggling the display; held for TBEAM_SLEEP_PRESS_MS
+// it puts the node into deep sleep. The display toggle of that same press is undone first,
+// because bDisplayOff is persisted and would otherwise survive the wake. The ext1 wake on
+// the button is armed after the release (esp32WaitButtonRelease(), esp32_sleep.cpp).
+void TBeamDuringLongPress()
+{
+  if(bTBeamSleepFired || btn.getPressedMs() < TBEAM_SLEEP_PRESS_MS)
+    return;
+  bTBeamSleepFired = true;
+  Serial.println("[BOARD_TBEAM]... very long press, GO to deepsleep");
+  // Restore the pre-press display state directly: the display-on command would also force
+  // posdisplay on (node_sset 0x0004) and change the user's setting.
+  if(bDisplayOff != bTBeamDisplayOffBeforeLong)
+  {
+    bDisplayOff = bTBeamDisplayOffBeforeLong;
+    bDisplayIsOff = bTBeamDisplayIsOffBeforeLong;
+    bPosDisplay = bTBeamPosDisplayBeforeLong;
+    meshcom_settings.node_sset = uTBeamSsetBeforeLong;
+    save_settings();
+  }
+  commandAction((char*)"--deepsleep", isPhoneReady, false);
+}
+#endif
 
 // setup code here, to run once:
 void init_onebutton()
@@ -465,6 +511,9 @@ void init_onebutton()
     btn.attachDoubleClick(doubleClick);   // Double Click event attachment
     btn.attachMultiClick(tripleClick);    // Multi Click event attachement
     btn.attachLongPressStart(PressLong);  // LongPress Click event attachement
+    #if defined(MC_TBEAM_VERYLONG_SLEEP)
+    btn.attachDuringLongPress(TBeamDuringLongPress);   // held 3 s -> deep sleep
+    #endif
   }
   else
   {
