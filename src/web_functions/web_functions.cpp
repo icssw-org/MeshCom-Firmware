@@ -4,6 +4,7 @@
  */
 #include "mc_text.h"
 #include "msg_body.h"      // CHARS-01: strip only the trailing {NNN ACK marker
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "node_position.h"   // nodeSignedLat/Lon: own position as signed degrees (#1279)
 #include <Arduino.h>
@@ -1910,7 +1911,7 @@ void sub_page_position()
     web_client.printf("<tr><td>Altitude</td><td>%i</td></tr>\n", meshcom_settings.node_alt);
     web_client.printf("<tr><td>Satellites</td><td>%i - %s - HDOP %i</td></tr>\n", (int)posinfo_satcount, (posinfo_fix ? "fix" : "nofix"), (int)fposinfo_hdop);
     web_client.printf("<tr><td>Rate</td><td>%i</td></tr>\n", (int)posinfo_interval);
-    web_client.printf("<tr><td>Next</td><td>%i sec</td></tr>\n", (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000));
+    web_client.printf("<tr><td>Next</td><td>%i sec</td></tr>\n", posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval));
     web_client.printf("<tr><td>Distance</td><td>%.0lf m</td></tr>\n", posinfo_distance);
     web_client.printf("<tr><td>Dir (current)</td><td>%i&deg;</td></tr>\n", (int)posinfo_direction);
     web_client.printf("<tr><td>Dir (last)</td><td>%i&deg;</td></tr>\n", (int)posinfo_last_direction);
@@ -3285,6 +3286,7 @@ void sub_page_setup()
     _create_setup_switch_element("display", "Display", "keep display active permanently", !bDisplayOff);        // create Switch-Element inclucing Label and Description
     //NOT USED _create_setup_switch_element("small", "small Display", "reduce content for small displays", bSMALLDISPLAY); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("volt", "Voltage", "show batt. voltage, not percent", bDisplayVolt);           // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("msgwake", "Message wake", "an incoming message turns an off display on", bMsgWake);   // T114-DARK-01 (#1314)
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("via", "Via", "enable via", bVIA);    // create Switch-Element inclucing Label and Description
     { // LED-08: only on a node that has the LED (the info page says "not fitted" otherwise); same console row as --charge led.
@@ -4099,6 +4101,7 @@ void sub_page_info()
     web_client.printf("<tr><td>Display</td><td>");
     web_client.printf("Display: %s<br>", (!bDisplayOff ? "on" : "off"));
     web_client.printf("Voltage: %s<br>", (bDisplayVolt ? "on" : "off"));
+    web_client.printf("Message wake: %s<br>", (bMsgWake ? "on" : "off"));   // T114-DARK-01 (#1314)
     web_client.printf("</td></tr>\n");
 
     web_client.printf("<tr><td>Network</td><td>");

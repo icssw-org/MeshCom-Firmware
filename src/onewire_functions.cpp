@@ -2,7 +2,7 @@
 #include "loop_functions_extern.h"
 
 #include "onewire_functions.h"
-#include "settings_sanitize.h"   // SENS-04: dht_type_valid / sanitize_dht_type / dht_name_matches
+#include "settings_sanitize.h"   // SENS-04: dht_type_valid / sanitize_dht_type / dht_probe_step
 
 byte i;
 byte present = 0;
@@ -10,6 +10,10 @@ byte present = 0;
 byte data[9];
 byte addr[8];
 float celsius, fahrenheit;
+
+bool dht_ok = false;   // DHT-PROBE-01: last DHT read gave valid T and H (--info status word)
+// DHT-PROBE-01: dht_found latches on the first valid read (dht_probe_step); until then up to DHT_PROBE_TRIES reads are tried.
+uint8_t dht_probe_left = 0;
 
 #ifdef OneWire_GPIO
 //--------------------------------------------------------------------------
@@ -33,6 +37,8 @@ static DHT_Unified *dht = nullptr;
 void init_onewire_dht()
 {
     dht_found = false;
+    dht_ok = false;
+    dht_probe_left = 0;
     
     if(!bONEWIRE)
         return;
@@ -81,45 +87,19 @@ void init_onewire_dht()
 
     dht->begin();
 
-    Serial.println(F("[INIT]...DHTxx Unified Sensor found"));
-    // Print temperature sensor details.
+    // DHT-PROBE-01: begin() only arms the pin; "found" is decided by the first valid read in loop_onewire_dht().
     sensor_t sensor;
     dht->temperature().getSensor(&sensor);
 
-    if(dht_name_matches(sensor.name, meshcom_settings.node_dht_type))
-    {
-        dht_found = true;
+    // Set delay between sensor readings based on sensor details.
+    delayMS = sensor.min_delay / 1000;
 
-        /*
-        Serial.println(F("------------------------------------"));
-        Serial.println(F("Temperature Sensor"));
-        Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-        Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-        Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-        Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("°C"));
-        Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("°C"));
-        Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("°C"));
-        Serial.println(F("------------------------------------"));
-        // Print humidity sensor details.
-        dht->humidity().getSensor(&sensor);
-        Serial.println(F("Humidity Sensor"));
-        Serial.print  (F("Sensor Type: ")); Serial.println(sensor.name);
-        Serial.print  (F("Driver Ver:  ")); Serial.println(sensor.version);
-        Serial.print  (F("Unique ID:   ")); Serial.println(sensor.sensor_id);
-        Serial.print  (F("Max Value:   ")); Serial.print(sensor.max_value); Serial.println(F("%"));
-        Serial.print  (F("Min Value:   ")); Serial.print(sensor.min_value); Serial.println(F("%"));
-        Serial.print  (F("Resolution:  ")); Serial.print(sensor.resolution); Serial.println(F("%"));
-        Serial.println(F("------------------------------------"));
-        */
-
-        // Set delay between sensor readings based on sensor details.
-        delayMS = sensor.min_delay / 1000;
-    }
+    dht_probe_left = DHT_PROBE_TRIES;
 }
 
 bool loop_onewire_dht()
 {
-    if(!dht_found || dht == nullptr)
+    if(dht == nullptr || !(dht_found || dht_probe_left > 0))
     {
         return false;
     }
@@ -132,6 +112,8 @@ bool loop_onewire_dht()
         Serial.printf("delayMS: %u\n", delayMS);
     */
 
+    bool read_ok = true;   // DHT-PROBE-01: this read returned numbers for T and H
+
     // Get temperature event and print its value.
     sensors_event_t event;
     dht->temperature().getEvent(&event);
@@ -140,7 +122,7 @@ bool loop_onewire_dht()
         if(bWXDEBUG)
             Serial.println(F("Error reading temperature (DHT)!"));
 
-        dht_found=false;
+        read_ok = false;
     }
     else
     {
@@ -161,7 +143,7 @@ bool loop_onewire_dht()
         if(bWXDEBUG)
             Serial.println(F("Error reading humidity (DHT)!"));
 
-        dht_found = false;
+        read_ok = false;
     }
     else
     {
@@ -174,6 +156,16 @@ bool loop_onewire_dht()
             Serial.println(F("%"));
         }
     }
+
+    const bool was_found = dht_found;
+    dht_probe_step(dht_found, dht_probe_left, read_ok);
+    dht_ok = read_ok;
+
+    if(!was_found && dht_found)
+        Serial.printf("[INIT]...DHT%i found\n", meshcom_settings.node_dht_type);
+    else
+    if(!dht_found && dht_probe_left == 0)
+        Serial.printf("[INIT]...DHT%i not found\n", meshcom_settings.node_dht_type);
 
     return true;
 }

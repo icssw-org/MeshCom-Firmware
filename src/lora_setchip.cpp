@@ -5,6 +5,7 @@
 
 #include "lora_setchip.h"
 #include "radio_units.h"   // RF-01..RF-03 unit conversions
+#include "rf_pa.h"   // TBEAM1W-PWR-01: same PA setup as the boot path
 #include "country_profile.h"   // C5: the country table
 
 #if defined(EXTERNAL_RADIO)
@@ -572,7 +573,7 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     if(bLORADEBUG)
         Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
-    if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER)
+    if (rfApplyOutputPower(radio, tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER)
     {
         Serial.println(F("Selected output power is invalid for this module!"));
         return false;

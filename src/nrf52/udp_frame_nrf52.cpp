@@ -24,6 +24,7 @@
 #include "printfdeb_functions.h"
 #include "via_functions.h"
 #include "regex_functions.h"
+#include "gw_phone_route.h"   // GW-GROUP-01/GW-DM-01: phone/display follow the LoRa rule
 #include "conf_frame.h"
 #include "setlog_lines.h"
 #include "gw_link_status.h"
@@ -317,6 +318,11 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
               bUDPtoLoraSend = false;
           }
 
+          // GW-GROUP-01/GW-DM-01: decided once; gates only what the phone and the display get.
+          // The relay to LoRa, the dedup and the gateway ack do not depend on it.
+          const bool bForNode = (msg_type_b != 0x3A) ||
+                                gwUdpTextForNode(destination_call, meshcom_settings.node_call, bNoMSGtoALL);
+
           if(msg_type_b == 0x3A)
           {
             if(memcmp(aprsmsg.msg_payload, "{SET}", 5) == 0)
@@ -409,7 +415,8 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
                     if(bDisplayInfo)
                         printfdeb("[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X ACK...%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5]);
 
-                    addBLEOutBuffer(print_buff, plen);
+                    if(bForNode)   // an ack for a group or DM that is not ours stays off the phone
+                        addBLEOutBuffer(print_buff, plen);
 
                     // DR-18 part 2 (docs/ack-wer-hat-quittiert.md §6.3):
                     // mirror the BLE ack frame just built above to the
@@ -484,7 +491,7 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
                                                rmRxEnabled(meshcom_settings.node_rm, meshcom_settings.node_passwd),
                                                (uint32_t)aprsmsg.msg_id, (uint32_t)millis());
 
-                if(iAckPos <= 0 && bDmDedupNew && !bStoConsumed && !bRmConsumed)
+                if(iAckPos <= 0 && bDmDedupNew && !bStoConsumed && !bRmConsumed && bForNode)
                 {
                   if(!bGATEWAY)
                     sendDisplayText(aprsmsg, (int16_t)99, (int8_t)0);
@@ -501,7 +508,7 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
 
                 uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
-                if(bDmDedupNew && !bStoConsumed && !bRmConsumed) addBLEOutBuffer(tempRcvBuffer, tempsize);
+                if(bDmDedupNew && !bStoConsumed && !bRmConsumed && bForNode) addBLEOutBuffer(tempRcvBuffer, tempsize);
 
                 bBLELoopOut=false;
 
@@ -614,7 +621,9 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
 
                 // add rcvMsg to BLE out Buff
                 // size message is int -> uint16_t buffer size
-                if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
+                // Frames that went through the branch above are done (bBLELoopOut false). The rest
+                // (position, HEY, {SET}/{CET}) goes to the phone; a text frame not for this node does not.
+                if(isPhoneReady == 1 && bBLELoopOut && gwUdpPhoneWants(msg_type_b, aprsmsg.msg_payload, bForNode))
                 {
                     if(bDEBUG)
                     {

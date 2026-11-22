@@ -632,6 +632,7 @@ unsigned int tdeck_get_gps()
 
     if(year > 2023)
     {
+        CLK_SRC("GPS");
         MyClock.setCurrentTime(meshcom_settings.node_utcoff, year, month, day, (uint16_t)hour, (uint16_t)min, (uint16_t)sec);
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
     }

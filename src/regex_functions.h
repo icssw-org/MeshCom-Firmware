@@ -7,6 +7,13 @@
 
 bool checkRegexCall(String strCallSign);
 
+// GW-CALL-01 (D5): the tail of the "Callsign <..> not valid" console line, with a
+// leading space, so the setters (--setcall, --setudpcall, --setlog) share one text.
+// A call with '/' (country prefix such as SV/OE3WFA) gets the reason; the grammar
+// has no '/' by design. Keep "[ERR]..Callsign <%s> not valid" as the first part of
+// the line, the hint is appended: printfdeb("... not valid%s\n", ..., callRejectHint(s).c_str())
+String callRejectHint(const String &callsign);
+
 // Prueft die Via-Liste des Knotens (--via): kommagetrennte Hop-Rufzeichen,
 // zusammen hoechstens 39 Zeichen (node_via ist char[40]). Leere Liste, leere
 // Eintraege, SSID ausserhalb 0..99 oder mit fuehrender Null und die

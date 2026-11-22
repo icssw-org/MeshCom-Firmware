@@ -12,6 +12,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 struct RadioLimits
 {
@@ -75,8 +76,12 @@ bool sanitize_backlight_level(int &v, int def, const char *field, sanitize_log_f
 bool dht_type_valid(int v);
 /* Resets anything else (a wiped or corrupt value reads 0) to 11. Returns true if corrected. */
 bool sanitize_dht_type(int &v, sanitize_log_fn log);
-/* True when the name the DHT driver reports ("DHT11", "DHT22") matches the configured type. */
-bool dht_name_matches(const char *name, int type);
+/* DHT-PROBE-01: "found" = a read returned numbers. found latches on the first valid read and never clears;
+ * an invalid read only burns one of the probe tries. */
+#define DHT_PROBE_TRIES 3
+void dht_probe_step(bool &found, uint8_t &tries_left, bool read_valid);
+/* "found" / "read error" / "probing" / "not found" (longest 10 chars) */
+const char *dht_status_word(bool found, bool last_read_ok, uint8_t tries_left);
 
 /* A stored ping target (node_pingcall) must be a plain callsign:
  * no group, no special target, not the node's own call (see ping_target.h).

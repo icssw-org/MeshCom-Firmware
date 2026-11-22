@@ -8,9 +8,9 @@
 // User-Button, und die EXTUDP-Telemetrie-Injektion).
 //
 // Warum das noetig ist:
-// Der periodische Beacon-Pfad in esp32_main.cpp/nrf52_main.cpp haelt seit jeher
-// eine Untergrenze ein ("minimal transmit time only max 30 sec",
-// posinfo_timer_min). Der Sofort-Pfad haelt gar keine ein: jeder Ausloeser
+// Der periodische Beacon-Pfad in esp32_main.cpp/nrf52_main.cpp haelt seit
+// POSINFO-LAG-01 POSINFO_AUTO_MIN_MS (60 s) ab dem letzten Positions-TX jeder
+// Art ein (posinfo_timer_min und lastOwnPosTx, posinfo_timer.h). Der Sofort-Pfad haelt gar keine ein: jeder Ausloeser
 // erzeugt genau einen Beacon, ohne zu pruefen, wann der letzte hinausging.
 //
 // handleExternTelemetry() (extudp_functions.cpp) ruft sendPosition() einmal pro
@@ -34,10 +34,17 @@
 // und der Track-/APRS-Pfad bleiben unberuehrt -- sie tragen ihre eigene,
 // laengere Kadenz.
 
-// 30 s: derselbe Wert, den der periodische Pfad ohnehin schon als
-// Mindestabstand fuehrt (posinfo_timer_min). SmartBeaconing geht im
-// Track-Betrieb bis auf 10 s herunter, laeuft aber nicht ueber den Sofort-Pfad.
+// 30 s: Mindestabstand fuer manuelle Sofort-Beacons (--sendpos, Button).
+// Automatische Beacons (Intervall, Track/SmartBeaconing, posinfo_shot inkl.
+// --posshot und App-Positions-Push, EXTUDP-Telemetrie) halten
+// POSINFO_AUTO_MIN_MS (60 s) ein.
 #define BEACON_SHOT_MIN_MS (30UL * 1000UL)
+
+// 60 s: minimum spacing of AUTOMATIC position beacons (periodic, track, smart beaconing, posinfo_shot)
+// from the last position TX of any kind. aprs.fi warns when a station's average interval drops
+// below ~30 s; 60 s is a 2x margin. Also gates --posshot, the app position push and EXTUDP telemetry
+// (deferred via posinfo_shot). Manual sends (--sendpos, button) keep BEACON_SHOT_MIN_MS.
+#define POSINFO_AUTO_MIN_MS (60UL * 1000UL)
 
 /**
  * @brief Darf jetzt ein Sofort-Beacon ("send now") ausgesendet werden?

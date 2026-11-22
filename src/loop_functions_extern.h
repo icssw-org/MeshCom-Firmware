@@ -119,6 +119,8 @@ extern bool bPingSend;
 extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayIsOff;
+extern bool bMsgWake;       // T114-DARK-01: --msgwake (default true)
+extern bool bDisplayDark;   // T114-DARK-01: --theme dark on the T114 (default false = light)
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
 extern bool bDisplayVia;
@@ -210,6 +212,8 @@ extern int one_start;
 extern bool ina226_found;
 extern bool shtc3_found;
 extern bool dht_found;
+extern uint8_t dht_probe_left;   // onewire_functions.cpp: DHT-PROBE-01 first-read attempts left (0 = decided)
+extern bool dht_ok;      // onewire_functions.cpp: last DHT read gave valid T and H (DHT-PROBE-01, --info)
 
 extern bool bSHORTPATH;
 //extern bool bGPSDEBUG;
@@ -532,7 +536,6 @@ extern int gps_refresh_track;
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long posinfo_timer_min;
 extern unsigned long heyinfo_timer;      // we check periodically to send HEY
-extern int ncnt_hold;
 extern unsigned long nbrsnap_timer;      // --nbrdebug: 15-min-Takt fuer nbrLogSnapshot()
 
 void nbrDebugApply(void);                // nbrLog an bNBRDEBUG angleichen (lora_functions.cpp)

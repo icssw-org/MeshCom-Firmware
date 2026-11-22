@@ -14,19 +14,15 @@
 #include "gps_functions.h"
 #include "gps_skyplot.h"
 #include "t114_gps_page.h"
+#include "t114_theme.h"
+
+#define PAL (t114Palette(bDisplayDark))
 
 extern Adafruit_ST7789 tft1;   // nrf52_main.cpp
 extern bool bSetDisplay;       // loop_functions.cpp, not in a header
 
 // ------------------------------------------------------------------ drawing
 
-#define C_WHITE   0xFFFF
-#define C_BLACK   0x0000
-#define C_RED     0xF800
-#define C_GREEN   0x0660   // medium green (0,204,0); the darker 0x0400 looked black on the T114 TFT
-#define C_ORANGE  0xFC60
-#define C_GRAY    0x8410
-#define C_LGRAY   0xC618
 
 static bool     g_active = false;
 static uint32_t g_skyHash = 0;
@@ -38,9 +34,9 @@ static uint16_t snrColor(int snr)
 {
     switch(gpsSkySnrLevel(snr))
     {
-        case GPS_SKY_SNR_HIGH: return C_GREEN;
-        case GPS_SKY_SNR_MID:  return C_ORANGE;
-        default:               return C_RED;
+        case GPS_SKY_SNR_HIGH: return PAL.good;
+        case GPS_SKY_SNR_MID:  return PAL.warn;
+        default:               return PAL.bad;
     }
 }
 
@@ -55,15 +51,15 @@ static void putText(int16_t x, int16_t y, uint8_t size, uint16_t fg, uint16_t bg
 
 static void drawHeader()
 {
-    tft1.fillRect(0, 0, tft1.width(), 30, C_RED);
-    putText(4, 6, 2, C_WHITE, C_RED, "GPS");
+    tft1.fillRect(0, 0, tft1.width(), 30, PAL.header);
+    putText(4, 6, 2, PAL.headerText, PAL.header, "GPS");
 }
 
 static void drawClock()
 {
     char buf[12];
     snprintf(buf, sizeof(buf), "%02i:%02i:%02i", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-    putText(tft1.width() - 8 * 12 - 4, 6, 2, C_WHITE, C_RED, buf);
+    putText(tft1.width() - 8 * 12 - 4, 6, 2, PAL.headerText, PAL.header, buf);
 }
 
 static void drawSky(bool force)
@@ -88,16 +84,16 @@ static void drawSky(bool force)
         return;
     g_skyHash = hash;
 
-    tft1.fillCircle(CX, CY, R + 1, C_WHITE);
-    tft1.drawCircle(CX, CY, R * 2 / 3, C_LGRAY);   // 30 degrees elevation
-    tft1.drawCircle(CX, CY, R / 3, C_LGRAY);       // 60 degrees elevation
-    tft1.drawFastHLine(CX - R, CY, 2 * R + 1, C_LGRAY);
-    tft1.drawFastVLine(CX, CY - R, 2 * R + 1, C_LGRAY);
-    tft1.drawCircle(CX, CY, R, C_BLACK);
+    tft1.fillCircle(CX, CY, R + 1, PAL.body);
+    tft1.drawCircle(CX, CY, R * 2 / 3, PAL.grid);   // 30 degrees elevation
+    tft1.drawCircle(CX, CY, R / 3, PAL.grid);       // 60 degrees elevation
+    tft1.drawFastHLine(CX - R, CY, 2 * R + 1, PAL.grid);
+    tft1.drawFastVLine(CX, CY - R, 2 * R + 1, PAL.grid);
+    tft1.drawCircle(CX, CY, R, PAL.outline);
 
-    putText(CX - 3, CY - R - 9, 1, C_BLACK, C_WHITE, "N");
-    putText(CX - R - 8, CY - 4, 1, C_BLACK, C_WHITE, "W");
-    putText(CX + R + 3, CY - 4, 1, C_BLACK, C_WHITE, "E");
+    putText(CX - 3, CY - R - 9, 1, PAL.outline, PAL.body, "N");
+    putText(CX - R - 8, CY - 4, 1, PAL.outline, PAL.body, "W");
+    putText(CX + R + 3, CY - 4, 1, PAL.outline, PAL.body, "E");
 
     if(!bGPSON)
         return;
@@ -113,7 +109,7 @@ static void drawSky(bool force)
         if(sats[i].snr > 0)
             tft1.fillCircle(x, y, 3, snrColor(sats[i].snr));
         else
-            tft1.drawCircle(x, y, 3, C_GRAY);   // in view, not tracked
+            tft1.drawCircle(x, y, 3, PAL.dim);   // in view, not tracked
     }
 }
 
@@ -123,45 +119,45 @@ static void drawPanel()
 
     if(!bGPSON)
     {
-        putText(PX, 34, 2, C_RED, C_WHITE, "GPS OFF   ");
-        putText(PX, 58, 1, C_BLACK, C_WHITE, "Triple click: Track");
-        putText(PX, 68, 1, C_BLACK, C_WHITE, "mode, starts the GPS");
+        putText(PX, 34, 2, PAL.bad, PAL.body, "GPS OFF   ");
+        putText(PX, 58, 1, PAL.bodyText, PAL.body, "Triple click: Track");
+        putText(PX, 68, 1, PAL.bodyText, PAL.body, "mode, starts the GPS");
         return;
     }
 
     // fix state
     if(posinfo_fix)
-        putText(PX, 34, 2, C_GREEN, C_WHITE, "FIX       ");
+        putText(PX, 34, 2, PAL.good, PAL.body, "FIX       ");
     else
-        putText(PX, 34, 2, C_RED, C_WHITE, "NO FIX    ");
+        putText(PX, 34, 2, PAL.bad, PAL.body, "NO FIX    ");
 
     // satellites used / in view
     int used = (int)posinfo_satcount;
     int inView = gpsSkySatsInView(millis());
     snprintf(buf, sizeof(buf), "SAT %2d/%-2d  ", used, inView);
-    putText(PX, 52, 2, C_BLACK, C_WHITE, buf);
+    putText(PX, 52, 2, PAL.bodyText, PAL.body, buf);
 
     // 12 segment bar for the satellites used; green from 6 (the fix needs more than 5)
-    uint16_t barColor = used >= 6 ? C_GREEN : (used >= 4 ? C_ORANGE : C_RED);
+    uint16_t barColor = used >= 6 ? PAL.good : (used >= 4 ? PAL.warn : PAL.bad);
     for(int i = 0; i < 12; i++)
-        tft1.fillRect(PX + i * 10, 70, 8, 6, i < used ? barColor : C_LGRAY);
+        tft1.fillRect(PX + i * 10, 70, 8, 6, i < used ? barColor : PAL.grid);
 
     snprintf(buf, sizeof(buf), "HDOP %4.1f ALT %4.0fm  ", gpsData.hdop, gpsData.altitude);
-    putText(PX, 80, 1, C_BLACK, C_WHITE, buf);
+    putText(PX, 80, 1, PAL.bodyText, PAL.body, buf);
 
     snprintf(buf, sizeof(buf), "SPD %4.1fkm/h CRS %03.0f ", gpsData.speed_kmh, gpsData.course);
-    putText(PX, 90, 1, C_BLACK, C_WHITE, buf);
+    putText(PX, 90, 1, PAL.bodyText, PAL.body, buf);
 
     char age[16];
     gpsSkyFormatAge(age, sizeof(age), posinfo_fix, gpsData.age_ms);
     snprintf(buf, sizeof(buf), "%-9s            ", age);
-    putText(PX, 100, 1, C_BLACK, C_WHITE, buf);
+    putText(PX, 100, 1, PAL.bodyText, PAL.body, buf);
 
     snprintf(buf, sizeof(buf), "LAT %9.4f %c  ", fabs(gpsData.latitude), gpsData.latitude < 0 ? 'S' : 'N');
-    putText(PX, 110, 1, C_BLACK, C_WHITE, buf);
+    putText(PX, 110, 1, PAL.bodyText, PAL.body, buf);
 
     snprintf(buf, sizeof(buf), "LON %9.4f %c  ", fabs(gpsData.longitude), gpsData.longitude < 0 ? 'W' : 'E');
-    putText(PX, 120, 1, C_BLACK, C_WHITE, buf);
+    putText(PX, 120, 1, PAL.bodyText, PAL.body, buf);
 }
 
 // ------------------------------------------------------------------ page control
@@ -175,7 +171,7 @@ void t114GpsPageRedraw()
 {
     bSetDisplay = true;
 
-    tft1.fillScreen(C_WHITE);
+    tft1.fillScreen(PAL.body);
     drawHeader();
     drawClock();
     drawSky(true);

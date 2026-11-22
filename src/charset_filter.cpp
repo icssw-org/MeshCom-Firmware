@@ -232,3 +232,34 @@ size_t charset_utf8_safe_truncate(const char *buf, size_t len, size_t max_len)
 
     return i;
 }
+
+size_t charset_wire_field(const char *src, char *dst, size_t dst_size, size_t cap, size_t *cut_bytes)
+{
+    if (cut_bytes != nullptr)
+        *cut_bytes = 0;
+
+    if (dst == nullptr || dst_size == 0)
+        return 0;
+
+    dst[0] = 0x00;
+
+    if (src == nullptr)
+        return 0;
+
+    // the copy into dst is itself a cut: keep it UTF-8-safe and count what it drops
+    const size_t srclen = strlen(src);
+    size_t n = charset_utf8_safe_truncate(src, srclen, dst_size - 1);
+    const size_t clipped = srclen - n;
+    memcpy(dst, src, n);
+
+    n = charset_filter_apply(dst, n, CHARSET_FILTER_STRIP_SEPARATORS);
+
+    size_t lim = (cap < dst_size - 1) ? cap : dst_size - 1;
+    size_t kept = charset_utf8_safe_truncate(dst, n, lim);
+
+    if (cut_bytes != nullptr)
+        *cut_bytes = clipped + (n - kept);
+
+    dst[kept] = 0x00;
+    return kept;
+}

@@ -787,10 +787,29 @@ static inline bool supersedeStatusOk(uint8_t st)
  * wird" -- beides passiert hier, innerhalb DERSELBEN kritischen Sektion,
  * kein Nachtrag mehr noetig.
  */
+// RM-LOSTREPLY-01 (D2): oldest QUEUED ACK (status DONE, prio 1, text or binary
+// ACK), or -1. Runs under the caller's lock, prints nothing. INFLIGHT and
+// EXT_PENDING are never DONE, so an owned slot cannot be picked.
+static int oldestQueuedAckSlot(void)
+{
+    int victim = -1;
+    for(int i = 0; i < MAX_RING; i++)
+    {
+        if(ringBuffer[i][0] == 0 || ringBuffer[i][1] != RING_STATUS_DONE ||
+           ringPriority[i] != MSG_PRIO_CRITICAL ||
+           !txRingFrameIsAck(ringBuffer[i] + 2, ringBuffer[i][0]))
+            continue;
+        if(victim < 0 || (int32_t)(ringEnqueueTime[i] - ringEnqueueTime[victim]) < 0)
+            victim = i;
+    }
+    return victim;
+}
+
 static int addTxRingEntryCore(const uint8_t* frame, uint16_t len,
                                uint8_t classify_status, uint8_t store_status,
                                const char* source, int retryCountIn, bool clearSlotFirst,
-                               uint8_t kind, const NbrMask *need, const NbrMask *alone)
+                               uint8_t kind, const NbrMask *need, const NbrMask *alone,
+                               bool evictAck)
 {
     // TX-01 (BACKLOG 3.8k): an unconfigured node (factory callsign) must not
     // transmit at all -- refuse here so its ring never even fills, on top
@@ -962,23 +981,31 @@ static int addTxRingEntryCore(const uint8_t* frame, uint16_t len,
             }
         }
 
+        // RM-LOSTREPLY-01 (D2): an own RM reply may take the oldest queued ACK
+        // when nothing of lower priority can be evicted.
+        int victim = -1;
         if(worst_slot >= 0 && prio < worst_prio)
+            victim = worst_slot;
+        else if(evictAck && prio == MSG_PRIO_CRITICAL)
+            victim = oldestQueuedAckSlot();
+
+        if(victim >= 0)
         {
             // Drop the lowest-priority entry to make room; the newcomer
             // takes its slot (nothing else moves, slot ids stay stable).
             droppedOld = true;
-            dropSlot = worst_slot;
-            dropPrio = worst_prio;
-            dropType = ringBuffer[worst_slot][2];
-            dropId = ((uint32_t)ringBuffer[worst_slot][6] << 24) | ((uint32_t)ringBuffer[worst_slot][5] << 16) |
-                     ((uint32_t)ringBuffer[worst_slot][4] << 8)  |  (uint32_t)ringBuffer[worst_slot][3];
-            if(worst_prio >= 1 && worst_prio <= 5)
-                stat_drop_count[worst_prio]++;
+            dropSlot = victim;
+            dropPrio = ringPriority[victim];
+            dropType = ringBuffer[victim][2];
+            dropId = ((uint32_t)ringBuffer[victim][6] << 24) | ((uint32_t)ringBuffer[victim][5] << 16) |
+                     ((uint32_t)ringBuffer[victim][4] << 8)  |  (uint32_t)ringBuffer[victim][3];
+            if(dropPrio >= 1 && dropPrio <= 5)
+                stat_drop_count[dropPrio]++;
             // M0-1 instrumentation (0.4): the evicted entry was a parked SENT
             // (own text waiting for its ACK), not a queued READY/DONE frame.
-            parkedOverwrite = ringBuffer[worst_slot][1] != RING_STATUS_READY &&
-                              ringBuffer[worst_slot][1] != RING_STATUS_DONE;
-            w = worst_slot;
+            parkedOverwrite = ringBuffer[victim][1] != RING_STATUS_READY &&
+                              ringBuffer[victim][1] != RING_STATUS_DONE;
+            w = victim;
             depthAfter = queued;   // evicted one out, new one in
         }
         else
@@ -1100,7 +1127,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
 {
     return addTxRingEntryCore(frame, len, ring_status, ring_status,
                                source, retryCountIn, clearSlotFirst,
-                               kind, need, alone);
+                               kind, need, alone, false);
 }
 
 // GWRX-01: siehe txring_functions.h. Status 0xFF, Label "udp_rx", retryCount 0
@@ -1137,7 +1164,7 @@ int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
 {
     return addTxRingEntryCore(frame, len, RING_STATUS_READY, RING_STATUS_DONE,
                                source, retryCountIn, clearSlotFirst,
-                               kind, need, alone);
+                               kind, need, alone, false);
 }
 
 // TXP W1c: Retry in place (Doku: txring_functions.h). Reihenfolge im Slot:
@@ -1178,4 +1205,12 @@ bool txRingRearmRetry(int slot, const uint8_t *frame, uint16_t len, uint8_t expe
             printfdeb("[MC-DBG] RING_REARM slot=%d msg_id=%08X retry=%d\n", slot, mid, retry);
     }
     return ok;
+}
+
+// RM-LOSTREPLY-01 (D2): own RM1 reply, send-once like addTxRingEntryOnce(), but
+// on a full ring it may evict the oldest queued ACK (see addTxRingEntryCore()).
+int addTxRingEntryRmReply(const uint8_t* frame, uint16_t len, const char* source)
+{
+    return addTxRingEntryCore(frame, len, RING_STATUS_READY, RING_STATUS_DONE,
+                               source, 0, false, 0, nullptr, nullptr, true);
 }

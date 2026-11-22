@@ -32,16 +32,21 @@
  * WHY THE MASK IS A PAIR
  * ----------------------
  * Not every `off` rung clears its own bit and nothing else. Four of them use a
- * literal AND-mask that clears a second bit as a side effect:
+ * literal AND-mask that clears more than its own bit as a side effect (bits
+ * 16-31, and bit 15 of node_sset4):
  *
- *     button off     node_sset  &= 0x7FEF   // bit 4  AND bit 15
- *     setcont off    node_sset  &= 0x3FFF   // bit 14 AND bit 15
- *     shortpath off  node_sset  &= 0x7BFF   // bit 10 AND bit 15
- *     setlog off     node_sset4 &= 0x7FFB   // bit 2  AND bit 15
+ *     button off     node_sset  &= 0x0000FFEF   // bit 4  (+ 16-31; bit 15 = msgwake is kept)
+ *     setcont off    node_sset  &= 0x0000BFFF   // bit 14 (+ 16-31; bit 15 = msgwake is kept)
+ *     shortpath off  node_sset  &= 0x0000FBFF   // bit 10 (+ 16-31; bit 15 = msgwake is kept)
+ *     setlog off     node_sset4 &= 0x00007FFB   // bit 2  AND bit 15 (+ 16-31)
+ *
+ * (Until T114-DARK-01 the three node_sset masks were 0x7FEF / 0x3FFF / 0x7BFF
+ * and cleared bit 15 as well; `--msgwake off` now stores its flag in node_sset
+ * bit 15, so they keep it.)
  *
  * The masks are 32 bits wide because `node_sset*` are `int`, not `uint16_t`.
  * That is not cosmetic: `&= ~0x0020` must leave bits 16-31 alone, while the
- * literal `& 0x7FEF` above must clear them. A 16-bit mask column would have
+ * literal `& 0x0000FFEF` above must clear them. A 16-bit mask column would have
  * silently changed both.
  *
  * Finally, `mesh on` SETS its flag while CLEARING its bit (the stored bit means

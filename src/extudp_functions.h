@@ -16,6 +16,8 @@ void queueExtern(char *src_type, uint8_t buffer[264], uint16_t buflen, int16_t r
 void flushExternQueue();
 void sendExternHeartbeat();
 void resetExternUDP();
+// ETH-06: nRF52 W5100S builds: drop the EXTUDP socket before a chip hardware reset (nrf_eth.cpp initETH_HW()).
+void externUdpChipReset();
 
 String getJSON(unsigned char incoming, int len, char *iname);
 

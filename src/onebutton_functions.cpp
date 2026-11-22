@@ -26,10 +26,10 @@
 #include "nrf52_functions.h"
 #endif
 
+#include "page_ring.h"   // DISP-PAGE-01/03: click walk over the message ring; WP_MSG_BROWSE_MAX (the last 4)
+
 #if defined(WP_DISP)
-// Anzahl der per 1x-Klick durchblaetterbaren letzten Nachrichten (Wireless Paper + E213,
-// gemeinsamer 2.13"-Display-Pfad): die letzten 4 (original-kompatibel).
-#define WP_MSG_BROWSE_MAX 4
+extern bool wpArrived;     // loop_functions.cpp: a message arrived since the last click (T114-DARK-01)
 #endif
 
 void singleClick()
@@ -116,9 +116,9 @@ void singleClick()
         return;
       }
 
-      // End of the stored messages (the status slot 5, or an empty slot): the status page
+      // End of the stored messages (an empty slot): the status page
       // first, a click while it is shown opens the GPS page.
-      if(pagePointer == 5 || pageLastLineAnz[pagePointer] == 0)
+      if(pageLastLineAnz[pagePointer] == 0)
       {
         if(t114StatusAt != 0 && (millis() - t114StatusAt) < 6000)
         {
@@ -146,102 +146,48 @@ void singleClick()
     // (PAGE_MAX=10) koennte mehr, aus Kompatibilitaet zeigen wir aber nur die letzten 4.
     {
       static bool wpStatusStep = false;                 // naechster Klick zeigt die Status-Seite
-      int wpNewest = pageLastPointer - 1;               // Slot der neuesten Nachricht
-      if(wpNewest < 0) wpNewest += PAGE_MAX;
 
-      // KEINE Nachricht im Ringpuffer: Original/PR -> Statusschirm; Preview -> "No Message".
-      if(pageLastLineAnz[wpNewest] == 0)
+      // DISP-PAGE-03: die Klick-Logik (Status-Schritt, Fenster, Rang) steckt in page_ring.h
+      // (wpBrowseClick); liveNewest = die frisch eingetroffene Nachricht ist schon auf dem Panel,
+      // der erste Klick geht daher zur naechstaelteren.
+      WpBrowseState wpState = { wpStatusStep, wpLiveNewest, pagePointer, wpArrived };
+      const WpBrowseResult wpRes = wpBrowseClick(pageLastLineAnz, PAGE_MAX, pageLastPointer, WP_MSG_BROWSE_MAX, wpState);
+
+      if(bDisplayCont)
+          Serial.printf("[WPBROWSE];slot;%d;rank;%d;live;%d\n", wpRes.status ? -1 : wpRes.slot, wpRes.rank, wpLiveNewest ? 1 : 0);
+
+      wpStatusStep = wpRes.next.statusStep;
+      pagePointer  = wpRes.next.pointer;
+      wpLiveNewest = false;
+      wpArrived    = false;
+
+      if(wpRes.status)
       {
-        sendDisplayHead(true);
-        wpStatusStep = false;
-        pagePointer  = wpNewest;
-        return;
+          sendDisplayHead(true);
+          return;
       }
-
-      // Status-Schritt (nach dem Fensterrand/der aeltesten) -> Statusschirm, dann Loop
-      if(wpStatusStep)
-      {
-        sendDisplayHead(true);
-        wpStatusStep = false;
-        pagePointer  = wpNewest;
-        return;
-      }
-
-      if(pageLastLineAnz[pagePointer] == 0)             // Sicherheit: aktueller Slot leer -> neueste
-        pagePointer = wpNewest;
-
-      // Anzahl gespeicherter Nachrichten (zusammenhaengend ab der neuesten)
-      int wpN = 0;
-      {
-        int s = wpNewest;
-        for(int n = 0; n < PAGE_MAX; n++)
-        {
-          if(pageLastLineAnz[s] == 0) break;
-          wpN++;
-          s--; if(s < 0) s += PAGE_MAX;
-        }
-      }
-      // sichtbares Fenster = min(vorhanden, WP_MSG_BROWSE_MAX)
-      int wpShow  = (wpN < WP_MSG_BROWSE_MAX) ? wpN : WP_MSG_BROWSE_MAX;
-      // Schritte unterhalb der neuesten (0 = neueste); ausserhalb Fenster -> auf neueste zuruecksetzen
-      int wpSteps = (wpNewest - pagePointer + PAGE_MAX) % PAGE_MAX;
-      if(wpSteps >= wpShow) { pagePointer = wpNewest; wpSteps = 0; }
-
-      // Index oben rechts: neueste = wpShow (max 4) ... Fensterrand = 1; 0 = Home/Status.
-      int wpRank = wpShow - wpSteps;
 
       // Nachricht anzeigen (Helper in loop_functions.cpp; kompaktes Layout + Voll-Refresh).
-      wpShowStoredMessage(pagePointer, wpRank);
-
-      // naechste (aeltere) bestimmen; am Fensterrand (wpSteps+1 >= wpShow) ODER aelteste erreicht
-      // (naechster Slot leer) -> naechster Klick zeigt Status, danach wieder bei der neuesten.
-      int wpNext = pagePointer - 1;
-      if(wpNext < 0) wpNext += PAGE_MAX;
-      if((wpSteps + 1) >= wpShow || pageLastLineAnz[wpNext] == 0)
-        wpStatusStep = true;
-      else
-        pagePointer = wpNext;
+      wpShowStoredMessage(wpRes.slot, wpRes.rank);
 
       return;
     }
     #endif
 
-    int pageNo = pagePointer + 1;   // number shown top right
-
-    #if defined(BOARD_E290)
+    // DISP-PAGE-01: click order newest -> ... -> oldest -> status page -> newest, on every board; the
+    // walk ends at the first empty slot of the ring (page_ring.h), not at the absolute slot 5. Number
+    // top right = rank among the stored messages (newest = highest, like E290 and Wireless Paper).
+    // An empty ring or an out-of-range pointer (boot) is the status page, never an index below 0.
+    const PageClickStep clickStep = pageClickStep(pageLastLineAnz, PAGE_MAX, pageLastPointer, pagePointer);
+    if(clickStep.kind == PageClickKind::Status)
     {
-      // E290: ring of PAGE_MAX slots, the slot after the newest message is always empty.
-      // Click order: newest -> ... -> oldest -> status page -> newest ...
-      // Number top right = position among the stored messages (newest = highest, like Wireless Paper).
-      int e290Newest = pageLastPointer - 1;
-      if(e290Newest < 0) e290Newest += PAGE_MAX;
-
-      if(pageLastLineAnz[pagePointer] == 0)      // past the oldest message (or none stored)
-      {
-        pagePointer = e290Newest;
+        pagePointer = clickStep.nextPointer;
         sendDisplayHead(true);
         return;
-      }
+    }
 
-      int e290Count = 0, e290Slot = e290Newest;
-      for(int n = 0; n < PAGE_MAX; n++)
-      {
-        if(pageLastLineAnz[e290Slot] == 0) break;
-        e290Count++;
-        e290Slot--; if(e290Slot < 0) e290Slot += PAGE_MAX;
-      }
-      pageNo = e290Count - ((e290Newest - pagePointer + PAGE_MAX) % PAGE_MAX);
-    }
-    #else
-    if(pagePointer == 5)
-    {
-      sendDisplayHead(true);
-      return;
-    }
-    #endif
-      
-    if(pageLastLineAnz[pagePointer] == 0)
-      pagePointer = pageLastPointer-1;
+    pagePointer = clickStep.slot;
+    int pageNo = clickStep.rank;   // number shown top right
 
     bDisplayIsOff=false;
 
@@ -305,9 +251,7 @@ void singleClick()
       sendDisplay1306(false, true, 0, 0, (char*)"#N");
     #endif
 
-    pagePointer--;
-    if(pagePointer < 0)
-        pagePointer=PAGE_MAX-1;
+    pagePointer = clickStep.nextPointer;
 
     pageHold=5;
   }
@@ -382,6 +326,19 @@ void tripleClick()
   sendDisplayHead(false);
 }
 
+#if defined(BOARD_TBEAM) || defined(BOARD_SX1262) || defined(BOARD_SX1268) || defined(BOARD_TBEAM_V3) || defined(BOARD_TBEAM_1W)
+// All five T-Beam envs (ttgo_tbeam, ttgo_tbeam_SX1262/SX1268, ttgo_tbeam_supreme, LilyGo_T-Beam-1W).
+#define MC_TBEAM_VERYLONG_SLEEP 1
+#define TBEAM_SLEEP_PRESS_MS 3000
+static bool bTBeamDisplayOffBeforeLong = false;
+static bool bTBeamDisplayIsOffBeforeLong = false;
+static bool bTBeamPosDisplayBeforeLong = false;
+static int uTBeamSsetBeforeLong = 0;
+static bool bTBeamSleepFired = false;
+void save_settings(void);
+void TBeamDuringLongPress();
+#endif
+
 void PressLong()
 {
   if(bDisplayCont)
@@ -430,6 +387,14 @@ void PressLong()
         Serial.println("[BOARD_T_ECHO]... PWR OFF");
         boardPWROff();
       #else
+        #if defined(MC_TBEAM_VERYLONG_SLEEP)
+        // Display state before this press: a press held on to deep sleep restores it (TBeamDuringLongPress).
+        bTBeamDisplayOffBeforeLong = bDisplayOff;
+        bTBeamDisplayIsOffBeforeLong = bDisplayIsOff;
+        bTBeamPosDisplayBeforeLong = bPosDisplay;
+        uTBeamSsetBeforeLong = meshcom_settings.node_sset;
+        bTBeamSleepFired = false;
+        #endif
         if(!bDisplayOff)
         {
             commandAction((char*)"--display off", isPhoneReady, false);
@@ -442,6 +407,31 @@ void PressLong()
 
   #endif
 }
+
+#if defined(MC_TBEAM_VERYLONG_SLEEP)
+// T-Beam: the long press (0.8 s) keeps toggling the display; held for TBEAM_SLEEP_PRESS_MS
+// it puts the node into deep sleep. The display toggle of that same press is undone first,
+// because bDisplayOff is persisted and would otherwise survive the wake. The ext1 wake on
+// the button is armed after the release (esp32WaitButtonRelease(), esp32_sleep.cpp).
+void TBeamDuringLongPress()
+{
+  if(bTBeamSleepFired || btn.getPressedMs() < TBEAM_SLEEP_PRESS_MS)
+    return;
+  bTBeamSleepFired = true;
+  Serial.println("[BOARD_TBEAM]... very long press, GO to deepsleep");
+  // Restore the pre-press display state directly: the display-on command would also force
+  // posdisplay on (node_sset 0x0004) and change the user's setting.
+  if(bDisplayOff != bTBeamDisplayOffBeforeLong)
+  {
+    bDisplayOff = bTBeamDisplayOffBeforeLong;
+    bDisplayIsOff = bTBeamDisplayIsOffBeforeLong;
+    bPosDisplay = bTBeamPosDisplayBeforeLong;
+    meshcom_settings.node_sset = uTBeamSsetBeforeLong;
+    save_settings();
+  }
+  commandAction((char*)"--deepsleep", isPhoneReady, false);
+}
+#endif
 
 // setup code here, to run once:
 void init_onebutton()
@@ -465,11 +455,32 @@ void init_onebutton()
     btn.attachDoubleClick(doubleClick);   // Double Click event attachment
     btn.attachMultiClick(tripleClick);    // Multi Click event attachement
     btn.attachLongPressStart(PressLong);  // LongPress Click event attachement
+    #if defined(MC_TBEAM_VERYLONG_SLEEP)
+    btn.attachDuringLongPress(TBeamDuringLongPress);   // held 3 s -> deep sleep
+    #endif
   }
   else
   {
       Serial.printf("[OBUT]...One Button GPIO(%i) not activated\n", iButtonPin);
   }
+}
+
+// BTN-OFF-01 (#1294): "--button off" detaches every handler init_onebutton() attached (OneButton
+// ignores a null callback), so the button stops acting at once instead of at the next reboot.
+// btn.tick() stays unguarded at its call sites, and the INSTRUMENT "--btn" hook still reaches
+// the handlers directly. Keep this list in step with init_onebutton().
+void deinit_onebutton()
+{
+    btn.attachClick(nullptr);
+    btn.attachDoubleClick(nullptr);
+    btn.attachMultiClick(nullptr);
+    btn.attachLongPressStart(nullptr);
+    #if defined(MC_TBEAM_VERYLONG_SLEEP)
+    btn.attachDuringLongPress(nullptr);
+    #endif
+    btn.reset();   // drop a half-finished gesture
+
+    Serial.printf("[OBUT]...One Button GPIO(%i) detached\n", iButtonPin);
 }
 // setup
 

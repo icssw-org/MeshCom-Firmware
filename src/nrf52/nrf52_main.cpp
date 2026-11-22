@@ -4,6 +4,8 @@
 
 #include "configuration.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "posinfo_timer.h"   // POSINFO-LAG-01: beacon due / spacing decision
+#include "beacon_rate.h"      // POSINFO_AUTO_MIN_MS
 #include "capture_functions.h"
 
 #include <Arduino.h>
@@ -770,6 +772,7 @@ void nrf52setup()
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bDisplayCont =  meshcom_settings.node_sset & 0x4000;
+    bMsgWake = (meshcom_settings.node_sset & 0x8000) == 0;   // T114-DARK-01: --msgwake, stored inverted (set = off)
 
     // TRK-01: Warnhinweis einmal beim Boot, wenn Track aus den Settings aktiv geladen wurde
     if(bDisplayTrack)
@@ -789,7 +792,7 @@ void nrf52setup()
     //free !! meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
-    //xxxxx = meshcom_settings.node_sset2 & 0x2000;
+    bDisplayDark = (meshcom_settings.node_sset2 & 0x2000) != 0;   // T114-DARK-01: --theme dark (T114; other boards never set the bit)
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
@@ -799,6 +802,7 @@ void nrf52setup()
     bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
     bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;   // LED-07: --board led
+    bGPSAutosymbol = meshcom_settings.node_sset3 & 0x1000;   // --gps autosymbol (as on ESP32)
 
     bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
@@ -1421,6 +1425,7 @@ void nrf52loop()
             // check valid Date & Time
             if(Year > 2023)
             {
+                CLK_SRC("RTC");
                 MyClock.setCurrentTime(0.0, Year, Month, Day, Hour, Minute, Second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
                 bMyClock = true;
@@ -1461,6 +1466,7 @@ void nrf52loop()
             // check valid Date & Time
             if(Year > 2023 && strTime.compareTo("none") != 0)
             {
+                CLK_SRC("NTP");
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                 bNTPDateTimeValid = true;
 
@@ -2195,29 +2201,19 @@ void nrf52loop()
         }
     }
 
-    // check NCNT modified -- MeshCom 5 (Welle 4, Konzept 4.8): lokaler
-    // Vergleich, nicht die Sendefassung -- nbrNcnt(), nicht nbrNcntAir().
-    int incnt = nbrNcnt(nbrMatrix, uptimeMin16());
-    if(ncnt_hold != incnt)
-    {
-        INSTR_SECTION("pos_timer");
-        // minimal alle 60 sec
-        if((uint32_t)(millis() - posinfo_timer_min) >= 60000)
-        {
-            posinfo_shot = true;
-            ncnt_hold = incnt;
-        }
-    }
+    // POSINFO-LAG-01: no position beacon on a neighbour count change. The beacon follows the configured
+    // interval; neighbour count and signal go out in the HEY frames. (The old 60 s NCNT trigger never fired:
+    // posinfo_timer_min was refreshed on every idle pass.)
 
     // posinfo
     //Serial.print(getTimeString());
     //Serial.printf(" posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
 
     // posinfo_interval in Seconds
-    if (((uint32_t)(millis() - posinfo_timer) >= (uint32_t)(posinfo_interval * 1000)) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
+    if (posinfoDue(millis(), posinfo_timer, posinfo_interval, (millis() > 100000 && millis() < 130000 && bPosFirst), posinfo_shot))
     {
-        // minimal transmit time only max 30 sec
-        if((uint32_t)(millis() - posinfo_timer_min) >= 30000)
+        // automatic beacons: at least POSINFO_AUTO_MIN_MS after the last position TX of any kind (D6, aprs.fi)
+        if(posinfoAutoSpacingOk(millis(), posinfo_timer_min, haveOwnPosTx(), lastOwnPosTxMs(), POSINFO_AUTO_MIN_MS))
         {
             if(bDisplayInfo)
             {
@@ -2288,10 +2284,7 @@ void nrf52loop()
             posinfo_timer_min = millis();
         }
     }
-    else
-    {
-        posinfo_timer_min = millis();
-    }
+    // POSINFO-LAG-01: posinfo_timer_min = time of the last send; not refreshed on idle passes
 
     // Trickle-HEY: adaptive interval (RFC 6206)
     if (((uint32_t)(millis() - heyinfo_timer) >= trickle_interval_ms) || bHeyFirst)
@@ -2622,8 +2615,7 @@ void nrf52loop()
                 if(one_found)
                     loop_onewire_ds18();
 
-                if(dht_found)
-                    loop_onewire_dht();
+                loop_onewire_dht();   // DHT-PROBE-01: probes itself (three tries), then reads only a found DHT
 
                 onewireTimeWait = millis();
 
@@ -3317,6 +3309,7 @@ unsigned int getGPS(void)
 
         meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
 
+        CLK_SRC("GPS");
         MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
 

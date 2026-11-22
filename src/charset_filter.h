@@ -117,8 +117,15 @@ size_t charset_filter_apply(char *buf, size_t len, charset_filter_mode mode);
  * sequence that would straddle max_len is dropped whole rather than left
  * broken. Read-only, never modifies buf. Use this at any fixed-size field
  * cap a receiver enforces by counting raw bytes (e.g. the 25-byte atxt
- * limit, src/aprs_functions.cpp:632) so the receiver's byte-counting parser
+ * limit, APRS_ATXT_WIRE_MAX, decoded in decodeAPRSPOS()) so the receiver's byte-counting parser
  * never inherits a split sequence. */
 size_t charset_utf8_safe_truncate(const char *buf, size_t len, size_t max_len);
+
+/* One wire text field: copy src into dst, strip the APRS structure
+ * separators (CHARSET_FILTER_STRIP_SEPARATORS), cut UTF-8-safe to
+ * min(cap, dst_size - 1) BYTES, NUL-terminate. Returns the resulting length.
+ * *cut_bytes (may be NULL) receives how many bytes the cap removed -- the
+ * separator strip is not counted. dst_size 0 or NULL dst/src returns 0. */
+size_t charset_wire_field(const char *src, char *dst, size_t dst_size, size_t cap, size_t *cut_bytes);
 
 #endif

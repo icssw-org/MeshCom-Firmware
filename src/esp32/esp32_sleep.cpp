@@ -4,6 +4,7 @@
 
 #include <Arduino.h>
 #include <esp_sleep.h>
+#include <esp_task_wdt.h>
 #include <driver/gpio.h>
 #if !ARDUINO_USB_CDC_ON_BOOT
 #include <driver/uart.h>
@@ -71,7 +72,10 @@ void esp32WaitButtonRelease()
 
     uint32_t t0 = millis();
     while (digitalRead(iButtonPin) == LOW && millis() - t0 < 10000)
+    {
+        esp_task_wdt_reset();   // up to 10 s held (T-Beam 3 s press): keep the loop-task WDT fed
         delay(10);
+    }
     delay(100);   // contact bounce after release
 }
 

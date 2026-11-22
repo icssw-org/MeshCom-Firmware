@@ -1,6 +1,8 @@
 //2025-09-16 23:036
 #include "command_functions.h"
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "netmode_label.h" // RAK-NETMODE-01: --info NETWORK label
 #include "capture_functions.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
@@ -10,6 +12,7 @@
 #include "printfdeb_functions.h"
 #include "mc_board_id.h" // F4-1a: --id board marker
 #include "command_match.h" // D2-10: commandMatches(), the ladder's matching rule
+#include "command_dash.h"  // CMD-DASH-01: look-alike dashes (U+2212, U+2013, U+2014) -> "--"
 #include "blocked_calls.h" // BLK-01: --blockcall
 #include "command_toggles.h" // D2-06: the table-driven on/off toggles
 #include "command_setters.h" // D2-07: numeric argument parse/range/store
@@ -43,6 +46,8 @@
 #include "board_led.h"       // LED-04/09/10: boardLedPinFree, ledFitted, ledNotFittedList
 #include "charge_led_mode.h"  // CHG-01/02: SSET2_CHGLED_CFG marker for the charge LED rows
 #include "rm_commands.h"      // RM_NAME_MAX / RM_ATXT_MAX: the --setname / --atxt clip lengths
+#include "pos_text_budget.h"  // APRS-TXT-03: --info beacon text drop line
+#include "charset_filter.h"   // charset_utf8_safe_truncate / charset_wire_field: the --atxt clip and the on-air notice
 #include "rm_validate.h"      // RM GUI W1b: one password validator for --passwd, the web field and the sender
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
@@ -137,6 +142,12 @@ extern TinyGPSPlus gps;
 #ifdef ESP32
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#endif
+
+// T114-DARK-01: --theme on the T114 reuses the T-Deck parser (pure header) and redraws the GPS page
+#if defined(HAS_TFT_114)
+#include <t-deck/tdeck_palette.h>
+#include "t114_gps_page.h"
 #endif
 
 // libs for T-Deck view refresh
@@ -458,6 +469,7 @@ static void gpioFnWins(PinFunc f)
 #endif
 }
 static void tg_post_button_on() { gpioFnWins(PIN_FN_BUTTON); init_onebutton(); }
+static void tg_post_button_off() { deinit_onebutton(); }   // BTN-OFF-01 (#1294): detach now, not at the next reboot
 static void tg_post_680_off() { bme680_found = false; }
 static void tg_post_811_off() { mcu811_found = false; }
 // EXT-02 (second half): --extudp off used to leave hasExternIPaddress (and
@@ -617,16 +629,16 @@ static const ToggleRow COMMAND_TOGGLES[] =
 {
     { "--setinfo off",        &bDisplayInfo,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_ECHO_LN },
     { "--setinfo on",         &bDisplayInfo,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_ECHO_LN },
-    { "--setcont off",        &bDisplayCont,         &meshcom_settings.node_sset,     0x00003FFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F },
+    { "--setcont off",        &bDisplayCont,         &meshcom_settings.node_sset,     0x0000BFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F },
     { "--setcont on",         &bDisplayCont,         &meshcom_settings.node_sset,     0xFFFFFFFF,   0x4000,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_LN },
     { "--setlog off",         &bDisplayLog,          &meshcom_settings.node_sset4,    0x00007FFB,   0x00000000,   tg_post_setlog_off,            TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F | TG_POST_FIRST },
     { "--setlog on",          &bDisplayLog,          &meshcom_settings.node_sset4,    0xFFFFFFFF,   0x0004,       tg_post_setlog_off,            TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_LN | TG_POST_FIRST },
     { "--setretx off",        &bDisplayRetx,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_ECHO_LN },
     { "--setretx on",         &bDisplayRetx,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_ECHO_LN },
-    { "--shortpath off",      &bSHORTPATH,           &meshcom_settings.node_sset,     0x00007BFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_LN },
+    { "--shortpath off",      &bSHORTPATH,           &meshcom_settings.node_sset,     0x0000FBFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_LN },
     { "--shortpath on",       &bSHORTPATH,           &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0400,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_F },
     { "--button on",          &bButtonCheck,         &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0010,       tg_post_button_on,             TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
-    { "--button off",         &bButtonCheck,         &meshcom_settings.node_sset,     0x00007FEF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--button off",         &bButtonCheck,         &meshcom_settings.node_sset,     0x0000FFEF,   0x00000000,   tg_post_button_off,            TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
     { "--nomsgall on",        &bNoMSGtoALL,          &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0002,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
     { "--390 off",            &bBMP3ON,              &meshcom_settings.node_sset3,    0xFFFFFFEF,   0x00000000,   nullptr,                       TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
     { "--680 off",            &bBME680ON,            &meshcom_settings.node_sset2,    0xFFFFFFFB,   0x00000000,   tg_post_680_off,               TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
@@ -663,6 +675,12 @@ static const ToggleRow COMMAND_TOGGLES[] =
     { "--nbrreport off",      &bNBRRPTOFF,           &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x0100,       tg_post_nbrreport_off,         TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
     { "--nbrreport auto",     nullptr,               &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x00000000,   tg_post_nbrreport_auto,        TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
     { "--nbrreport on",       &bNBRRPTON,            &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x0200,       tg_post_nbrreport_on,          TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    // --msgwake on|off (T114-DARK-01, D3): 0x8000 in node_sset, inverted ("off" sets the bit), so an
+    // existing node starts with msgwake on = today's behaviour. Off: a message does not light a display
+    // that is switched off (dispMsgWakes(), sendDisplayText()); it is still stored and read by button/app.
+    // Every literal AND-mask on node_sset keeps bit 15 for this reason (0x7xxx -> 0xFxxx).
+    { "--msgwake on",         &bMsgWake,             &meshcom_settings.node_sset,     0xFFFF7FFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--msgwake off",        &bMsgWake,             &meshcom_settings.node_sset,     0xFFFFFFFF,   0x8000,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
     { "--viadebug on",        &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_BLE_ECHO },
     { "--viadebug off",       &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_BLE_ECHO },
     // Upstream d93c05a0/31ef8648: the phone gets SN + SN1, not a text echo the
@@ -795,6 +813,10 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     
     if(iphone == 1)
         ble=true;
+
+    // CMD-DASH-01: before the splitter looks for "--". Writes only when a non-ASCII dash is present,
+    // so the (char*)"--..." literals some callers pass are never touched.
+    commandFoldDashes(msg_text);
 
     // loop more commands from one string
     // --setcall OE3WAS-10 --setpwd 12345678 --setssid Drei_H288A_24G_yAFG --webserver on --button gpio 12 --button on ......
@@ -960,6 +982,8 @@ void commandAction(char *umsg_text, bool ble)
                            // must never reach a persisted setting -- see
                            // src/command_setters.h.
     float fVar=0.0;
+
+    commandFoldDashes(umsg_text);   // CMD-DASH-01: callers that skip the splitter (web GUI, RM, T-Deck)
 
     String sVar = umsg_text;
     sVar.trim();
@@ -1246,6 +1270,7 @@ void commandAction(char *umsg_text, bool ble)
 
             if(Year > 2023)
             {
+                CLK_SRC("CMD");
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"HAND");
             }
@@ -1337,7 +1362,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         bDisplayVolt = false;
 
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FFE;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFFFE;
 
         if(ble)
         {
@@ -1363,7 +1388,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            printfdeb("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..Callsign <%s> not valid%s\n", sVar.c_str(), callRejectHint(sVar).c_str());
             return;
         }
 
@@ -1431,8 +1456,8 @@ void commandAction(char *umsg_text, bool ble)
     else
     #endif
     #if defined(NRF52_SERIES)
-    // --dumpsettings: print the raw contents of the nRF52 keyed settings
-    // store file to the console. Bench diagnostic for the boot-2 settings
+    // --dumpsettings: print the contents of the nRF52 keyed settings
+    // store file to the console (passwords and bt_code masked, SEC-DUMP-01). Bench diagnostic for the boot-2 settings
     // loss investigated in docs/w3-settings-verdict.md -- DO_DEBUG 0
     // compiles out every DEBUG_MSG on the migration/save/load path, so this
     // is currently the only way to see what actually reached flash, as
@@ -1501,6 +1526,12 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"ota-update") == 0)
     {
+        // OTA-SAFEBOOT-01 (#1300), operator D1 (b): an old Safeboot is reported, the update proceeds
+        if(fwManualOtaDecide(fwNetSafebootVersion(), AU_SAFEBOOT_MIN, fwNetSafebootOld()) == FWOTA_WARN_OLD)
+        {
+            Serial.printf("[AU];ota-update;note;safeboot_too_old;ver;%d;need;%d;nocap;%d;proceeding\n", fwNetSafebootVersion(), AU_SAFEBOOT_MIN, fwNetSafebootOld() ? 1 : 0);
+            Serial.printf("[AU];note;flash once with the web flasher to install the new Safeboot\n");
+        }
         auRebootToSafeboot();   // returns only without a safeboot partition (or AU-16: DIO bootloader, already reported)
 
         return;
@@ -1532,7 +1563,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--wifistat              WiFi link/counters\n--udpstat               MeshCom UDP RX/TX counters\n");
             #endif
             #if defined(NRF52_SERIES)
-            printdeb("--ethstat               Ethernet link/counters\n--dumpsettings          dump raw settings store\n");
+            printdeb("--ethstat               Ethernet link/counters\n--dumpsettings          dump settings store (secrets masked)\n");
             #endif
             delay(100);
 
@@ -1591,7 +1622,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
             delay(100);
 
-            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--track on/off          SmartBeaconing\n");
+            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt), up to 39 bytes stored, first 25 bytes go on air\n--aprsmc <call>         APRS destination call (default APRSMC)\n--track on/off          SmartBeaconing\n");
             #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
             printdeb("--gps on/off            GPS chip\n");
             #ifndef BOARD_T_DECK_PRO
@@ -1684,7 +1715,10 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("\n== Telemetry ==\n--parm tm1,..,tm5       value names (unused: blank)\n--unit tm1,..,tm5       units (unused: blank)\n--format 1,1,1,1,1      decimals (unused: 0)\n--eqns 0,1,0,...        equations, 15 values\n--values press,hum,temp,onewire,co2  value sources\n--ptime 5..120          telemetry interval min\n");
             delay(100);
 
-            printdeb("\n== Display ==\n--display on/off        display\n--nomsgall on/off       hide '*' messages\n--contrast 1-255        OLED contrast\n");
+            printdeb("\n== Display ==\n--display on/off        display\n--nomsgall on/off       hide '*' messages\n--contrast 1-255        OLED contrast\n--msgwake on/off        message wakes an off display\n");
+            #if defined(HAS_TFT_114)
+            printdeb("--theme auto|dark|light  display theme (auto = light)\n");
+            #endif
             #if defined(WP_DISP) or defined(BOARD_E290)
             printdeb("--rotate 0/90/180/270   e-ink rotation\n");
             #endif
@@ -1804,7 +1838,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bPosDisplay=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FFB;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFFFB;
 
         if(ble)
         {
@@ -1824,7 +1858,7 @@ void commandAction(char *umsg_text, bool ble)
         bDisplayIsOff=false;
         bPosDisplay=true;
 
-        meshcom_settings.node_sset = (meshcom_settings.node_sset & 0x7FFD) | 0x0004;   // both off + set bDisplyOff
+        meshcom_settings.node_sset = (meshcom_settings.node_sset & 0xFFFD) | 0x0004;   // both off + set bDisplyOff
 
         if(ble)
         {
@@ -1860,6 +1894,8 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
 
         save_settings();
+
+        pageHold = 0;   // DISP-PAGE (#1294): a browse click holds the page for 5 s; --display off must not wait for it
 
         sendDisplayHead(false);
 
@@ -2394,7 +2430,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bDisplayTrack=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FDF;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFFDF;
 
         if(ble)
         {
@@ -2473,7 +2509,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bBLElong=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x77FF;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xF7FF;
 
         save_settings();
 
@@ -2534,7 +2570,7 @@ void commandAction(char *umsg_text, bool ble)
             bmx_found = false;
             
             meshcom_settings.node_sset |= 0x0080;
-            meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7EFF;   // BME280 off
+            meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFEFF;   // BME280 off
 
             save_settings();
 
@@ -2565,7 +2601,7 @@ void commandAction(char *umsg_text, bool ble)
             bmx_found = false;
             
             meshcom_settings.node_sset |= 0x0100;
-            meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7F7F;   // BMP280 off
+            meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFF7F;   // BMP280 off
 
             save_settings();
 
@@ -2661,7 +2697,7 @@ void commandAction(char *umsg_text, bool ble)
         bmx_found=false;
         bmp3_found=false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0xFE7F;   // BME280/BMP280 off
         meshcom_settings.node_sset3 &= ~0x0010;   // BMP390 off (only bit 0x0010; 0x8000 NOPMOTHER and the upper bits stay)
 
         // N-28: "--bmx" ist das Sammelkommando, und die Hilfe sagt seit jeher
@@ -2852,7 +2888,7 @@ void commandAction(char *umsg_text, bool ble)
     // MCFW-WX1: APRS-IS weather over Wi-Fi (ESP32 only). The passcode is stored but never echoed.
     #if defined(ESP32)
     else
-    if(commandCheck(msg_text+2, (char*)"aprswx") == 0)
+    if(commandMatchesBare(msg_text+2, "aprswx"))   // bare status only: "aprswx on/off" are TG_BRETURN toggle rows (#1288)
     {
         char wxc[16];
         bool callok = aprsIsWxCall(wxc, sizeof(wxc), meshcom_settings.node_aprswxcall, meshcom_settings.node_call);
@@ -3062,6 +3098,7 @@ void commandAction(char *umsg_text, bool ble)
         bONEWIRE=false;
         one_found=false;
         dht_found=false;
+        dht_probe_left = 0;   // DHT-PROBE-01: no probe while one-wire is off
         
         meshcom_settings.node_sset2 &= ~0x0001;
 
@@ -4272,10 +4309,20 @@ void commandAction(char *umsg_text, bool ble)
         if(sVar == "none")
             sVar = "";
 
+        // APRS-TXT-02: byte cap, but never inside a UTF-8 sequence
         if(sVar.length() > RM_ATXT_MAX)
-            sVar = sVar.substring(0, RM_ATXT_MAX);
+            sVar = sVar.substring(0, charset_utf8_safe_truncate(sVar.c_str(), sVar.length(), RM_ATXT_MAX));
 
         snprintf(meshcom_settings.node_atxt, sizeof(meshcom_settings.node_atxt), "%s", sVar.c_str());
+
+        // APRS-TXT-02 (D3 A): up to 39 bytes are stored, APRS_ATXT_WIRE_MAX go on air
+        {
+            char cwire[sizeof(meshcom_settings.node_atxt)];
+            size_t icut = 0;
+            charset_wire_field(meshcom_settings.node_atxt, cwire, sizeof(cwire), APRS_ATXT_WIRE_MAX, &icut);
+            if(icut > 0)
+                printfdeb("\n[ATXT] %u bytes stored, only the first %u bytes go on air\n", (unsigned)strlen(meshcom_settings.node_atxt), (unsigned)strlen(cwire));
+        }
 
         if(ble)
         {
@@ -4299,7 +4346,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            printfdeb("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..Callsign <%s> not valid%s\n", sVar.c_str(), callRejectHint(sVar).c_str());
             return;
         }
 
@@ -4348,7 +4395,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            printfdeb("\n[ERR]..UDP-Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..UDP-Callsign <%s> not valid%s\n", sVar.c_str(), callRejectHint(sVar).c_str());
             return;
         }
 
@@ -5830,7 +5877,7 @@ void commandAction(char *umsg_text, bool ble)
             else if(_au.staged && _au.availTag[0] != '\0' && strcmp(_au.stagedTag, _au.availTag) == 0)
             {
                 // before the availNewer test: staging records the tag as installed, so the
-                // next CHECK reports "not newer" and this case would otherwise be unreachable
+                // next CHECK can report "not newer" (undated running image) and this case would otherwise be unreachable
                 Serial.printf("[AU];install;already_staged;%s\n", _au.stagedTag);
             }
             else if(_auNewer && !_au.installable)
@@ -6320,6 +6367,48 @@ void commandAction(char *umsg_text, bool ble)
 
         return;
     }
+    #if defined(HAS_TFT_114)
+    // T114-DARK-01 (D1): --theme auto|dark|light on the T114. Same parser as the T-Deck (tdeck_theme_parse,
+    // exact lower case); auto = light (no light sensor). Stored as node_sset2 0x2000 (set = dark), applied
+    // live: the GPS page is redrawn, a clock/status page on the next draw.
+    if(commandCheck(msg_text+2, (char*)"theme ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 6;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        const int t = tdeck_theme_parse(arg);
+        if(t < 0)
+        {
+            printfdeb("[TFT];theme;error;arg;%s;allowed;auto|dark|light\n", arg);
+            return;
+        }
+        bDisplayDark = (t == THEME_DARK);
+        if(bDisplayDark)
+            meshcom_settings.node_sset2 |= 0x2000;
+        else
+            meshcom_settings.node_sset2 &= ~0x2000;
+        save_settings();
+        if(t114GpsPageActive())
+            t114GpsPageRedraw();
+        else
+            if(!bDisplayIsOff && iDisplayType != 0)
+                sendDisplayHead(false);
+        // auto = light on the T114 (no light sensor): echo what is applied, the same word a later bare --theme prints
+        printfdeb("[TFT];theme;%s;dark;%d\n", (t == THEME_AUTO) ? "auto (light)" : tdeck_theme_name((uint8_t)t), bDisplayDark ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"theme") == 0)
+    {
+        printfdeb("[TFT];theme;%s;dark;%d\n", bDisplayDark ? "dark" : "light", bDisplayDark ? 1 : 0);
+        return;
+    }
+    #endif
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     // T-Deck field switches: mute and the three position-persistence flags.
     // Until 2026-09-13 they sat in the INSTRUMENT_ENABLED block below and were
@@ -7590,11 +7679,11 @@ void commandAction(char *umsg_text, bool ble)
                 snprintf(cSHT21, sizeof(cSHT21), " (%s)",  (sht21_found?"found":"error"));
 
             char cone[10]={0};
-            char cdht[10]={0};
+            char cdht[16]={0};
             if(bONEWIRE)
             {
                 snprintf(cone, sizeof(cone), " (%s)",  (one_found?"found":"error"));
-                snprintf(cdht, sizeof(cdht), " (%s)",  (dht_found?"found":"error"));
+                snprintf(cdht, sizeof(cdht), " (%s)",  dht_status_word(dht_found, dht_ok, dht_probe_left));
             }
 
             printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...AHT20: %s%s\n...SHT21: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
@@ -7880,6 +7969,18 @@ void commandAction(char *umsg_text, bool ble)
                     meshcom_settings.node_aprsmc, meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"), bleTxStats, (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
 
+            printfdeb("...MSGWAKE %s\n", (bMsgWake?"on":"off"));   // T114-DARK-01
+            #if defined(HAS_TFT_114)
+            printfdeb("...THEME %s\n", (bDisplayDark?"dark":"light"));
+            #endif
+
+            // APRS-TXT-03 (D4 B0): only while the beacon is dropping comment and/or name
+            {
+                char _ptxt[80];
+                if(posTextInfoLine(_ptxt, sizeof(_ptxt), POS_TEXT_BUDGET) > 0)
+                    printfdeb("...%s\n", _ptxt);
+            }
+
             // BLC-03: BLE link counters (connects, disconnects by class, failed connects, advertising restarts).
             char bleLinkStats[128];
             bleStatsFormat(g_bleStats, bleLinkStats, sizeof bleLinkStats);
@@ -8045,11 +8146,16 @@ void commandAction(char *umsg_text, bool ble)
             }
 
             printdeb("...NETWORK Mode:");
-            if(meshcom_settings.node_netmode == 0)
-                printlndeb("WiFi");
-            else
-            if(meshcom_settings.node_netmode == 1)
-                printlndeb("ETH");
+            // RAK-NETMODE-01 (#1289): on nRF52 the uplink is fixed by the build, not node_netmode.
+#if defined(NRF52_SERIES)
+#if defined(BOARD_RAK4630) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO)   // RAK4631 (+ RAK13800)
+            printlndeb(infoNetModeLabel(meshcom_settings.node_netmode, true, true));
+#else
+            printlndeb(infoNetModeLabel(meshcom_settings.node_netmode, true, false));
+#endif
+#else
+            printlndeb(infoNetModeLabel(meshcom_settings.node_netmode, false, false));
+#endif
 
             printfdeb("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             printfdeb("...MTU          : %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);
@@ -8130,7 +8236,7 @@ void commandAction(char *umsg_text, bool ble)
             {
                 printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %.1f\n...RATE: %i postime..%i\n...NEXT: %i sec\n...DIST: %.0lfm\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i %s [%s]\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-                (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), fposinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
+                (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), fposinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
                 meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource);
 
                 printfdeb("...SYMB: %c %c ..Auto %s\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n...SOFTSERREAD: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSAutosymbol?"on":"off"), (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID, (bSOFTSERREAD?"on":"off"));
@@ -8296,7 +8402,7 @@ void sendGpsJson()
     pdoc["SFIX"] = posinfo_fix;
     pdoc["HDOP"] = (int)fposinfo_hdop;
     pdoc["RATE"] = (int)posinfo_interval;
-    pdoc["NEXT"] = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
+    pdoc["NEXT"] = posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval);
     pdoc["DIST"] = posinfo_distance;
     pdoc["DIRn"] = (int)posinfo_direction;
     pdoc["DIRo"] = (int)posinfo_last_direction;

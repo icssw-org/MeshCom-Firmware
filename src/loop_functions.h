@@ -96,6 +96,11 @@ int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
                         int retryCountIn = -1, bool clearSlotFirst = false,
                         uint8_t kind = 0, const NbrMask *need = nullptr, const NbrMask *alone = nullptr);
 
+// RM-LOSTREPLY-01 (D2): own RM1 reply. Like addTxRingEntryOnce(), but on a full
+// ring it may evict the oldest QUEUED (DONE, not in-flight) ACK when nothing of
+// lower priority can be evicted. Everything else keeps the tail-drop rule.
+int addTxRingEntryRmReply(const uint8_t* frame, uint16_t len, const char* source);
+
 // checkOwnRx()/checkServerRx() werden jetzt in dedup_functions.h deklariert.
 int checkOwnTx(unsigned int msg_id);
 void insertOwnTx(unsigned int id);
@@ -142,6 +147,10 @@ int sendMessage(char *msg_text, int len, const char *src_override = nullptr,
 unsigned int sendInjectedPosition(const char *srcCall, const char *posData);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
 void sendPosition(unsigned long intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
+// Time of the last position TX of any kind (sendPosition(): periodic, track, instant) -- spacing
+// for automatic beacons in the main loops (POSINFO_AUTO_MIN_MS, beacon_rate.h / posinfo_timer.h).
+bool haveOwnPosTx(void);
+unsigned long lastOwnPosTxMs(void);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 // Send a MeshCom message ACK to dest_call. src_override (when set) puts the ACK
 // on air under a foreign source callsign — used by the KISS interface to relay a
@@ -198,6 +207,7 @@ void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const
 void oledStat();
 void oledInvalidate();
 extern bool bOledLog;
+extern bool wpLiveNewest;   // DISP-PAGE-03: the panel shows the newest message of an arrival no click has stepped from
 bool is_equ(const char* buf1, const char* buf2);
 int is_pos(const char* buf, const char* comp_buf);
 

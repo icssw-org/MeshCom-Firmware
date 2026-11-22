@@ -11,6 +11,7 @@
 
 #include "loop_functions.h"
 #include "display_clock_gate.h"   // sendDisplayTime() redraw decision
+#include "page_ring.h"           // DISP-PAGE-01/03: ring count, WP browse window
 #include "gfx_charmap.h"   // national characters on the GFXfont displays (E290, WP, E213)
 #include "text_fold.h"     // CHARS-01: fold what the display font lacks
 #include "ack_attribution.h"
@@ -18,6 +19,8 @@
 #include "bp_notice_frame.h"
 #include "dedup_functions.h"
 #include "beacon_rate.h"
+#include "autosymbol.h"   // GPS-AUTOSYM-02/03
+#include "posinfo_next.h"   // POSINFO-NEXT-01: clamped NEXT countdown
 #include "hey_policy.h"     // F6: gateway keeps its HG alive through trickle suppression
 #include "nbr_views.h"
 #include "command_functions.h"
@@ -31,18 +34,22 @@
 #include "kiss_functions.h"
 #include "configuration.h"
 #include "loop_functions_extern.h"   // REMOTE_LED_PIN rule + RM LED levels
-#include "cet_age.h"   // CET-AGE-01: cetStepAllowed() (pure part only)
+#include "cet_age.h"   // CET-AGE-01: back-step limits used by cet_filter.h
+#include "cet_filter.h" // CET-SCATTER-01 Part A: forward-only {CET} filter
+#include "time_rank.h"  // CET-SCATTER-01 Part B: time-source rank with holdover
 #include "board_led.h"
 #if defined(ESP32)
 #include "esp32/esp32_pmu.h"   // chargeLedFitted()
 #endif
 
 #include "TinyGPSPlus.h"
+#include "gps_functions.h"   // WZ_GPS_TimeLive() ({CET} rank gate)
 
 #include "printfdeb_functions.h"
 
 #include "via_functions.h"
 #include "charset_filter.h"
+#include "pos_text_budget.h"
 #include "msgid_counter.h"
 #include <counters_store.h>
 #include "setlog_lines.h"
@@ -62,6 +69,14 @@
 #include "pong_format.h"   // {pong} payload id as unsigned, display of last 3 digits
 #include "own_msg_status.h"   // durable delivery state of own text messages (web GUI ticks)
 
+static TimeRankState s_timeRank;   // CET-SCATTER-01 Part B
+static CetFilter s_cetFilter;   // CET-SCATTER-01 Part A (zero-initialised; Part B needs file scope)
+// Called by CLK_SRC() at every set site (clock.h). A higher source also references the
+// {CET} filter, so a later beacon is filtered instead of taken as FIRST.
+void timeRankNoteSrc(const char *src)
+{
+    timeRankNoteRef(&s_timeRank, &s_cetFilter, timeRankOf(src), millis());
+}
 bool gpsDetected = false;
 bool gpsInitDone = false;
 
@@ -400,6 +415,8 @@ bool bCHECKMESH = false;
 bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayIsOff = false;
+bool bMsgWake = true;       // T114-DARK-01 (D2): --msgwake, false = a message does not wake an off display (node_sset 0x8000 set)
+bool bDisplayDark = false;  // T114-DARK-01 (D1): --theme dark on the T114 (node_sset2 0x2000); auto = light
 bool bDisplayVolt = false;
 bool bDisplayInfo = false;
 bool bDisplayVia = false;
@@ -598,6 +615,11 @@ bool bWpCompactLayout = false;
 // 0 = kein Index (Home/Status, frische Nachricht). Wird in wpRefreshClock mitgezeichnet, damit
 // der 10-s-Statuszeilen-Refresh die Ziffer nicht wegloescht.
 int wpMsgIdx = 0;
+// DISP-PAGE-03: true exactly while the panel shows the newest message of an arrival that no click has
+// stepped from (set where the slot is stored in sendDisplay1306, cleared by wpShowStoredMessage and
+// sendDisplayHead). The first click then goes to the next older message, not to the same one.
+bool wpLiveNewest = false;
+bool wpArrived = false;        // T114-DARK-01: a message arrived since the last click (also one stored with --msgwake off)
 
 
 void wpApplyLayout(bool compact)
@@ -919,19 +941,22 @@ int gps_refresh_track = 0;
 
 // Loop timers
 unsigned long posinfo_timer = 0;        // we check periodically to send GPS
-unsigned long posinfo_timer_min = 0;    // we check min. periodically to send GPS
+unsigned long posinfo_timer_min = 0;    // time of the last automatic beacon send (POSINFO-LAG-01: stamped on send only)
 // Zeitpunkt des letzten selbst erzeugten Positions-Beacons und ob es ihn schon
-// gab -- Schranke fuer den Sofort-Pfad in sendPosition(), siehe beacon_rate.h.
+// gab -- Schranke fuer den Sofort-Pfad in sendPosition() (BEACON_SHOT_MIN_MS) und,
+// ueber haveOwnPosTx()/lastOwnPosTxMs(), fuer die automatischen Beacons
+// (POSINFO_AUTO_MIN_MS), siehe beacon_rate.h.
 static unsigned long lastOwnPosTx = 0;
 static bool bHaveOwnPosTx = false;
 static unsigned long iShotSuppressed = 0;
+bool haveOwnPosTx(void) { return bHaveOwnPosTx; }
+unsigned long lastOwnPosTxMs(void) { return lastOwnPosTx; }
 // Dasselbe fuer den Sofort-Pfad von sendHey() (FL-02) -- eigener Zeitstempel,
 // unabhaengig vom Positions-Pfad. Siehe sendHeyShot() unten und beacon_rate.h.
 static unsigned long lastOwnHeyTx = 0;
 static bool bHaveOwnHeyTx = false;
 static unsigned long iHeyShotSuppressed = 0;
 unsigned long heyinfo_timer = 0;        // we check periodically to send HEY
-int ncnt_hold = 0;
 unsigned long nbrsnap_timer = 0;        // --nbrdebug: 15-min-Takt fuer nbrLogSnapshot()
 
 // Priority Queue arrays
@@ -1407,6 +1432,41 @@ static bool e290FullRefreshDue()
 }
 #endif
 
+#if defined(WP_DISP)
+static void wpDrawMsgIdx();   // defined below; DISP-PAGE-03 draws the counter on the live render
+#endif
+
+// T114-DARK-01 (D2) store-only mode: an incoming message that may not wake the display (--msgwake off and the
+// display is off) is stored in the page ring exactly as usual, but pushed to NO panel: no u8g2 page loop,
+// no e-paper clear()/update(), no TFT draw or backlight call, no "#C" re-blank afterwards. Set only for the
+// duration of one sendDisplayText() call (DispStoreOnlyScope); consulted at every push point of
+// sendDisplay1306() and sendDisplayText().
+static bool bDispStoreOnly = false;
+struct DispStoreOnlyScope
+{
+    bool prev;
+    explicit DispStoreOnlyScope(bool on) : prev(bDispStoreOnly) { bDispStoreOnly = on; }
+    ~DispStoreOnlyScope() { bDispStoreOnly = prev; }
+};
+
+#if !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS)
+// the ring write every panel branch of sendDisplay1306() does while it draws: same slot, same 25-byte copy
+static void dispStoreRingLines(bool bNeu)
+{
+    if(iDisplayType != 0 || !bNeu)
+        return;
+
+    for(int its=0; its<pageLineAnz; its++)
+    {
+        pageLastLineAnz[pageLastPointer] = pageLineAnz;
+        pageLastLine[pageLastPointer][its][0] = pageLine[its][0];
+        pageLastLine[pageLastPointer][its][1] = pageLine[its][1];
+        pageLastLine[pageLastPointer][its][2] = pageLine[its][2];
+        memcpy(pageLastText[pageLastPointer][its], pageText[its], 25);
+    }
+}
+#endif
+
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
@@ -1421,9 +1481,14 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
     {
         #if defined(BOARD_T_ECHO)
+            if(!bDispStoreOnly)
+            {
             epaper_display.fillScreen(GxEPD_WHITE);
             epaper_display.setFont(&FreeMonoBold9pt7b);
+            }
         #elif defined(HAS_EPAPER)
+            if(!bDispStoreOnly)
+            {
             epaper_display.clearMemory();
 
         	if(memcmp(text, "#F", 2) == 0)
@@ -1440,6 +1505,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             #else
             epaper_display.setFont(&FreeMonoBold12pt7b);
             #endif
+            }
         #elif defined(BOARD_HELTEC_T114) || defined(BOARD_T_CONNECT_PRO)
         #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined(BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO)
         #else
@@ -1480,6 +1546,10 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     if(bTransfer)
     {
         //printlndeb("Transfer");
+        if(bDispStoreOnly)
+            dispStoreRingLines(bNeu);   // store-only: the ring write below, no panel push
+        if(!bDispStoreOnly)
+        {
         #if defined HAS_EPAPER
             if(pageLineAnz > 0)
             {
@@ -1559,6 +1629,15 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     bool bE290Full = e290FullRefreshDue();
                     if(bE290Full)
                         epaper_display.fastmodeOff();
+                    #endif
+                    #if defined(WP_DISP)
+                    if(iDisplayType == 0 && bNeu)
+                    {
+                        // DISP-PAGE-03: a fresh message shows its counter (= first click's rank). The slot was
+                        // written above, pageLastPointer has not advanced yet: the newest is pageLastPointer.
+                        wpMsgIdx = wpBrowseShow(pageRingCount(pageLastLineAnz, PAGE_MAX, (pageLastPointer + 1) % PAGE_MAX), WP_MSG_BROWSE_MAX);
+                        wpDrawMsgIdx();
+                    }
                     #endif
                     epaper_display.update();
                     #if defined(BOARD_E290)
@@ -1773,10 +1852,17 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         }
         
         #endif
+        }   // !bDispStoreOnly
 
         if(iDisplayType == 0 && bNeu)
         {
             pagePointer=pageLastPointer;
+            #if defined(WP_DISP)
+            // DISP-PAGE-03: the panel shows the newest message, no click has stepped from it; a store-only
+            // (suppressed) message is NOT on the panel, so the first click must show it
+            wpLiveNewest = dispArrivalLiveNewest(bDispStoreOnly);
+            wpArrived = true;   // every arrival cancels a pending status step, shown or not
+            #endif
 
             pageLastPointer++;
             if(pageLastPointer >= PAGE_MAX)
@@ -1807,6 +1893,8 @@ void oledStat()
                   , (unsigned long)oled_last_crc, (unsigned long)oled_skipped);
 }
 
+#include "batt_label.h"     // TDECK-VOLT-01: shared battery label (OLED, TFT, T-Deck)
+
 #if defined(BOARD_HELTEC_T114)
 #include "t114_gps_page.h"
 extern bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr);   // nrf52_main.cpp
@@ -1814,13 +1902,14 @@ extern bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr);   // nrf52_main.cpp
 
 void sendDisplayHead(bool bInit)
 {
-    if((bSetDisplay || pageHold > 0) && !bInit)
+    if(dispHeadBlocked(bSetDisplay, pageHold, bInit))
         return;
 
     bSetDisplay=true;
 
     #if defined(WP_DISP)
     wpMsgIdx = 0;       // Home/Info-Seite -> keine Nachrichten-Ziffer oben rechts
+    wpLiveNewest = false;
     #endif
 
     #ifdef BOARD_T5_EPAPER
@@ -2061,7 +2150,7 @@ void sendDisplayTrack()
         snprintf(msg_text, sizeof(msg_text), "LON :%.4lf %c%4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
         sendDisplay1306(false, false, 3, dzeile[2], msg_text);
 
-        int pos_seconds = posinfo_interval - ((millis() - (int)posinfo_timer)) / 1000;
+        int pos_seconds = posinfoNextSeconds(millis(), (uint32_t)posinfo_timer, (uint32_t)posinfo_interval);
 
         #if defined(BOARD_T_ECHO)
         snprintf(msg_text, sizeof(msg_text), "RATE:%5i", (int)posinfo_interval);
@@ -2256,21 +2345,11 @@ static void sendDisplayClockLine()
     char cbatt[10];
     char cstatus[10];
 
+    // TDECK-VOLT-01 (#1312): one label helper for OLED, TFT and T-Deck; OLED output unchanged
     #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT) || defined(BOARD_T_ECHO)
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 4, 1, " USB", false);
     #else
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
-
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "   USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 5, 2, "   USB", false);
     #endif
 
     #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T_CONNECT_PRO)
@@ -2342,21 +2421,11 @@ void sendDisplayMainline()
     char cstatus[10];
     char nodetype[5];
 
+    // TDECK-VOLT-01 (#1312): one label helper for OLED, TFT and T-Deck; OLED output unchanged
     #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT) || defined(BOARD_T_ECHO)
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 4, 1, " USB", false);
     #else
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
-
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "   USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 5, 2, "   USB", false);
     #endif
 
     if(bGPSON)
@@ -2456,13 +2525,7 @@ void wpRefreshClock()
     char cbatt[10];
     char cstatus[10];
 
-    if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
-    else
-        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
-
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "   USB");
+    batt_label_format(cbatt, sizeof(cbatt), global_batt/1000.0, global_proz, bDisplayVolt, global_batt == 0.0, 5, 2, "   USB", false);   // TDECK-VOLT-01
 
     if(bGPSON)
         snprintf(cstatus, sizeof(cstatus), "G  ");
@@ -2548,6 +2611,7 @@ void wpShowStoredMessage(int slot, int idx)
     // 0 = Home-Screen. Global merken, damit der 10-s-wpRefreshClock die Ziffer NICHT wegloescht
     // (er zeichnet sie via wpDrawMsgIdx() jedes Mal mit).
     wpMsgIdx = idx;
+    wpLiveNewest = false;            // DISP-PAGE-03: ein Klick hat die Anzeige bewegt
     wpDrawMsgIdx();                  // VOR dem Voll-Refresh in den Framebuffer
 
     epaper_display.fastmodeOff();   // Voll-Refresh nachschieben -> Status-Screen physisch weg
@@ -2785,13 +2849,7 @@ void mainStartTimeLoop()
                         if(pageLastLineAnz[wpNewest] != 0)
                         {
                             // Index oben rechts = N (neueste Meldung): Anzahl belegter Slots
-                            int wpRank = 0, s = wpNewest;
-                            for(int n = 0; n < PAGE_MAX; n++)
-                            {
-                                if(pageLastLineAnz[s] == 0) break;
-                                wpRank++;
-                                s--; if(s < 0) s += PAGE_MAX;
-                            }
+                            const int wpRank = pageRingCount(pageLastLineAnz, PAGE_MAX, pageLastPointer);
                             wpShowStoredMessage(wpNewest, wpRank);
                         }
                         else
@@ -3026,8 +3084,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     else
     if(mcStartsWith(aprsmsg.msg_payload, "{CET}") > 0)
     {
-        // CET Meldungen nur annehmen wenn nichr GPS, RTC oder Handyverbindung vorhanden ist
-        if(!bRTCON && !posinfo_fix && !bNTPDateTimeValid) // !!!! erst aktivieren wenn PHone regelmässig zeit liefert  && !bPhoneTimeValid)
+        // CET-SCATTER-01 Part B: rank gate inside the filter call below (cetBeaconGate); a higher
+        // source (live flag or holdover) holds the beacon.
         {
             uint16_t Year=2000;
             uint16_t Month=1;
@@ -3050,31 +3108,48 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             if(Year > 2023)
             {
-                // CET-AGE-01 R1: stale second server stream must not step the clock back.
+                // CET-SCATTER-01 Part A: forward-only filter. Delay only adds to the payload age, so
+                // a forward step never overshoots; a step back needs a quorum of stale beacons.
                 // delta = payload UTC - node clock UTC (node_date_* is local, minus node_utcoff).
-                static bool cetHaveLast = false;
                 static unsigned long cetLastAcceptMs = 0;
-                bool cetAllow = true;
+                long cetDeltaS = 0;
                 uint32_t cetPlLocal = 0, cetNowLocal = 0;
                 const unsigned long cetSinceMs = millis() - cetLastAcceptMs;
-                if(cetEpochFromFields(Year, Month, Day, Hour, Minute, Second, &cetPlLocal) &&
-                   cetEpochFromFields((uint32_t)meshcom_settings.node_date_year, (uint32_t)meshcom_settings.node_date_month,
+                const bool cetPlOk = cetEpochFromFields(Year, Month, Day, Hour, Minute, Second, &cetPlLocal);
+                const bool cetNowOk = cetEpochFromFields((uint32_t)meshcom_settings.node_date_year, (uint32_t)meshcom_settings.node_date_month,
                                       (uint32_t)meshcom_settings.node_date_day, (uint32_t)meshcom_settings.node_date_hour,
                                       (uint32_t)meshcom_settings.node_date_minute, (uint32_t)meshcom_settings.node_date_second,
-                                      &cetNowLocal))
+                                      &cetNowLocal);
+                if(cetPlOk && cetNowOk)
                 {
                     const int32_t cetOffS = (int32_t)(meshcom_settings.node_utcoff * 3600.0f + (meshcom_settings.node_utcoff < 0 ? -0.5f : 0.5f));
-                    const long cetDeltaS = (long)((int32_t)cetPlLocal - ((int32_t)cetNowLocal - cetOffS));
-                    cetAllow = cetStepAllowed(cetDeltaS, cetHaveLast, cetSinceMs);
-                    if(!cetAllow)
-                        Serial.printf("[CET];skip;back_s;%ld;since_s;%lu\n", -cetDeltaS, cetSinceMs / 1000UL);
+                    cetDeltaS = (long)((int32_t)cetPlLocal - ((int32_t)cetNowLocal - cetOffS));
                 }
+                // live rank: NTP > GPS (fix, or valid module time without fix) > RTC
+                bool cetGpsLive = posinfo_fix;
+                #ifdef ENABLE_GPS
+                if(!cetGpsLive) cetGpsLive = WZ_GPS_TimeLive();
+                #endif
+                TimeRank cetLive = bNTPDateTimeValid ? TR_NTP : (cetGpsLive ? TR_GPS : (bRTCON ? TR_RTC : TR_NONE));
+                TimeRankState *cetRank = &s_timeRank;
+                const CetGateOut cetG = cetBeaconGate(cetRank, &s_cetFilter, cetLive, cetPlOk, cetNowOk, (int32_t)cetDeltaS, millis());
+                const CetVerdict cetV = cetG.v;
 
-                if(cetAllow)
+                if(cetG.action == CETG_HOLD_RANK)
+                    Serial.printf("[CET];hold;why;rank;by;%s;held_s;%lu;src;%s;ms;%lu\n", timeRankName(cetG.by), (unsigned long)cetG.held_s, aprsmsg.msg_source_call, (unsigned long)millis());
+                else if(cetG.action == CETG_BAD_PAYLOAD)
+                    Serial.printf("[CET];skip;why;bad_payload;src;%s;ms;%lu\n", aprsmsg.msg_source_call, (unsigned long)millis());
+                else if(cetV == CET_V_BACK)
+                    Serial.printf("[CET];skip;back_s;%ld;since_s;%lu;quorum;%u;src;%s;ms;%lu\n", -cetDeltaS, cetSinceMs / 1000UL, (unsigned)s_cetFilter.n_back, aprsmsg.msg_source_call, (unsigned long)millis());
+                else if(cetV == CET_V_BAND)
+                    Serial.printf("[CET];hold;why;band;delta_s;%ld;src;%s;ms;%lu\n", cetDeltaS, aprsmsg.msg_source_call, (unsigned long)millis());
+
+                if(cetG.action == CETG_FILTER && cetVerdictApplies(cetV))
                 {
+                    Serial.printf("[CET];apply;why;%s;delta_s;%ld;src;%s;ms;%lu\n", cetVerdictName(cetV), cetDeltaS, aprsmsg.msg_source_call, (unsigned long)millis());
+                    CLK_SRC("CET");
                     MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                     snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
-                    cetHaveLast = true;
                     cetLastAcceptMs = millis();
                 }
             }
@@ -3100,11 +3175,19 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     ///////////////////////////////////////////////////////////
     // text immer 30 sec stehenlassen und Display immer ON
-    DisplayOffWait = millis() + (30 * 1000); // 30 seconds
-    bDisplayIsOff=false;
+    // T114-DARK-01 (D2): the single wake site of every display board. With --msgwake off an OFF display
+    // stays off: no timer, flag stays, nothing is pushed to any panel (bDispStoreOnly); the message is
+    // still stored in the page ring below and the next button press shows it.
+    const bool bMsgWakes = dispMsgWakes(bMsgWake, bDisplayIsOff);
+    const DispStoreOnlyScope storeOnlyScope(!bMsgWakes);   // suppressed: stored only, nothing is pushed to a panel
+    if(bMsgWakes)
+    {
+        DisplayOffWait = millis() + (30 * 1000); // 30 seconds
+        bDisplayIsOff=false;
+    }
 
     #if defined(BOARD_HELTEC_T114)
-    t114GpsPageClose();   // the message is drawn over the GPS page
+    t114GpsPageClose();   // draws nothing: the GPS page must be inactive so the next click shows the message
     #endif
 
     #if defined(WP_DISP)
@@ -3189,8 +3272,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
 
-    epaper_display.setCursor(0, dzeile[1]);
-    epaper_display.setFont(WP_FONT9);
+    if(!bDispStoreOnly)
+    {
+        epaper_display.setCursor(0, dzeile[1]);
+        epaper_display.setFont(WP_FONT9);
+    }
 
     String strPath = String("M* <") + aprsmsg.msg_source_call + ">";
     // DM
@@ -3214,9 +3300,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     msg_text[20]=0x00;
-    epaper_display.println(msg_text);
+    if(!bDispStoreOnly)
+    {
+        epaper_display.println(msg_text);
 
-    epaper_display.setCursor(0, dzeile[2]);
+        epaper_display.setCursor(0, dzeile[2]);
+    }
 
     String strAscii = "";//aprsmsg.msg_payload;
 
@@ -3235,10 +3324,16 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #if defined(WP_DISP)
     // Nachrichtentext mit kompakter Schrift (enger Zeilenabstand 15 statt 22) -> bis zu 160
     // Zeichen passen auf das Panel. Gleicher Font wie beim Durchblaettern -> Browse == Live.
-    epaper_display.setFont(wpMsgFont());
+    if(!bDispStoreOnly)
+    {
+        epaper_display.setFont(wpMsgFont());
+    }
     #endif
 
-    epaper_display.println(strAscii);
+    if(!bDispStoreOnly)
+    {
+        epaper_display.println(strAscii);
+    }
 
     strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
     pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
@@ -3248,8 +3343,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #if defined(WP_DISP)
     // Neue Nachricht per Voll-Refresh aufbauen -> gestochen scharf, tiefschwarz,
     // kein Ghosting. Die schnellen Partial-Updates (Uhrzeit) bleiben unberuehrt.
-    epaper_display.fastmodeOff();
+    if(!bDispStoreOnly)
+    {
+        epaper_display.fastmodeOff();
+    }
     #endif
+    if(!bDispStoreOnly)   // store-only: no refresh at all (the ring slots above are already written)
+    {
     #if defined(BOARD_E290)
     bool bE290Full = e290FullRefreshDue();   // E290: partial refresh, full one only now and then
     if(bE290Full)
@@ -3260,6 +3360,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     if(bE290Full)
         epaper_display.fastmodeOn();   // back to fastmode ON, see sendDisplay1306
     #endif
+    }
 
     #elif defined (BOARD_T5_EPAPER)
     // extra source
@@ -3301,7 +3402,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
     pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
-    displayTFT(strPath, strAscii);
+    if(!bDispStoreOnly)
+    {
+        displayTFT(strPath, strAscii);
+    }
 
     #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     
@@ -5007,7 +5111,12 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
         user_msg_status = 0xFF; // non-text frames: no retransmission (unchanged)
     }
 
-    int w = bUseOnce ? addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "user_msg", 0)
+    int w;
+    // own replies only: a KISS client's frame (src_override) never gets the ACK eviction
+    if(bUseOnce && bDM && !(src_override && src_override[0]) && dmTextIsRm1Reply(aprsmsg.msg_payload))
+        w = addTxRingEntryRmReply(msg_buffer, (uint16_t)aprsmsg.msg_len, "user_msg");   // RM-LOSTREPLY-01
+    else
+        w = bUseOnce ? addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "user_msg", 0)
                       : addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, user_msg_status, "user_msg", 0);
 
     if(bDisplayRetx && w >= 0)
@@ -5290,14 +5399,11 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
     {
         // CHR-02: strip APRS structure separators and truncate on a UTF-8
-        // boundary at the same 25-byte cap decodeAPRSPOS() applies on
-        // receive (aprs_functions.cpp:632) -- otherwise a receiver's
-        // byte-counting parser can inherit a split multi-byte sequence.
+        // boundary at APRS_ATXT_WIRE_MAX bytes, the cap decodeAPRSPOS()
+        // applies on receive -- otherwise a receiver's byte-counting parser
+        // can inherit a split multi-byte sequence.
         char catxt_src[sizeof(meshcom_settings.node_atxt)];
-        snprintf(catxt_src, sizeof(catxt_src), "%s", meshcom_settings.node_atxt);
-        size_t iatxt = charset_filter_apply(catxt_src, strlen(catxt_src), CHARSET_FILTER_STRIP_SEPARATORS);
-        iatxt = charset_utf8_safe_truncate(catxt_src, iatxt, 25);
-        catxt_src[iatxt] = 0x00;
+        charset_wire_field(meshcom_settings.node_atxt, catxt_src, sizeof(catxt_src), APRS_ATXT_WIRE_MAX, nullptr);
 
         snprintf(catxt,  sizeof(catxt), "%s", catxt_src);
     }
@@ -5502,18 +5608,20 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     strncat(strconcat, cdigital, sizeof(strconcat) - strlen(strconcat) - 1);
     strncat(strconcat, ctele, sizeof(strconcat) - strlen(strconcat) - 1);
 
-    // wenn die concatenation zu lang ist, dann catxt und cname löschen
-    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 100)
+    // Tags + Kommentar + Name sind auf POS_TEXT_BUDGET Bytes begrenzt: zuerst entfaellt
+    // der Kommentar, dann der Name (pos_text_budget.h). APRS-TXT-03: nicht mehr still,
+    // sondern mit Marker, einmal je Wechsel des Ergebnisses (Rohes Serial.printf wie bei
+    // [POS];shot, damit der Marker auch bei --debug off sichtbar ist).
     {
-        catxt[0]=0x00;
+        const PosTextFit txtFit = posTextFit(strlen(strconcat), catxt, cname, POS_TEXT_BUDGET);
+        if(posTextDropRecord(txtFit, strlen(strconcat)))
+        {
+            char cmark[64];
+            if(posTextDropMarker(cmark, sizeof(cmark), txtFit, strlen(strconcat), POS_TEXT_BUDGET) > 0)
+                Serial.print(cmark);
+        }
     }
 
-    // wenn die concatenation zu lang ist, dann catxt und cname löschen
-    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 100)
-    {
-        cname[0]=0x00;
-    }
-    
     snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, strconcat);
 
     return String(msg_start);
@@ -6569,6 +6677,33 @@ int GetHeadingDifference(int heading1, int heading2)
 
 unsigned int setSMartBeaconing(double dlat, double dlon)
 {
+    // Automatic symbol (GPS-AUTOSYM-02/03) is evaluated before the TRACK-off return and before the stationary
+    // return, so it also works with TRACK off and the symbol returns to the runner while the node stands still.
+    // It uses its own speed estimate (autoSymbolSpeed): posinfo_last_* is only maintained by the TRACK path and
+    // is stale with TRACK off, and the RAK4631 never feeds the global gps (no valid gps.speed there).
+    // No side effects on the TRACK state.
+    static AutoSymbolState s_autoSym;       // zero-init = nothing seen since boot
+    static AutoSymbolSpeed s_autoSpeed;     // previous sample, refreshed on every call
+
+    const uint32_t now_ms = (uint32_t)millis();
+    const double auto_mps = autoSymbolSpeed(&s_autoSpeed, gps.speed.isValid(), gps.speed.isValid() ? gps.speed.mps() : 0.0, dlat, dlon, now_ms);
+
+    // History is kept while the opt-in is off (switching it on mid-trip behaves as before).
+    autoSymbolNote(&s_autoSym, auto_mps, now_ms);
+
+    if(bGPSAutosymbol)
+    {
+        char target_symbol = autoSymbolPick(&s_autoSym, meshcom_settings.node_symid, meshcom_settings.node_symcd, now_ms);
+
+        if(meshcom_settings.node_symcd != target_symbol)
+        {
+            meshcom_settings.node_symcd = target_symbol;
+
+            if(iGPSDEBUG > 0)
+                printfdeb("Auto-Symbol switch to '%c'\n", target_symbol);
+        }
+    }
+
     // check TRACK Mode on
     if(!bDisplayTrack)
     {
@@ -6635,55 +6770,6 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     if(iGPSDEBUG > 0)
         printfdeb("%s [POSINFO]...dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, speed_mps, gps_refresh_intervall);
 
-    // Moving Logic & Symbol Switching with Hysteresis
-    static unsigned long last_car_speed_ts = 0;
-    static unsigned long last_bike_speed_ts = 0;
-
-    // Update timestamps based on current speed
-    if (speed_mps > 7.0) // > 25 km/h -> Car range
-    {
-        last_car_speed_ts = millis();
-        last_bike_speed_ts = millis(); // Also implies bike speed threshold passed
-    }
-    else if (speed_mps > 1.4) // > 5 km/h -> Bike range
-    {
-        last_bike_speed_ts = millis();
-    }
-
-    // Determine Symbol based on history (2 minutes hysteresis)
-    char target_symbol = 0;
-
-    // use APRS Symbol switching
-    if(bGPSAutosymbol)
-    {
-        if (meshcom_settings.node_symid == '/') // Only auto-switch if using primary table
-        {
-            // Check if we are currently using one of the auto-switchable symbols
-            if (meshcom_settings.node_symcd == '[' || meshcom_settings.node_symcd == 'b' || meshcom_settings.node_symcd == '>')
-            {
-                if ((millis() - last_car_speed_ts) < 120000) // Car speed seen in last 2 mins
-                {
-                    target_symbol = '>';
-                }
-                else if ((millis() - last_bike_speed_ts) < 120000) // Bike speed seen in last 2 mins
-                {
-                    target_symbol = 'b';
-                }
-                else
-                {
-                    target_symbol = '['; // Runner/Hiker default
-                }
-
-                if (target_symbol != 0 && meshcom_settings.node_symcd != target_symbol)
-                {
-                    meshcom_settings.node_symcd = target_symbol;
-
-                    if(iGPSDEBUG > 0)
-                        printfdeb("Auto-Symbol switch to '%c'\n", target_symbol);
-                }
-            }
-        }
-    }
     // WiFi Stationary Check
     // If connected to WiFi AND speed is low, we assume we are indoors/stationary to prevent GPS drift
     // But if moving (e.g. in car with hotspot), we still want updates.

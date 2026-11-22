@@ -378,13 +378,17 @@ inline bool fwRecordDecode(const uint8_t *buf, size_t n, FwStageRecord &out)
 // True only if the candidate is newer than the running image AND its tag
 // differs from lastInstalledTag, the tag the caller persisted when it last
 // staged and handed over an image (null or empty = nothing installed yet).
+// The second condition holds only while the running image is undated (AU-27).
 //
 // Why the second condition: a running image built without MC_BUILD_TAG
 // reports SOURCE_VERSION+SUB, e.g. "4.40a", which is UNDATED, so any dated
 // release of the same letter ("v4.40a.10.02") compares as newer. If that
 // release itself was built without a tag, it would again report "4.40a"
 // after the update, see the same release as newer and reinstall it forever.
-// The lastInstalled guard stops that loop after one install.
+// The lastInstalled guard stops that loop after one install. It applies only
+// while the running image is undated: a dated image reports the candidate's
+// date after installing it, so it cannot loop, and a node downgraded by other
+// means (OTA flasher, NVS kept) must be offered the release again.
 inline bool fwShouldInstall(const FwVersion &running, const FwVersion &cand, const char *candTag,
                             const char *lastInstalledTag)
 {
@@ -394,7 +398,7 @@ inline bool fwShouldInstall(const FwVersion &running, const FwVersion &cand, con
     if (fwCompare(running, cand) <= 0)
         return false;
     // compared over the 23 characters the stage record keeps
-    if (lastInstalledTag != nullptr && strEqN(candTag, lastInstalledTag, 23))
+    if (!running.hasDate && lastInstalledTag != nullptr && strEqN(candTag, lastInstalledTag, 23))
         return false;
     return true;
 }
@@ -623,6 +627,25 @@ static inline const char *fwSafebootWhy(bool versionOk, bool nocap, bool bootQio
     if (!bootQio)
         return "dio";
     return (versionOk && !nocap) ? "ok" : "old";
+}
+
+// OTA-SAFEBOOT-01 (#1300): a manual --ota-update (console, web button) on a Safeboot below the minimum WARNS and
+// proceeds (operator decision D1 b); it never refuses. sbVer < 0 (partition missing, unreadable, or a build
+// without the scanner) gives PROCEED: auRebootToSafeboot() already reports a missing partition.
+enum FwManualOtaVerdict : uint8_t
+{
+    FWOTA_PROCEED = 0,
+    FWOTA_WARN_OLD
+};
+// Same predicate as the web status (exceptions: version -1 proceeds silently, auRebootToSafeboot reports
+// the missing partition; DIO + nocap warns "old" here while the web says "dio"): warns when fwSafebootWhy() would say "old" (version below the
+// minimum, or nocap set after a failed handover). "dio" is not judged here (auRebootToSafeboot reports it).
+static inline FwManualOtaVerdict fwManualOtaDecide(int sbVer, int minVer, bool nocap)
+{
+    if (sbVer < 0)
+        return FWOTA_PROCEED;
+    const char *why = fwSafebootWhy(sbVer >= minVer, nocap, true);
+    return (why[0] == 'o' && why[1] == 'l' && why[2] == 'd' && why[3] == '\0') ? FWOTA_WARN_OLD : FWOTA_PROCEED;
 }
 
 struct FwGoReq

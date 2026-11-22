@@ -56,6 +56,14 @@ bool checkRegexCall(String callsign)
 	return true;
 }
 
+String callRejectHint(const String &callsign)
+{
+	if(callsign.indexOf('/') >= 0)
+		return String(" (letters, digits and an optional -SSID; no '/' country prefix, use the home call and the SSID)");
+
+	return String(" (letters, digits and an optional -SSID)");
+}
+
 bool checkViaList(const String &list)
 {
 	// node_via ist char[40]: lieber ablehnen als stillschweigend abschneiden

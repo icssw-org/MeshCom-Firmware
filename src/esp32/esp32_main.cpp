@@ -11,6 +11,8 @@
  */
 #include <Arduino.h>
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "posinfo_timer.h"   // POSINFO-LAG-01: beacon due / spacing decision
+#include "beacon_rate.h"      // POSINFO_AUTO_MIN_MS
 #include <atomic>
 #include <configuration.h>
 #include "capture_functions.h"
@@ -21,6 +23,7 @@
 #include "loop_breadcrumb.h" // F3: always-on LAST_LOOP_SECTION breadcrumb for TASK_WDT forensics
 #include "track_warning.h" // TRK-01: Warnhinweis bei aktivem Track
 #include <maxhop.h>         // CS-01: plausibility of the persisted text hop limit
+#include "rf_pa.h"          // TBEAM1W-PWR-01: shared SX126x PA setup (boot + runtime)
 #include <RadioLib.h>
 
 #include <Wire.h>               
@@ -1469,6 +1472,7 @@ void esp32setup()
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bDisplayCont = meshcom_settings.node_sset & 0x4000;
+    bMsgWake = (meshcom_settings.node_sset & 0x8000) == 0;   // T114-DARK-01: --msgwake, stored inverted (set = off)
 
     // TRK-01: Warnhinweis einmal beim Boot, wenn Track aus den Settings aktiv geladen wurde
     if(bDisplayTrack)
@@ -1499,7 +1503,7 @@ void esp32setup()
     // NOTE: externalRadioSetup() runs later, AFTER lora_setcountry() has applied
     // the effective freq/bw/sf/cr/preamble, so the bridge config snapshot is built
     // from the same effective radio settings the local radio path would use.
-    //xxxxxxx   = meshcom_settings.node_sset2 & 0x2000;
+    // node_sset2 0x2000 = T114 --theme dark (read in nrf52_main.cpp only; no ESP32 board uses it)
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
@@ -2217,19 +2221,11 @@ void esp32setup()
         save_settings();
         printfdeb("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
-        #if defined(BOARD_T_DECK_PRO)
-        if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        if (rfApplyOutputPower(radio, tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
             printlndeb(F("Selected output power is invalid for this module!"));
             Serial.printf("[LoRa] radio config failed, restarting\n");
             esp_restart();
         }
-        #else
-        if (radio.setOutputPower(tx_power, false) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
-            printlndeb(F("Selected output power is invalid for this module!"));
-            Serial.printf("[LoRa] radio config failed, restarting\n");
-            esp_restart();
-        }
-        #endif
 
         // set over current protection limit (accepted range is 0 - 140 mA)
         // NOTE: set value to 0 to disable overcurrent protection
@@ -4105,6 +4101,7 @@ void esp32loop()
             // check valid Date & Time
             if(Year > 2023 && strTime.compareTo("none") != 0)
             {
+                CLK_SRC("NTP");
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                 bNTPDateTimeValid = true;
 
@@ -4159,6 +4156,7 @@ void esp32loop()
             // check valid Date & Time
             if(Year > 2013)
             {
+                CLK_SRC("RTC");
                 MyClock.setCurrentTime(0.0, Year, Month, Day, Hour, Minute, Second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
 
@@ -4731,24 +4729,15 @@ void esp32loop()
         gps_refresh_timer = millis();
     }
 
-    // check NCNT modified -- MeshCom 5 (Welle 4, Konzept 4.8): lokaler
-    // Vergleich, nicht die Sendefassung -- nbrNcnt(), nicht nbrNcntAir().
-    int incnt = nbrNcnt(nbrMatrix, uptimeMin16());
-    if(ncnt_hold != incnt)
-    {
-        // minimal alle 60 sec
-        if((uint32_t)(millis() - posinfo_timer_min) >= 60000)
-        {
-            posinfo_shot = true;
-            ncnt_hold = incnt;
-        }
-    }
+    // POSINFO-LAG-01: no position beacon on a neighbour count change. The beacon follows the configured
+    // interval; neighbour count and signal go out in the HEY frames. (The old 60 s NCNT trigger never fired:
+    // posinfo_timer_min was refreshed on every idle pass.)
 
     // posinfo_interval in Seconds
-    if (((uint32_t)(millis() - posinfo_timer) >= (posinfo_interval * 1000)) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
+    if (posinfoDue(millis(), posinfo_timer, posinfo_interval, (millis() > 100000 && millis() < 130000 && bPosFirst), posinfo_shot))
     {
-        // minimal transmit time only max 30 sec
-        if((uint32_t)(millis() - posinfo_timer_min) >= 30000)
+        // automatic beacons: at least POSINFO_AUTO_MIN_MS after the last position TX of any kind (D6, aprs.fi)
+        if(posinfoAutoSpacingOk(millis(), posinfo_timer_min, haveOwnPosTx(), lastOwnPosTxMs(), POSINFO_AUTO_MIN_MS))
         {
             if(bDisplayInfo)
             {
@@ -4816,10 +4805,7 @@ void esp32loop()
             posinfo_timer_min = millis();
         }
     }
-    else
-    {
-        posinfo_timer_min = millis();
-    }
+    // POSINFO-LAG-01: posinfo_timer_min = time of the last send; not refreshed on idle passes
 
 
     // Trickle-HEY: adaptive interval (RFC 6206)
@@ -5059,8 +5045,7 @@ void esp32loop()
                     }
                 }
 
-                if(dht_found)
-                    loop_onewire_dht();
+                loop_onewire_dht();   // DHT-PROBE-01: gates itself (found or probe tries left)
 
                 onewireTimeWait = millis() - lreduction;
 

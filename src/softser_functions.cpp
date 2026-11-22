@@ -95,6 +95,7 @@ bool loopSOFTSER(int ID)
 
             sscanf(ctime_buf, "%04u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
 
+            CLK_SRC("SER");
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, year, month, day, hour, minute, second);
 
             snprintf(cTimeSource, sizeof(cTimeSource), (char*)"SER");

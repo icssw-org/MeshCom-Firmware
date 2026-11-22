@@ -48,6 +48,14 @@ static inline DispClkDecision dispClkDecide(const DispClkInputs &in)
     return DispClkDecision::Draw;
 }
 
+// DISP-PAGE-02: the guard at the top of sendDisplayHead(): a draw in progress (setDisplay) or the 5 s
+// browse hold after a button click (pageHold > 0) makes it return, except for an init call. The
+// "display off" handler therefore has to clear pageHold itself before sendDisplayHead(false).
+static inline bool dispHeadBlocked(bool setDisplay, int pageHold, bool init)
+{
+    return (setDisplay || pageHold > 0) && !init;
+}
+
 // CLK-PING-01: the clock line is skipped only while a held full-screen frame was really drawn
 // (DisplayOffWait running AND heldFrameDrawn, set by DisplayPong's u8g2 branch and the hold-text
 // frame). DisplayOffWait alone is not enough: it is also set on boards whose DisplayPong draws
@@ -146,4 +154,21 @@ static inline long dispClkShownSod(DispClkShown &st, long now_sod)
     st.have = true;
     st.sod = now_sod;
     return now_sod;
+}
+
+// T114-DARK-01 (D2, --msgwake): may an incoming message turn the display on? A display that is ON
+// always keeps today's behaviour (the 30 s timer is re-armed). A display that is OFF (bDisplayIsOff,
+// only ever true while the "display off" setting is on) is woken unless the user switched msgwake
+// off; the message is still stored in the page ring and shown by a button press.
+static inline bool dispMsgWakes(bool msgWake, bool displayIsOff)
+{
+    return msgWake || !displayIsOff;
+}
+
+// A message that may not wake the display (!dispMsgWakes) is "store-only": written to the page ring, pushed to no panel.
+// Wireless Paper: is the newest message already on the panel after an arrival? Only if it was pushed. A
+// store-only message is not, so wpBrowseClick() (page_ring.h) must not treat it as shown and skip it.
+static inline bool dispArrivalLiveNewest(bool storeOnly)
+{
+    return !storeOnly;
 }

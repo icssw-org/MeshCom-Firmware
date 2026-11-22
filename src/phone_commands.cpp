@@ -393,6 +393,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 				if(Year > 2020)
 				{
+					CLK_SRC("PHONE");
 					MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
 					bPhoneTimeValid=true;
 				}
