@@ -31,7 +31,8 @@
 #include "kiss_functions.h"
 #include "configuration.h"
 #include "loop_functions_extern.h"   // REMOTE_LED_PIN rule + RM LED levels
-#include "cet_age.h"   // CET-AGE-01: cetStepAllowed() (pure part only)
+#include "cet_age.h"   // CET-AGE-01: back-step limits used by cet_filter.h
+#include "cet_filter.h" // CET-SCATTER-01 Part A: forward-only {CET} filter
 #include "board_led.h"
 #if defined(ESP32)
 #include "esp32/esp32_pmu.h"   // chargeLedFitted()
@@ -62,6 +63,7 @@
 #include "pong_format.h"   // {pong} payload id as unsigned, display of last 3 digits
 #include "own_msg_status.h"   // durable delivery state of own text messages (web GUI ticks)
 
+static CetFilter s_cetFilter;   // CET-SCATTER-01 Part A (zero-initialised; Part B needs file scope)
 bool gpsDetected = false;
 bool gpsInitDone = false;
 
@@ -3050,11 +3052,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             if(Year > 2023)
             {
-                // CET-AGE-01 R1: stale second server stream must not step the clock back.
+                // CET-SCATTER-01 Part A: forward-only filter. Delay only adds to the payload age, so
+                // a forward step never overshoots; a step back needs a quorum of stale beacons.
                 // delta = payload UTC - node clock UTC (node_date_* is local, minus node_utcoff).
-                static bool cetHaveLast = false;
                 static unsigned long cetLastAcceptMs = 0;
-                bool cetAllow = true;
+                CetVerdict cetV = CET_V_FIRST;
+                long cetDeltaS = 0;
                 uint32_t cetPlLocal = 0, cetNowLocal = 0;
                 const unsigned long cetSinceMs = millis() - cetLastAcceptMs;
                 if(cetEpochFromFields(Year, Month, Day, Hour, Minute, Second, &cetPlLocal) &&
@@ -3064,17 +3067,22 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                                       &cetNowLocal))
                 {
                     const int32_t cetOffS = (int32_t)(meshcom_settings.node_utcoff * 3600.0f + (meshcom_settings.node_utcoff < 0 ? -0.5f : 0.5f));
-                    const long cetDeltaS = (long)((int32_t)cetPlLocal - ((int32_t)cetNowLocal - cetOffS));
-                    cetAllow = cetStepAllowed(cetDeltaS, cetHaveLast, cetSinceMs);
-                    if(!cetAllow)
-                        Serial.printf("[CET];skip;back_s;%ld;since_s;%lu\n", -cetDeltaS, cetSinceMs / 1000UL);
+                    cetDeltaS = (long)((int32_t)cetPlLocal - ((int32_t)cetNowLocal - cetOffS));
+                    cetV = cetFilterDecide(&s_cetFilter, (int32_t)cetDeltaS, millis());
                 }
+                else
+                    cetFilterNoteRef(&s_cetFilter);   // clock never set: first beacon sets it
 
-                if(cetAllow)
+                if(cetV == CET_V_BACK)
+                    Serial.printf("[CET];skip;back_s;%ld;since_s;%lu;quorum;%u;src;%s;ms;%lu\n", -cetDeltaS, cetSinceMs / 1000UL, (unsigned)s_cetFilter.n_back, aprsmsg.msg_source_call, (unsigned long)millis());
+                else if(cetV == CET_V_BAND)
+                    Serial.printf("[CET];hold;why;band;delta_s;%ld;src;%s;ms;%lu\n", cetDeltaS, aprsmsg.msg_source_call, (unsigned long)millis());
+
+                if(cetVerdictApplies(cetV))
                 {
+                    Serial.printf("[CET];apply;why;%s;delta_s;%ld;src;%s;ms;%lu\n", cetVerdictName(cetV), cetDeltaS, aprsmsg.msg_source_call, (unsigned long)millis());
                     MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                     snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
-                    cetHaveLast = true;
                     cetLastAcceptMs = millis();
                 }
             }
