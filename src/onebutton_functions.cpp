@@ -30,7 +30,6 @@
 
 #if defined(WP_DISP)
 extern bool wpArrived;     // loop_functions.cpp: a message arrived since the last click (T114-DARK-01)
-extern bool wpLiveNewest;   // loop_functions.cpp: the panel shows the newest message of an arrival no click has stepped from
 #endif
 
 void singleClick()

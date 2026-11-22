@@ -207,6 +207,7 @@ void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const
 void oledStat();
 void oledInvalidate();
 extern bool bOledLog;
+extern bool wpLiveNewest;   // DISP-PAGE-03: the panel shows the newest message of an arrival no click has stepped from
 bool is_equ(const char* buf1, const char* buf2);
 int is_pos(const char* buf, const char* comp_buf);
 
