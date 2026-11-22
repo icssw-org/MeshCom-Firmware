@@ -536,7 +536,6 @@ extern int gps_refresh_track;
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long posinfo_timer_min;
 extern unsigned long heyinfo_timer;      // we check periodically to send HEY
-extern int ncnt_hold;
 extern unsigned long nbrsnap_timer;      // --nbrdebug: 15-min-Takt fuer nbrLogSnapshot()
 
 void nbrDebugApply(void);                // nbrLog an bNBRDEBUG angleichen (lora_functions.cpp)

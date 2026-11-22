@@ -15,11 +15,12 @@
 // tree and found NOT to fit that shape after all, despite looking like
 // candidates from the predicate table alone -- left exactly where they are:
 //
-//   - posinfo_timer_min: looks like a standalone 60 s-gate timer, but its
-//     reset is NOT inside its own predicate -- it is reset unconditionally
-//     from posinfo_timer's own if/else every pass (posinfo_timer itself is
-//     out of scope: `||` first-fire clause, DR-16 territory). Extracting
-//     posinfo_timer_min alone would tear that entanglement apart.
+//   - posinfo_timer_min: looks like a standalone spacing timer, but it is not
+//     a periodic one -- since POSINFO-LAG-01 it is stamped only when a position
+//     beacon is actually sent (never on idle passes), inside the send branch of
+//     posinfo_timer's own predicate (posinfo_timer itself is out of scope: `||`
+//     first-fire clause, DR-16 territory; decision in src/posinfo_timer.h).
+//     Extracting posinfo_timer_min alone would tear that entanglement apart.
 //   - softser_refresh_timer: its predicate is the `if` of an
 //     if/else-if/else chain shared with the bSOFTSER_APP/appSOFTSER() app
 //     dispatch. The scheduler has no way to run those else-branches when

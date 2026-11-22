@@ -147,6 +147,10 @@ int sendMessage(char *msg_text, int len, const char *src_override = nullptr,
 unsigned int sendInjectedPosition(const char *srcCall, const char *posData);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
 void sendPosition(unsigned long intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
+// Time of the last position TX of any kind (sendPosition(): periodic, track, instant) -- spacing
+// for automatic beacons in the main loops (POSINFO_AUTO_MIN_MS, beacon_rate.h / posinfo_timer.h).
+bool haveOwnPosTx(void);
+unsigned long lastOwnPosTxMs(void);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 // Send a MeshCom message ACK to dest_call. src_override (when set) puts the ACK
 // on air under a foreign source callsign — used by the KISS interface to relay a

@@ -941,19 +941,22 @@ int gps_refresh_track = 0;
 
 // Loop timers
 unsigned long posinfo_timer = 0;        // we check periodically to send GPS
-unsigned long posinfo_timer_min = 0;    // we check min. periodically to send GPS
+unsigned long posinfo_timer_min = 0;    // time of the last automatic beacon send (POSINFO-LAG-01: stamped on send only)
 // Zeitpunkt des letzten selbst erzeugten Positions-Beacons und ob es ihn schon
-// gab -- Schranke fuer den Sofort-Pfad in sendPosition(), siehe beacon_rate.h.
+// gab -- Schranke fuer den Sofort-Pfad in sendPosition() (BEACON_SHOT_MIN_MS) und,
+// ueber haveOwnPosTx()/lastOwnPosTxMs(), fuer die automatischen Beacons
+// (POSINFO_AUTO_MIN_MS), siehe beacon_rate.h.
 static unsigned long lastOwnPosTx = 0;
 static bool bHaveOwnPosTx = false;
 static unsigned long iShotSuppressed = 0;
+bool haveOwnPosTx(void) { return bHaveOwnPosTx; }
+unsigned long lastOwnPosTxMs(void) { return lastOwnPosTx; }
 // Dasselbe fuer den Sofort-Pfad von sendHey() (FL-02) -- eigener Zeitstempel,
 // unabhaengig vom Positions-Pfad. Siehe sendHeyShot() unten und beacon_rate.h.
 static unsigned long lastOwnHeyTx = 0;
 static bool bHaveOwnHeyTx = false;
 static unsigned long iHeyShotSuppressed = 0;
 unsigned long heyinfo_timer = 0;        // we check periodically to send HEY
-int ncnt_hold = 0;
 unsigned long nbrsnap_timer = 0;        // --nbrdebug: 15-min-Takt fuer nbrLogSnapshot()
 
 // Priority Queue arrays

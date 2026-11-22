@@ -4,6 +4,8 @@
 
 #include "configuration.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "posinfo_timer.h"   // POSINFO-LAG-01: beacon due / spacing decision
+#include "beacon_rate.h"      // POSINFO_AUTO_MIN_MS
 #include "capture_functions.h"
 
 #include <Arduino.h>
@@ -2199,29 +2201,19 @@ void nrf52loop()
         }
     }
 
-    // check NCNT modified -- MeshCom 5 (Welle 4, Konzept 4.8): lokaler
-    // Vergleich, nicht die Sendefassung -- nbrNcnt(), nicht nbrNcntAir().
-    int incnt = nbrNcnt(nbrMatrix, uptimeMin16());
-    if(ncnt_hold != incnt)
-    {
-        INSTR_SECTION("pos_timer");
-        // minimal alle 60 sec
-        if((uint32_t)(millis() - posinfo_timer_min) >= 60000)
-        {
-            posinfo_shot = true;
-            ncnt_hold = incnt;
-        }
-    }
+    // POSINFO-LAG-01: no position beacon on a neighbour count change. The beacon follows the configured
+    // interval; neighbour count and signal go out in the HEY frames. (The old 60 s NCNT trigger never fired:
+    // posinfo_timer_min was refreshed on every idle pass.)
 
     // posinfo
     //Serial.print(getTimeString());
     //Serial.printf(" posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
 
     // posinfo_interval in Seconds
-    if (((uint32_t)(millis() - posinfo_timer) >= (uint32_t)(posinfo_interval * 1000)) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
+    if (posinfoDue(millis(), posinfo_timer, posinfo_interval, (millis() > 100000 && millis() < 130000 && bPosFirst), posinfo_shot))
     {
-        // minimal transmit time only max 30 sec
-        if((uint32_t)(millis() - posinfo_timer_min) >= 30000)
+        // automatic beacons: at least POSINFO_AUTO_MIN_MS after the last position TX of any kind (D6, aprs.fi)
+        if(posinfoAutoSpacingOk(millis(), posinfo_timer_min, haveOwnPosTx(), lastOwnPosTxMs(), POSINFO_AUTO_MIN_MS))
         {
             if(bDisplayInfo)
             {
@@ -2292,10 +2284,7 @@ void nrf52loop()
             posinfo_timer_min = millis();
         }
     }
-    else
-    {
-        posinfo_timer_min = millis();
-    }
+    // POSINFO-LAG-01: posinfo_timer_min = time of the last send; not refreshed on idle passes
 
     // Trickle-HEY: adaptive interval (RFC 6206)
     if (((uint32_t)(millis() - heyinfo_timer) >= trickle_interval_ms) || bHeyFirst)

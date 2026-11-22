@@ -13,6 +13,8 @@
 #include "extern_tele_json.h"
 #include "extern_msg_json.h"
 #include "mcp17_bits.h"
+#include "posinfo_timer.h"   // POSINFO_AUTO_MIN_MS gate for the tele beacon (POSINFO-LAG-01)
+#include "beacon_rate.h"
 // DR-18 part 2: queueExternAck()'s declaration and its pure JSON builder
 // buildExternAckJson() live in udp_frame.h (see that header for why -- not
 // extudp_functions.h, which is outside the U1 carve's file set).
@@ -317,7 +319,16 @@ static void handleExternTelemetry(JsonDocument &inputJson)
   // Push an immediate position beacon (same mechanism as the "--sendpos"
   // console command) so the new values go out right away, embedded in the
   // position comment, instead of waiting for the next periodic beacon
-  // (up to POSINFO_INTERVAL, 30 minutes by default).
+  // (up to POSINFO_INTERVAL, 30 minutes by default). This is automatic
+  // traffic: it keeps POSINFO_AUTO_MIN_MS (60 s, aprs.fi) from the last
+  // position TX of any kind; inside that window the beacon is deferred to the
+  // main loop (posinfo_shot), which sends the newest values once the gate opens.
+  if(!posinfoAutoSpacingOk(millis(), posinfo_timer_min, haveOwnPosTx(), lastOwnPosTxMs(), POSINFO_AUTO_MIN_MS))
+  {
+    posinfo_shot = true;
+    Serial.println("[EXT] tele: position beacon deferred (60 s spacing)");
+    return;
+  }
   sendPosition(0x9999, meshcom_settings.node_lat, meshcom_settings.node_lat_c,
                meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
                meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp,
