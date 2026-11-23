@@ -18,6 +18,7 @@
 #include <time.h>
 #include <nrf52_functions.h>
 #include <nrf52_radio.h>
+#include "lora_syncword.h"     // one-byte -> SX126x two-byte sync word
 #include <settings_sanitize.h> // #1132: resolve_tx_power sentinel normalization
 #include <extudp_functions.h>
 
@@ -238,20 +239,12 @@ String strDate;
 
 /*
 Sync Word Setting in MeshCom
-    MeshCom Syc Word is 0x2b
-
-    Output of the LoRa Sync Word Register 0x0740 in MeshCom:
-
-    Set radio: power level=22
-    Sync Word 1st byte = 24
-    Sync Word 2nd byte = b4
-
-    In our Library it gets set at sx126x.h / radio.cpp
-    Define: sx126x.h line 109:
-    #define LORA_MAC_PUBLIC_SYNCWORD 0x242b
-
-    Radio.SetCustomSyncWord(0x242b); needs to be called, so syncword gets new set in radio.cpp
-    Method
+    MeshCom sync word is SYNC_WORD_SX127x (0x2b, configuration_global.h), the one-byte form
+    that RadioLib uses on the ESP32 boards. RadioLib converts it to the SX126x register form
+    (sw & 0xF0) | 0x04, ((sw & 0x0F) << 4) | 0x04 = 0x24 0xb4 (registers 0x0740/0x0741).
+    SX126x-Arduino writes Radio.SetCustomSyncWord() raw, so the nRF52 code passes
+    loraSyncWordSx126x(SYNC_WORD_SX127x) = 0x24b4 (lora_syncword.h). It has to be called
+    after RadioInit(), which resets the chip to 0x1424.
 */
 
 //NVIC_SystemReset(); resets the device
@@ -1198,7 +1191,7 @@ void nrf52setup()
 
     // Sets the Syncword new that we can set the MESHCOM SWORD
     DEBUG_MSG("RADIO", "Setting new LoRa Sync Word");
-    Radio.SetCustomSyncWord(0x242b);
+    Radio.SetCustomSyncWord(loraSyncWordSx126x(SYNC_WORD_SX127x));
 
     // set bandwidth 
     Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", getBW());

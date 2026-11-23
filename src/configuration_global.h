@@ -617,8 +617,8 @@ static inline bool flashLayoutCompatible(int stored)
 
 #define BLE_TEST 0
 
-#define SYNC_WORD_SX127x 0x2b  // MeshCom Sync Word!!
-#define SYNC_WORD_SX127x_2BYTE 0x2b24 // MeshCom Sync Word!!
+#define SYNC_WORD_SX127x 0x2b  // MeshCom Sync Word!! (one-byte form, all boards; nRF52 converts it, see lora_syncword.h)
+#define SYNC_WORD_LORA_APRS 0x12  // LoRa APRS sync word (TRACK mode on the APRS frequency)
 
 
 // common for all Boards:

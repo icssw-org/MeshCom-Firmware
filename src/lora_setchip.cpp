@@ -4,6 +4,7 @@
 #include "loop_functions_extern.h"
 
 #include "lora_setchip.h"
+#include "lora_syncword.h"   // one-byte -> SX126x two-byte sync word (nRF52)
 #include "radio_units.h"   // RF-01..RF-03 unit conversions
 #include "rf_pa.h"   // TBEAM1W-PWR-01: same PA setup as the boot path
 #include "country_profile.h"   // C5: the country table
@@ -300,8 +301,8 @@ bool lora_setchip_meshcom()
     //  Initialize the LoRa Transceiver
     RadioInit();
 
-    // Sets the Syncword new that we can set the MESHCOM SWORD
-    Radio.SetCustomSyncWord(0x242b);
+    // MeshCom sync word (SX126x-Arduino writes the two-byte register form raw)
+    Radio.SetCustomSyncWord(loraSyncWordSx126x(SYNC_WORD_SX127x));
 
     if(bLORADEBUG)
         Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", getFreq());
@@ -391,8 +392,9 @@ bool lora_setchip_aprs()
     //  Initialize the LoRa Transceiver
     RadioInit();
 
-    // Sets the Syncword new that we can set the MESHCOM SWORD
-    // not used because APRS using radioInit SYNCWORD ... Radio.SetCustomSyncWord(0x242b);
+    // LoRa APRS sync word. RadioInit() resets the chip, which already restores 0x1424; set it
+    // explicitly so it does not depend on that reset and matches the ESP32 path below.
+    Radio.SetCustomSyncWord(loraSyncWordSx126x(SYNC_WORD_LORA_APRS));
 
     if(bLORADEBUG)
         Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", meshcom_settings.node_track_freq/1000000.);
@@ -489,7 +491,7 @@ bool lora_setchip_aprs()
         rf_cr = 7;
     }
 
-    return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, 0x12, rf_preamble_length, rf_crc);
+    return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_LORA_APRS, rf_preamble_length, rf_crc);
 #endif
 
     return true;
