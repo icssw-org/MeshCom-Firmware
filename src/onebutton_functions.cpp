@@ -49,12 +49,14 @@ void singleClick()
   // before the TRACK check, so a click can also wake the display in track mode.
   // Switch the backlight on and, if the display is stored off, arm the same
   // off-timer a received message uses.
+  // Every click restarts the 30 s off-timer while the display is stored off (also when it is already lit).
+  if(bDisplayOff)
+      DisplayOffWait = millis() + (30 * 1000);
+
   if(bDisplayIsOff)
   {
       bDisplayIsOff=false;
       digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
-      if(bDisplayOff)
-          DisplayOffWait = millis() + (30 * 1000);
 
       if(bDisplayTrack)
       {

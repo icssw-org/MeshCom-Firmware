@@ -1449,6 +1449,17 @@ struct DispStoreOnlyScope
     ~DispStoreOnlyScope() { bDispStoreOnly = prev; }
 };
 
+// T114: may a ping/pong event turn an OFF display on? Same rule as an incoming message (--msgwake, dispMsgWakes()):
+// with --msgwake off an off display stays dark. Other boards keep today's behaviour (DisplayPong draws on them).
+static inline bool dispPingWakes()
+{
+#if defined(BOARD_HELTEC_T114)
+    return dispMsgWakes(bMsgWake, bDisplayIsOff);
+#else
+    return true;
+#endif
+}
+
 #if !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS)
 // the ring write every panel branch of sendDisplay1306() does while it draws: same slot, same 25-byte copy
 static void dispStoreRingLines(bool bNeu)
@@ -2952,8 +2963,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         DisplayPong((char*)cmsg, (char*)aprsmsg.msg_source_call, (char*)cset, (char*)cdur);
 
         // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
-        DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
-        bDisplayIsOff=false;
+        // T114: with --display off and --msgwake off the PONG is still received, but the display stays dark
+        if(dispPingWakes())
+        {
+            DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
+            bDisplayIsOff=false;
+        }
 
         return;
     }
@@ -4303,8 +4318,12 @@ PingResult sendPing(char msg_call[10])
     }
 
     // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
-    DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
-    bDisplayIsOff=false;
+    // T114: --display off + --msgwake off keeps the display dark; the ping is sent regardless
+    if(dispPingWakes())
+    {
+        DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
+        bDisplayIsOff=false;
+    }
 
     meshcom_settings.node_pingduration = millis();
     bPingSend=true;
@@ -4317,8 +4336,12 @@ void PongFail(String msg_call)
     DisplayPong((char*)"PONG", (char*)msg_call.c_str(), (char*)"FAILED", (char*)"");
 
     // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
-    DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
-    bDisplayIsOff=false;
+    // T114: --display off + --msgwake off keeps the display dark; the ping is sent regardless
+    if(dispPingWakes())
+    {
+        DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
+        bDisplayIsOff=false;
+    }
 }
 
 void SendPong(String msg_call, unsigned int msg_id)
