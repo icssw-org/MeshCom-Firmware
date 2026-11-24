@@ -3644,7 +3644,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     #if defined(BOARD_HELTEC_T114)
-    if(bDisplayIsOff)
+    if(bDisplayIsOff && dispMsgWakes(bMsgWake, bDisplayIsOff))   // --msgwake off: an off display stays dark, the position is still stored
     {
         // a received position wakes the display like a text message does: backlight on,
         // and the same 30 s before it goes dark again if the display is stored off
