@@ -18,6 +18,19 @@ void sendExternHeartbeat();
 void resetExternUDP();
 // ETH-06: nRF52 W5100S builds: drop the EXTUDP socket before a chip hardware reset (nrf_eth.cpp initETH_HW()).
 void externUdpChipReset();
+// EXT-PEER-01: --extudpip (command path, web setparam goes through it) changed node_extern. Any task may call this;
+// getExternUDP() re-resolves the peer (resetExternUDP()) when the socket is open.
+void extudpRequestPeerRefresh();
+
+// EXTUDP register query (src/ext_reg.h): getExtern()
+// hands {"type":"reg","q":...} to extRegQuery(); extRegTick() (called from
+// getExternUDP()) runs it. While a query runs, sendBleJsonRegister() gives the
+// frame to extRegSinkFrame() instead of the BLE ring.
+void extRegQuery(const char *q);
+void extRegTick();
+void extRegReset();   // drops a queued query / running "all" run (resetExternUDP() calls it)
+bool extRegSinkActive();
+void extRegSinkFrame(const uint8_t *json, uint16_t len);
 
 String getJSON(unsigned char incoming, int len, char *iname);
 

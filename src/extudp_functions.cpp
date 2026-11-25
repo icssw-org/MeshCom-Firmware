@@ -5,6 +5,8 @@
 #include <atomic>
 
 #include <extudp_functions.h>
+#include "command_functions.h"   // commandAction(): register query
+#include "ext_reg.h"
 #include <loop_functions.h>
 #include <debugconf.h>
 #include "instrument.h"
@@ -138,6 +140,25 @@ void startExternUDP()
   if(hasExternIPaddress)
     return;
 
+  // EXT-PEER-01: an empty field ("--extudpip none", or a refused target that was blanked) is no peer: no DNS lookup,
+  // no socket, no latch. Same threshold as the send path and resetExternUDP().
+  if((int)strlen(meshcom_settings.node_extern) <= 7)
+    return;
+
+  #if defined(ESP32)
+  // A peer name that did not resolve is retried after 30 s, not on every loop pass: WiFi.hostByName() blocks the
+  // loop task for up to the DNS timeout. A changed --extudpip retries at once.
+  static uint32_t s_dnsFailMs = 0;
+  static String s_dnsFailTarget;
+  if(s_dnsFailTarget.length() > 0)
+  {
+    if(s_dnsFailTarget != meshcom_settings.node_extern)
+      s_dnsFailTarget = "";
+    else if((uint32_t)(millis() - s_dnsFailMs) < 30000)
+      return;
+  }
+  #endif
+
   #ifdef BOARD_T_ETH_ELITE
   extern_node_ip = ETH.localIP();
   #elif defined(ESP32)
@@ -193,7 +214,16 @@ void startExternUDP()
   #if defined(ESP32)
   if(!WiFi.isConnected())
   {
-    Serial.println("[EXT] no WiFI connection open");
+    // reached on every pass while the link is down (also after a peer refresh): say it every 30 s only
+    static uint32_t last_nowifi_log = 0;
+    static bool first_nowifi = true;
+    uint32_t now = millis();
+    if(first_nowifi || (uint32_t)(now - last_nowifi_log) > 30000)
+    {
+      Serial.println("[EXT] no WiFI connection open");
+      last_nowifi_log = now;
+      first_nowifi = false;
+    }
     return;
   }
 
@@ -211,7 +241,28 @@ void startExternUDP()
   {
     str_ip = meshcom_settings.node_extern;
 
-    apip.fromString(str_ip);
+    // EXT-PEER-01: the result used to be ignored. A name that is no dotted quad (RAK has no resolver:
+    // "mcapp.local" passes the target check) left apip on the OLD peer and latched, so the node logged
+    // "now sending to IP <name>" and sent to the previous host. Do not latch; said once per target.
+    if(!apip.fromString(str_ip))
+    {
+      static String s_unparsed;
+      if(s_unparsed != str_ip)
+      {
+        s_unparsed = str_ip;
+        #if defined(ESP32)
+        Serial.printf("[EXT] target %s did not resolve (DNS), retry every 30 s\n", str_ip.c_str());
+        #else
+        Serial.printf("[EXT] target %s is not an IP address and cannot be resolved here -- set --extudpip to a dotted IP\n", str_ip.c_str());
+        #endif
+      }
+      #if defined(ESP32)
+      s_dnsFailTarget = meshcom_settings.node_extern;
+      s_dnsFailMs = millis();
+      #endif
+      UdpExtern.stop();   // no latch means no RESET later: do not hold a W5100S socket without a reader
+      return;   // hasExternIPaddress stays false
+    }
 
     Serial.printf("[EXT] to IP:%s\n", str_ip.c_str());
   }
@@ -393,6 +444,17 @@ void getExtern(unsigned char incoming[], int len)
     return;
   }
 
+  // Register query {"type":"reg","q":"SN"}: only queued here, run from
+  // extRegTick() after getExtern() has returned (this frame carries the
+  // JsonDocument; commandAction() is deep). Not part of the host test.
+#ifndef NATIVE_BUILD
+  if(msg_type != nullptr && strcmp(msg_type, "reg") == 0)
+  {
+    extRegQuery(inputJson["q"] | (const char *)nullptr);
+    return;
+  }
+#endif
+
 // FIX — Null-Checks einfügen:
   const char* dst = inputJson["dst"];
   const char* msg = inputJson["msg"];
@@ -448,8 +510,28 @@ void getExtern(unsigned char incoming[], int len)
 // hands the datagram to getExtern() below -- not part of what this native
 // build tests, guarded out with the socket it depends on.
 #ifndef NATIVE_BUILD
+// EXT-PEER-01: set from the command/web task, consumed by getExternUDP() (the socket's only user).
+static std::atomic<bool> s_peerRefresh{false};
+
+void extudpRequestPeerRefresh()
+{
+  s_peerRefresh.store(true);
+}
+
 void getExternUDP()
 {
+  // EXT-PEER-01: consumed (cleared) on every pass. This function only runs while EXTUDP is on (callers gate
+  // on bEXTUDP), so a request made while it is off stays set until it is switched on; the first pass then drops
+  // or acts on it, and startExternUDP() reads node_extern fresh, so the leftover is harmless.
+  // mayOpenHere: nRF52 only, and only with Ethernet up -- never socket code on an uninitialised W5100S (N-20).
+  // ESP32 restarts the socket every pass (esp32_main.cpp) and never needs START.
+  #if defined(ESP32) || defined(BOARD_T_ETH_ELITE)
+  const bool mayOpenHere = false;
+  #else
+  const bool mayOpenHere = neth.hasIPaddress;
+  #endif
+  ExtudpRefreshAction refresh = extudp_refresh_decide(s_peerRefresh.exchange(false), bEXTUDP, hasExternIPaddress, mayOpenHere);
+
   #ifdef ESP32
     if(bWIFIAP)
       return;
@@ -458,10 +540,17 @@ void getExternUDP()
   if(!bEXTUDP)
     return;
 
+  // START: socket closed by "--extudpip none" / a refused target; open it now instead of at the 15-minute web tick
+  if(refresh == EXTUDP_REFRESH_START)
+  {
+    startExternUDP();
+    return;
+  }
+
   #ifdef EXT_W5100S_SOCKET
   // ETH-06: the W5100S hardware reset took the socket; open it again once Ethernet has an address,
   // not at the 15-minute web tick (nrf52_main.cpp) -- until then every send path stays gated off.
-  if(extudp_reopen_after_chip_reset(s_extLostByReset, bEXTUDP, hasExternIPaddress, neth.hasIPaddress))
+  if(extudp_reopen_after_chip_reset(s_extLostByReset, bEXTUDP, hasExternIPaddress, mayOpenHere))
   {
     startExternUDP();   // retried on every pass until it latches; says so once when it does
     return;
@@ -470,6 +559,14 @@ void getExternUDP()
 
   if(!hasExternIPaddress)
     return;
+
+  if(refresh == EXTUDP_REFRESH_RESET)
+  {
+    resetExternUDP();   // closes the socket; reopens (new apip) when EXTUDP is on and node_extern is a peer
+    return;
+  }
+
+  extRegTick();
 
 #ifdef MC_TEST_HOOKS
   // N-20-Soak-Instrumentierung (compile-gated, Produktionsbuilds unberuehrt):
@@ -560,6 +657,39 @@ void getExternUDP()
 // it is reachable from getExtern()/handleExternTelemetry(), the inbound
 // parser this native build tests, so it is guarded out with the socket.
 #ifndef NATIVE_BUILD
+// One datagram to the EXTUDP peer. resetOnError=false keeps sendExternNotice()'s
+// historic behaviour (write result ignored, endPacket() always called).
+static bool extSendDatagram(const uint8_t *buf, size_t len, bool resetOnError)
+{
+  UdpExtern.beginPacket(apip , EXTERN_PORT);
+  bool ok = UdpExtern.write(buf, len);
+  if(!ok && resetOnError)
+  {
+    resetExternUDP();
+    return false;
+  }
+  UdpExtern.endPacket();
+  return ok;
+}
+
+// Serial log of an outgoing datagram, printed in two halves for long payloads
+static void extLogOut(const char *tag, const char *buf)
+{
+  if(strlen(buf) < 10)
+  {
+    Serial.printf("%s %s Len: %i\n", tag, buf, strlen(buf));
+  }
+  else
+  {
+    int iklng=strlen(buf) / 2;
+
+    String strKurz = buf;
+
+    Serial.printf("%s %s", tag, strKurz.substring(0, iklng).c_str());
+    Serial.printf("%s Len: %i\n", strKurz.substring(iklng, strlen(buf)).c_str(), strlen(buf));
+  }
+}
+
 void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr)
 {
   (void)bUDP;
@@ -812,56 +942,18 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
 
   if(bEXTUDP && hasExternIPaddress && (int)strlen(meshcom_settings.node_extern) > 7)
   {
-    UdpExtern.beginPacket(apip , EXTERN_PORT);
+    extLogOut("[EXT] Out:", c_json);
 
-    if(strlen(c_json) < 10)
-    {
-      Serial.printf("[EXT] Out: %s Len: %i\n", c_json, strlen(c_json));
-    }
-    else
-    {
-      int iklng=strlen(c_json) / 2;
-
-      String strKurz = c_json;
-
-      Serial.printf("[EXT] Out: %s", strKurz.substring(0, iklng).c_str());
-      Serial.printf("%s Len: %i\n", strKurz.substring(iklng, strlen(c_json)).c_str(), strlen(c_json));
-    }
-
-    if (!UdpExtern.write((uint8_t*)c_json, strlen(c_json)))
-    {
-      resetExternUDP();
+    if (!extSendDatagram((uint8_t*)c_json, strlen(c_json), true))
       return;
-    }
-
-    UdpExtern.endPacket();
 
     if((strcmp(src_type, "node") == 0 || strcmp(src_type, "lora") == 0) && strlen(c_tjson) > 0)
     {
       // Telemetrie
-      UdpExtern.beginPacket(apip , EXTERN_PORT);
+      extLogOut("[EXT] Tele-Out:", c_tjson);
 
-      if(strlen(c_tjson) < 10)
-      {
-        Serial.printf("[EXT] Tele-Out: %s Len: %i\n", c_tjson, strlen(c_tjson));
-      }
-      else
-      {
-        int iklng=strlen(c_tjson) / 2;
-
-        String strKurz = c_tjson;
-
-        Serial.printf("[EXT] Tele-Out: %s", strKurz.substring(0, iklng).c_str());
-        Serial.printf("%s Len: %i\n", strKurz.substring(iklng, strlen(c_tjson)).c_str(), strlen(c_tjson));
-      }
-
-      if (!UdpExtern.write((uint8_t*)c_tjson, strlen(c_tjson)))
-      {
-        resetExternUDP();
+      if (!extSendDatagram((uint8_t*)c_tjson, strlen(c_tjson), true))
         return;
-      }
-
-      UdpExtern.endPacket();
     }
   }
   else
@@ -965,17 +1057,165 @@ static void sendExternJson(const uint8_t *json, uint16_t jlen)
     return;
   }
 
-  UdpExtern.beginPacket(apip, EXTERN_PORT);
-
   Serial.printf("[EXT] Ack-Out: %.*s Len: %u\n", (int)jlen, (const char*)json, (unsigned)jlen);
 
-  if (!UdpExtern.write(json, jlen))
+  extSendDatagram(json, jlen, true);
+}
+
+// ---------------------------------------------------------------------------
+// EXTUDP register query (src/ext_reg.h). Read-only, answered only to the
+// configured node_extern peer (extSendDatagram() -> apip:EXTERN_PORT, never
+// the sender's address), nothing goes over LoRa. The frames are made by the
+// existing BLE builders: extRegTick() runs the console command that builds a
+// register, sendBleJsonRegister() hands each frame to extRegSinkFrame()
+// instead of the BLE ring, which keeps the one whose TYP was asked for,
+// removes secret members (extRegFilter(), denylist by key name) and sends
+// it. A phone never sees these frames, and BLE does not have to be on.
+// ---------------------------------------------------------------------------
+static_assert(BLE_JSON_PAYLOAD_MAX <= EXT_REG_PAYLOAD_MAX, "ext_reg.h reply buffer is sized for BLE_JSON_PAYLOAD_MAX");
+
+static ExtRegLimiter regLimiter = {0, false};
+static char regPendingQ[EXT_REG_NAME_MAX + 2];   // +1 char over the limit so extRegLookup() sees "too long"
+static ExtRegRun regRun_st = {false, -1, 0};     // queued query / "all" run (ext_reg.h); cleared by extRegReset()
+static bool regSinkOn = false;
+static char regWant[EXT_REG_NAME_MAX + 1];
+static bool regEmitted = false;
+// static, not stack: nRF52 loop task has 4 KB (N-22), T-Beam RAM is tight
+static char regReply[EXT_REG_REPLY_MAX];
+
+static bool regPeerReady()
+{
+  #ifdef ESP32
+    if(bWIFIAP)
+      return false;
+  #endif
+  return bEXTUDP && hasExternIPaddress && (int)strlen(meshcom_settings.node_extern) > 7;
+}
+
+static void regLog(const char *what)
+{
+  if(bLORADEBUG)
+    Serial.printf("[EXT] reg: %s\n", what);
+}
+
+void extRegQuery(const char *q)
+{
+  if(!regPeerReady())
+    return;
+
+  if(!extRegAllow(regLimiter, (uint32_t)millis()))
   {
-    resetExternUDP();
+    regLog("dropped, rate limit 1/s");
     return;
   }
 
-  UdpExtern.endPacket();
+  if(extRegRunBusy(regRun_st))
+  {
+    regLog("dropped, previous query still running");
+    return;
+  }
+
+  snprintf(regPendingQ, sizeof(regPendingQ), "%s", q ? q : "");
+  regRun_st.pending = true;
+}
+
+bool extRegSinkActive()
+{
+  return regSinkOn;
+}
+
+void extRegSinkFrame(const uint8_t *json, uint16_t len)
+{
+  if(!regSinkOn)
+    return;
+
+  char typ[EXT_REG_NAME_MAX + 2];
+  if(!extRegFrameTyp((const char *)json, len, typ, sizeof(typ)) || strcmp(typ, regWant) != 0)
+    return;
+
+  // 0 = not filterable: send nothing rather than the unfiltered text
+  size_t n = extRegFilter((const char *)json, len, regReply, sizeof(regReply), true);
+  if(n == 0)
+  {
+    regLog("frame not filterable, dropped");
+    return;
+  }
+
+  regEmitted = true;
+  if(bLORADEBUG)
+    Serial.printf("[EXT] Reg-Out: %s Len: %u\n", regReply, (unsigned)n);
+  extSendDatagram((const uint8_t *)regReply, n, false);
+}
+
+// Builds register idx through the BLE builder; true if its frame was sent.
+static bool regRun(int idx)
+{
+  char cmd[16];
+
+  snprintf(regWant, sizeof(regWant), "%s", EXT_REG_TABLE[idx].name);
+  snprintf(cmd, sizeof(cmd), "%s", EXT_REG_TABLE[idx].cmd);
+  regEmitted = false;
+  regSinkOn = true;
+  commandAction(cmd, 1, true);   // ble=true builds the frame, rxFromPhone=true keeps the serial print out
+  regSinkOn = false;
+  return regEmitted;
+}
+
+static void regSendJson(size_t n)
+{
+  if(n > 0)
+  {
+    if(bLORADEBUG)
+      Serial.printf("[EXT] Reg-Out: %s Len: %u\n", regReply, (unsigned)n);
+    extSendDatagram((const uint8_t *)regReply, n, false);
+  }
+}
+
+// Forgets a queued query and a running "all" run. resetExternUDP() calls it (--extudp off, a new
+// --extudpip, a failed write): the tick below only runs while EXTUDP is on, so without this a run
+// paused by "off" would go on towards the next peer.
+void extRegReset()
+{
+  extRegRunReset(regRun_st);
+}
+
+// Main loop, via getExternUDP(): one register per call, "all" every 100 ms.
+void extRegTick()
+{
+  if(!regPeerReady())
+  {
+    extRegRunReset(regRun_st);
+    return;
+  }
+
+  if(regRun_st.pending)
+  {
+    regRun_st.pending = false;
+
+    int idx = extRegLookup(regPendingQ);
+
+    if(idx == EXT_REG_UNKNOWN)
+      regSendJson(extRegErrorJson(regReply, sizeof(regReply), "unknown"));
+    else if(idx == EXT_REG_ALL)
+      extRegRunStartAll(regRun_st, (uint32_t)millis());
+    else if(!regRun(idx))
+      regSendJson(extRegErrorJson(regReply, sizeof(regReply), "unavailable"));
+
+    return;
+  }
+
+  int idx = 0;
+  switch(extRegAllStep(regRun_st, (uint32_t)millis(), &idx))
+  {
+    case EXT_REG_STEP_RUN:
+      (void)regRun(idx);   // a register this build/state does not have is skipped
+      break;
+    case EXT_REG_STEP_DONE:
+      regSendJson(extRegDoneJson(regReply, sizeof(regReply)));
+      break;
+    default:
+      break;
+  }
 }
 
 void flushExternQueue()
@@ -1053,13 +1293,14 @@ void sendExternNotice(const char *text, const char *dst)
   if(json_len == 0)
     return;
 
-  UdpExtern.beginPacket(apip, EXTERN_PORT);
-  UdpExtern.write((const uint8_t *)c_json, json_len);
-  UdpExtern.endPacket();
+  extSendDatagram((const uint8_t *)c_json, json_len, false);
 }
 
 void resetExternUDP()
 {
+  // before the bWIFIAP return: "--extudp off" ends up here, and so must a pending register query
+  extRegReset();
+
   #ifdef ESP32
     if(bWIFIAP)
       return;
@@ -1087,6 +1328,7 @@ void externUdpChipReset()
     return;
   UdpExtern = EthernetUDP();   // sockindex back to MAX_SOCK_NUM: the object no longer names a chip socket
   hasExternIPaddress = false;
+  extRegReset();               // a register query in flight has lost its peer, as with resetExternUDP()
   Serial.printf("[EXT];event;chip_reset;socket;dropped;ms;%lu\n", (unsigned long)millis());
   #endif
 }
