@@ -158,7 +158,7 @@ struct FwNetStatus
     char stagedTag[24];    // tag of the valid FWS2 record, "" if none
     bool staged;           // a valid FWS2 record exists in NVS
     char lastErr[48];      // short reason of the last failed job, "" otherwise
-    uint32_t lastCheckEpoch; // time() at the last successful CHECK, 0 if none this boot
+    uint32_t lastCheckEpoch; // node UTC at the last successful CHECK, 0 if none this boot or the node clock was not valid
     uint32_t bytesDone;    // DOWNLOAD / STAGELAN progress (compressed bytes written); reset to 0 when a
                            // job starts and NOT cleared at its end (it then equals progLen on success). Only
                            // meaningful together with state == FWS_BUSY and job DOWNLOAD / STAGELAN: the
@@ -189,8 +189,16 @@ bool fwNetStartLan(const char *url, uint32_t ilen, const char *tag);
 // restart) if there is no Safeboot partition; it does not return on success.
 bool auRebootToSafeboot(void);
 
+// Node time (node_date_*) as a UTC instant; ok = false (and 0) while no GPS/RTC/NTP has set the node clock.
+// The libc clock is never set on this firmware, so time() must not be used for wall-clock stamps.
+int64_t fwNetNodeUtc(bool &ok);
+
 // Thread-safe snapshot (portMUX). Never blocks on the network.
 void fwNetGetStatus(FwNetStatus &out);
+
+// True while an AU job (CHECK/DOWNLOAD) owns the node, from before the pre-TLS gate to the end of the job on
+// every path. The web server and the WiFi scan stay out of the heap meanwhile (OTA-LOWHEAP-01 fix A).
+bool fwNetSessionActive(void);
 
 // True while a phone holds the BLE link (connected or app ready): the same expression esp32BlePause()
 // declines on and the lowheap_phone token keys on, so /austatus "phone" and the job agree.
@@ -286,6 +294,30 @@ bool fwNetMarkHandover(const char *tag);
 void fwNetUnmarkHandover(void);
 bool fwNetSafebootOld(void);
 
+// OTA-LOWHEAP-01 / AU-30: verify boot (classic ESP32 without PSRAM). The dry-run inflate needs 32 KB + 11.4 KB at
+// once, which a T-Beam never has after WiFi start. A DOWNLOAD whose bytes are proven (SHA-256 against the release
+// digest, read-back CRC, length) but whose dry run found no memory stages the record with NVS "vpend" = tag.
+//   fwNetVerifyPending  true when "vpend" names tag (fwApplyNeedsVerifyBoot). Every apply path asks it after its
+//                       own checks (battery, Safeboot, bootloader) and then arms a verify boot instead of handing over.
+//   fwNetArmVerifyBoot  NVS "vfy" = tag; false if the write failed (do not restart). fwNetUnmarkHandover removes it.
+//   fwNetVerifyBoot     esp32setup(), before BLE and WiFi start. "vfy" absent -> FWVB_NONE. Else "vfy" is erased first
+//                       (no boot loop), the record is loaded, the dry run runs on the still whole heap:
+//                       FWVB_OK  "vpend" removed, the caller marks the handover and reboots into Safeboot;
+//                       FWVB_FAIL record and "last" removed, the reason is the status lastErr (web page).
+//                       Logs [AU];verify_boot;ok;<tag>|fail;<reason>;free;<n>;blk;<n>. tag gets the "vfy" tag.
+enum FwVerifyBoot : uint8_t
+{
+    FWVB_NONE,
+    FWVB_OK,
+    FWVB_FAIL
+};
+bool fwNetVerifyPending(const char *tag);
+bool fwNetArmVerifyBoot(const char *tag);
+FwVerifyBoot fwNetVerifyBoot(char *tag, size_t n);
+// AU-30: deliberate restart into the APP (not Safeboot) for the verify boot; clears the loop breadcrumb like
+// auRebootToSafeboot. Does not return. Defined in command_functions.cpp.
+[[noreturn]] void auRestartForVerify(void);
+
 // Safeboot capability version (AU-12, src/safeboot/safeboot_ver.h). The Safeboot partition is scanned
 // once per boot (first call) for its embedded version marker; the result is cached.
 //   fwNetSafebootVersion  -1 = partition missing or unreadable, 0 = old (no marker, not AU-aware),
@@ -308,7 +340,7 @@ const char *fwNetSafebootWhy(void);
 
 // Removes the record and Safeboot's "tries" counter and clears the cached staged flag. Used
 // when a handover cannot succeed (no Safeboot partition, boot partition not settable), so
-// it is not retried at every boot (also removes "hand"). The "last" tag (reinstall guard) stays.
+// it is not retried at every boot (also removes "hand", and AU-30 "vpend" / "vfy"). The "last" tag (reinstall guard) stays.
 void fwNetClearRecord(void);
 
 // NVS "fwstage"/"last"; "" if none. n must be >= 1.

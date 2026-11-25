@@ -8,6 +8,7 @@ This file contains all web-based setup functions
 #include <regex_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <fw_schedule.h> // install schedule: fwSchedParseDelay/Day/Time (ESP32 setters audelay, auday, autime)
 #if defined(ENABLE_MSGSTORE)
 #include <msgstore_api.h> // stage 3 store node: store/storecall/storetime/storeslots/storenotice setparam mapping
 #endif
@@ -208,6 +209,20 @@ static String wsReadback(const WsParam &p){
  * @param setupData a pointer to a struct that contains the parameter name, the parameter value and will contain the return code and return value
  */
 
+#if defined(ESP32)
+// Install schedule read-back texts (same spelling as the console and the select values).
+static String auSchedDayName(int d){
+    static const char *const n[] = {"off", "mon", "tue", "wed", "thu", "fri", "sat", "sun"};
+    return String((d >= 0 && d <= 7) ? n[d] : n[0]);
+}
+static String auSchedTimeText(int m){
+    char b[8];
+    if(m < 0 || m > 1439) m = FWSCHED_TIME_DEFAULT;
+    snprintf(b, sizeof(b), "%02d:%02d", m / 60, m % 60);
+    return String(b);
+}
+#endif
+
 void webSetup_setParam(setupStruct *setupData){
     bool bPhoneReady = (isPhoneReady == 1);
     char message_text[200];
@@ -404,6 +419,35 @@ void webSetup_setParam(setupStruct *setupData){
         if(setupData->paramValue.equalsIgnoreCase("auto"))
             setupData->returnCode = WS_RETURNCODE_FAIL;
         setupData->returnValue = cur;
+        return;
+    } else
+
+    // Install schedule (src/fw_schedule.h): the value is validated by the console rung (--autoupdate delay|day|time),
+    // read-back is the stored state. X-MC is checked by setparam() in web_functions.cpp.
+    if(setupData->paramName.equals("audelay")) {
+        snprintf(message_text, sizeof(message_text), "--autoupdate delay %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        int want = -1;
+        setupData->returnCode = (fwSchedParseDelay(setupData->paramValue.c_str(), &want) && want == meshcom_settings.node_audelay)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_audelay);
+        return;
+    } else
+
+    if(setupData->paramName.equals("auday")) {
+        snprintf(message_text, sizeof(message_text), "--autoupdate day %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        int want = -1;
+        setupData->returnCode = (fwSchedParseDay(setupData->paramValue.c_str(), &want) && want == meshcom_settings.node_auday)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = auSchedDayName(meshcom_settings.node_auday);
+        return;
+    } else
+
+    if(setupData->paramName.equals("autime")) {
+        snprintf(message_text, sizeof(message_text), "--autoupdate time %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        int want = -1;
+        setupData->returnCode = (fwSchedParseTime(setupData->paramValue.c_str(), &want) && want == meshcom_settings.node_autime)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = auSchedTimeText(meshcom_settings.node_autime);
         return;
     } else
 
@@ -879,6 +923,20 @@ void webSetup_getParam(setupStruct *setupData){
         return;
     } else
 
+    if(setupData->paramName.equals("audelay")) {
+        setupData->returnValue = String(meshcom_settings.node_audelay);
+        return;
+    } else
+
+    if(setupData->paramName.equals("auday")) {
+        setupData->returnValue = auSchedDayName(meshcom_settings.node_auday);
+        return;
+    } else
+
+    if(setupData->paramName.equals("autime")) {
+        setupData->returnValue = auSchedTimeText(meshcom_settings.node_autime);
+        return;
+    } else
 #endif
 
     if(setupData->paramName.equals("setlat")) {

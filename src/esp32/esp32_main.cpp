@@ -2408,6 +2408,31 @@ void esp32setup()
         snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", (char*)DEFAULT_CALL);
     }
 
+    // OTA-LOWHEAP-01 / AU-30: an apply of a record with a deferred dry run restarted into the app. Here, before BLE and
+    // WiFi, the big D/IRAM block is still whole (T-Beam 110,580 B) and the 32 KB + 11.4 KB dry run fits. The apply's
+    // checks (battery QA-AU-09, Safeboot capable, bootloader qio) already passed; the display is up for the OTA screen.
+    {
+        char vtag[24];
+        const FwVerifyBoot vb = fwNetVerifyBoot(vtag, sizeof(vtag));
+        if(vb == FWVB_OK)
+        {
+            if(!fwNetMarkHandover(vtag))
+                Serial.printf("[AU];fail;nvs\n");
+            else
+            {
+                Serial.printf("[AU];handover;%s\n", vtag);
+                if(!auRebootToSafeboot())   // returns only without a usable Safeboot partition
+                {
+                    // same as auHandoverRecord(): the (now verified) record stays, the handover is withdrawn, logged
+                    fwNetUnmarkHandover();
+                    if(fwNetBootloaderQio())   // AU-16: the DIO guard has reported itself
+                        Serial.printf("[ERR];update;no safeboot partition\n");
+                }
+            }
+        }
+        // FWVB_FAIL: record dropped, the reason is in the AU status; the boot goes on normally
+    }
+
     // Create the BLE Device & WiFiAP
     snprintf(cBLEName, sizeof(cBLEName), "M%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
     snprintf(s_bleManuf, sizeof(s_bleManuf), "MCM%s-%02x%02x-%s", g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
@@ -2634,10 +2659,18 @@ static bool s_auSkipLogged = false;     // D9: [AU];auto;skip / blocked printed 
 static volatile bool s_auApplyRebootReq = false;
 static volatile uint32_t s_auApplyRebootAtMs = 0;
 
+static volatile bool s_auApplyVerify = false;   // AU-30: the requested reboot is a verify boot into the app
+
 void auRequestApplyReboot(void)
 {
     s_auApplyRebootAtMs = millis();   // time first, flag second: the loop reads them in the other order
     s_auApplyRebootReq = true;
+}
+
+void auRequestVerifyReboot(void)
+{
+    s_auApplyVerify = true;   // before the request flag: auTick reads it after that one
+    auRequestApplyReboot();
 }
 
 // fwNetStart() refuses new jobs while the requested reboot is still waiting for its 500 ms.
@@ -2656,6 +2689,7 @@ static bool auTagSame(const char *a, const char *b)
 // ---------------------------------------------------------------------------
 static uint32_t s_guardSetMs = 0;
 static bool s_guardChain = false;       // the CHECK was requested with a chain and no DOWNLOAD started yet
+static uint8_t s_guardChainTries = 0;   // AU-30: refused DOWNLOAD starts of this chain (retried on the next ticks)
 static bool s_guardSawBusy = false;     // a job of this guard was started (BUSY is set synchronously by fwNetStart)
 static volatile uint8_t s_auShedMask = 0;   // spec 8.1 step 3: FW_SHED_* bits the loop keeps stopped (KISS TCP, net console)
 
@@ -2665,6 +2699,16 @@ bool auBleGuardActive(void)
     return s_bleGuard;
 #else
     return false;   // no guard off the classic ESP32 (forced NimBLE deinit is not safe on the S3)
+#endif
+}
+
+// OTA-LOWHEAP-01 / AU-30 (job task, read only): the CHECK of this guard has a DOWNLOAD chained that has not started yet.
+bool auBleGuardChainPending(void)
+{
+#if AU_BLE_PAUSE
+    return s_bleGuard && s_guardChain;
+#else
+    return false;
 #endif
 }
 
@@ -2760,6 +2804,7 @@ static void auBleGuardRelease(FwGuardAct act)
 {
     s_bleGuard = false;
     s_guardChain = false;
+    s_guardChainTries = 0;
     s_guardSawBusy = false;
     switch(act)
     {
@@ -2768,6 +2813,10 @@ static void auBleGuardRelease(FwGuardAct act)
     case FWG_REL_REFUSED:   Serial.printf("[AU];bleguard;off;refused\n"); break;
     default:                Serial.printf("[AU];bleguard;off;watchdog\n"); break;
     }
+    // AU-30: every guard end (done, fail, refused, watchdog, chain start refused) passes here and no job is BUSY then
+    // (fwGuardStep holds a busy guard): an AU buffer the CHECK kept for a DOWNLOAD that did not come is freed. A DOWNLOAD
+    // that did start has adopted it already (it is owned then and this is a no-op).
+    fwNetDropIdleBuf32();
     // the job task left BLE down while the guard was set; a failed resume is retried by the loop
     if(esp32BleDown())
         esp32BleResume();
@@ -2814,15 +2863,31 @@ static void auGuardTick(uint32_t now)
         return;
     if(act == FWG_CHAIN_DOWNLOAD)
     {
-        s_guardChain = false;
-        auNotifyCheck(st);   // the DOWNLOAD below turns BUSY before auTick reads the CHECK result
+        if(s_guardChainTries == 0)
+            auNotifyCheck(st);   // the DOWNLOAD below turns BUSY before auTick reads the CHECK result
         if(fwNetStart(FWJ_DOWNLOAD, (uint8_t)meshcom_settings.node_updchan))
         {
+            s_guardChain = false;
+            s_guardChainTries = 0;
             s_guardSawBusy = true;
             s_auSawBusy = true;
+            return;
         }
-        else
-            auBleGuardRelease(FWG_REL_FAIL);
+        // AU-30: a refused start is mostly a missing task stack right after the CHECK (the idle task frees the CHECK's
+        // stack a moment later; the kept AU buffer holds 32 KB). Retry on the next 1 Hz ticks; on the 3rd refusal drop
+        // the kept AU buffer (the DOWNLOAD then takes its own, as without the chain) and try once more; then give up.
+        s_guardChainTries++;
+        Serial.printf("[AU];bleguard;chain;retry;%u\n", (unsigned)s_guardChainTries);
+        if(s_guardChainTries < 3)
+            return;
+        if(s_guardChainTries == 3)
+        {
+            fwNetDropIdleBuf32();
+            return;
+        }
+        s_guardChain = false;
+        s_guardChainTries = 0;
+        auBleGuardRelease(FWG_REL_FAIL);
         return;
     }
     auBleGuardRelease(act);
@@ -2861,6 +2926,17 @@ static bool auHandoverRecord(const FwStageRecord &rec)
         Serial.printf("[AU];handover;blocked;bootloader_dio\n");
         return false;
     }
+    // AU-30: the dry run was deferred (no memory after the download): a verify boot runs it first and hands over itself
+    if(fwNetVerifyPending(rec.tag))
+    {
+        if(!fwNetArmVerifyBoot(rec.tag))
+        {
+            Serial.printf("[AU];fail;nvs\n");
+            return false;
+        }
+        Serial.printf("[AU];apply;verify_boot;%s\n", rec.tag);
+        auRestartForVerify();
+    }
     // the "hand" marker goes in BEFORE the reboot: it is how the next boot tells an old
     // Safeboot (record untouched) from a new one (marker consumed)
     if(!fwNetMarkHandover(rec.tag))
@@ -2871,12 +2947,14 @@ static bool auHandoverRecord(const FwStageRecord &rec)
     Serial.printf("[AU];handover;%s\n", rec.tag);
     if(!auRebootToSafeboot())
     {
-        // hopeless (no Safeboot partition, or it cannot be set as boot partition): drop the
-        // record so the next boot does not try again, and the staged flag no longer fires.
-        // AU-16: a DIO bootloader was already reported by the guard; the record is dropped the same way
+        // no Safeboot partition, or it cannot be set as boot partition. AU-30: the same as the verify boot in
+        // esp32setup() and the web apply in auTick(): the proven record stays, the handover marker is withdrawn,
+        // the failure is logged.
+        // No retry loop: s_auHandoverTag allows one attempt per tag and boot, and a failed reboot does not restart.
+        // AU-16: a DIO bootloader was already reported by the guard
         if(fwNetBootloaderQio())
             Serial.printf("[AU];fail;nosafeboot\n");
-        fwNetClearRecord();
+        fwNetUnmarkHandover();
     }
     return true;
 }
@@ -2893,11 +2971,18 @@ static void auTick(void)
         // request, this catches one that slipped in before it): do not reboot under a running job
         FwNetStatus auNow;
         fwNetGetStatus(auNow);
+        const bool verify = s_auApplyVerify;
+        s_auApplyVerify = false;
         if(fwApplyRebootAct(true, auNow.state == FWS_BUSY) == FWAPPLY_ABORT_BUSY)
         {
-            fwNetUnmarkHandover();
+            fwNetUnmarkHandover();   // AU-30: also withdraws an armed verify boot
             Serial.printf("[AU];apply;abort;busy\n");
             return;
+        }
+        if(verify)
+        {
+            Serial.printf("[AU];apply;reboot;verify\n");
+            auRestartForVerify();   // AU-30: the verify boot hands over itself
         }
         Serial.printf("[AU];apply;reboot\n");
         if(!auRebootToSafeboot())   // returns only without a usable Safeboot partition
@@ -2913,6 +2998,7 @@ static void auTick(void)
         return;
     s_auLastTickMs = now;
     auGuardTick(now);
+    fwNetSchedTick();   // install schedule: logs "[AU];sched;due;..." once when the plan is due; starts nothing
 
     // AU-12: boot demotion, once per boot at the first tick (settings are loaded long before). A node
     // that was in auto mode with a Safeboot too old to apply updates drops to notify and says so. Only

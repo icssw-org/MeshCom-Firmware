@@ -209,6 +209,12 @@
     M(int, node_autoupd, MC_PLATFORM_DEFAULT(1, 0))                                                      \
     /* AU-03 (#1187): update channel, 0 prod (icssw-org) / 1 dev (DK5EN); default 0. Persisted. */           \
     M(int, node_updchan, 0)                                                                              \
+    /* AU schedule (src/fw_schedule.h): days after the release 0..7 (default 3), weekday 0 none / 1 Mon .. 7 Sun */ \
+    /* (replaces the delay), install time as minute of day 0..1439 (default 03:00). Persisted. A key missing from */ \
+    /* stored data keeps these defaults. ESP32 acts on them; nRF52 only carries them. Nothing installs by itself. */ \
+    M(int, node_audelay, 3)                                                                              \
+    M(int, node_auday, 0)                                                                                \
+    M(int, node_autime, 180)                                                                             \
     /* gateway registration state (src/gw_reg_runtime.cpp): flag + callsign at entry. Persisted, not exported. */ \
     M(int, node_gwrf, 0)                                                                                 \
     A(char, node_gwrc, [10], {0})

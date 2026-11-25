@@ -40,6 +40,7 @@
 
 #if defined(ESP32)
 #include "esp_task_wdt.h"
+#include "esp32/fw_update_net.h"   // fwNetSessionActive(): no WiFi scan during an AU session (OTA-LOWHEAP-01)
 #endif
 
 #if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
@@ -730,9 +731,11 @@ void wifiDnsPoll()
   // wieder mit Scan. Die Felddiagnose bleibt genau dort erhalten, wo sie
   // gebraucht wird, und ein gesunder Knoten ist ~4-5 s frueher online.
   s_wifiBringupCount++;
-  if(s_wifiBringupCount == 1)
+  // OTA-LOWHEAP-01 fix A5: a scan costs ~10 KB of heap; during an Auto Update session connect directly.
+  if(s_wifiBringupCount == 1 || fwNetSessionActive())
   {
-    Serial.printf("[WIFI];scan;skipped;first_bringup;ms;%lu\n", (unsigned long)millis());
+    Serial.printf("[WIFI];scan;skipped;%s;ms;%lu\n", s_wifiBringupCount == 1 ? "first_bringup" : "au_session",
+                  (unsigned long)millis());
     s_wifiScanPending = false;
     wifiBegin();
   }

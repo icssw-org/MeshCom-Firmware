@@ -364,6 +364,9 @@ struct CfgField
     X("node_rmstrict", CFG_INT,  node_rmstrict,         0.0, 1.0,           CFG_NOESC)        \
     X("node_autoupd",  CFG_INT,  node_autoupd,          0.0, 2.0,           CFG_NOESC)        \
     X("node_updchan",  CFG_INT,  node_updchan,          0.0, 1.0,           CFG_NOESC)        \
+    X("node_audelay",  CFG_INT,  node_audelay,          0.0, 7.0,           CFG_NOESC)        \
+    X("node_auday",    CFG_INT,  node_auday,            0.0, 7.0,           CFG_NOESC)        \
+    X("node_autime",   CFG_INT,  node_autime,           0.0, 1439.0,        CFG_NOESC)        \
     CFG_FIELD_LIST_PLATFORM(X)
 
 /* Platform-only persisted fields.

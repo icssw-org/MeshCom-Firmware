@@ -34,7 +34,7 @@ if(L=='S'){m=s.sbwhy=='dio'?'! Bootloader (DIO) cannot start the Safeboot: renew
 else if(L=='B'){lab='Checking now ...';dis=1;}
 else if(L=='D'){g=1;m='Firmware '+s.avail+' available';lab='Downloading now ... '+s.pct+' %';dis=1;}
 else if(L=='d'){g=1;lab='Verifying download ...';dis=1;}
-else if(L=='E'){g=1;m='Firmware '+s.staged+' downloaded and verified';lab='Install now';act='apply';red=1;}
+else if(L=='E'){g=1;m='Firmware '+s.staged+(s.vpend?' downloaded, checked at install':' downloaded and verified');lab='Install now';act='apply';red=1;}
 else if(L=='G'){m='! A connected phone uses the memory the update needs';lab='Pause Bluetooth and check';act='ble';}
 else if(L=='g'){m='The phone has disconnected -- check again';}
 else if(L=='H'){m='! Not enough free memory for the update. Reboot the node and try again.';}

@@ -11,6 +11,7 @@
 #include <prod_lock.h>   // prodLockNormalise(): production-locked settings, dependency-free
 #include <daylight.h>    // TD-23: BL_DAY_DEFAULT / BL_NIGHT_DEFAULT for the backlight sanitize
 #include <instrument.h>  // INSTRUMENT_ENABLED
+#include <fw_schedule.h>  // fwSchedSanitize(): install schedule settings after a load (pure, header-only)
 #if !defined(NATIVE_BUILD)
 #include "pin_board.h"   // GPIO-01: pinRepairLoaded() with the board context (after the variant includes via lora_setchip.h)
 #endif
@@ -252,6 +253,10 @@ bool sanitize_loaded_settings(void)
     // Ping target must be a plain callsign (no group, special target, own call)
     if(sanitize_ping_target(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), meshcom_settings.node_call, sanitize_log))
         fixed++;
+
+    // Install schedule (src/fw_schedule.h): a corrupt delay / weekday / time goes back to its default. The printed
+    // value and the computed one must agree; ESP32 has no decode() clamp like nRF52.
+    fixed += fwSchedSanitize(meshcom_settings.node_audelay, meshcom_settings.node_auday, meshcom_settings.node_autime);
 
     // Production lock: fixed values for the locked settings,
     // range repair for postime/ptime/ping*, node_autoupd 2 (auto) -> 1, mailbox announcement off.

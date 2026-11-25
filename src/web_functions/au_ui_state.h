@@ -263,6 +263,28 @@ static inline size_t auStatusJson(const AuUiIn &in, char *out, size_t cap)
     return w.n;
 }
 
+// AU-30: appends `"vpend":0|1` to the object auStatusJson() wrote (n chars, closing '}'), like auAppendSched.
+// 1 = the staged record's dry-run inflate was deferred (classic ESP32 without PSRAM): the page says "checked at
+// install" instead of "verified". Rides outside auStatusJson so its golden strings stay as they are. Returns the
+// new length; body is left as it was when it does not fit.
+static inline size_t auAppendVpend(char *body, size_t cap, size_t n, int vpend)
+{
+    if (body == 0 || n < 2 || body[n - 1] != '}' || n >= cap)
+        return n;
+    AuJsonW w = {body, cap, n - 1, false};
+    w.key("vpend");
+    w.num(vpend ? 1u : 0u);
+    w.put('}');
+    if (w.bad || w.n >= cap)
+    {
+        body[n - 1] = '}';
+        body[n] = 0;
+        return n;
+    }
+    body[w.n] = 0;
+    return w.n;
+}
+
 // Appends `"sched":"<notice>"` to the object auStatusJson() wrote (n chars, closing '}'), like fwJsonAppendUp.
 // Returns the new length; body is left as it was when it does not fit. An empty notice is still sent (the page
 // clears its line).
