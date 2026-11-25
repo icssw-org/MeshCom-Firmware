@@ -7,6 +7,7 @@
 
 #include <configuration.h>
 #include <capture_functions.h>
+#include <loop_functions.h>
 
 #ifdef ESP32
   #include <esp32/esp32_main.h>
@@ -22,6 +23,7 @@
   static void nrf52LoopBody()
   {
     nrf52loop();
+    flushDeferredSettingsSave();
     captureDrain();
   }
 #endif
@@ -104,5 +106,6 @@ void loop()
   // Rohframe-Mitschnitt ausgeben. Die Erfassung sitzt im Radio-Callback bzw.
   // zwischen CAD und startTransmit() und darf dort nicht drucken; hier ist
   // Loop-Kontext. Ein Frame je Durchlauf, siehe capture_functions.h.
+  flushDeferredSettingsSave();   // QA-RX-02
   captureDrain();
 }

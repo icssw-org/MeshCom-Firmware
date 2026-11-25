@@ -59,6 +59,7 @@
 #endif
 #include "mcp17_bits.h"
 #include "pos_tag_nan.h"
+#include "deferred_save.h"   // QA-RX-02
 #include "prod_lock.h"   // production lock: {SET} hop range
 #include "instrument.h"   // INSTRUMENT_ENABLED
 #include "rm_client_cmd.h"   // client RM1 commands: reply stops their repeats
@@ -2926,6 +2927,25 @@ void mainStartTimeLoop()
 }
 
 
+// QA-RX-02: {SET} is applied in RAM at once, flash is written at most once per
+// window with the latest value. The first write after boot is not deferred;
+// a reboot inside a later window loses the pending value.
+static bool bHopSavePending = false;
+static bool bHopSavedOnce = false;
+static uint32_t hopSaveLast = 0;
+static int hopSavedText = 0;    // max_hop_text in flash, valid while bHopSavePending
+
+void flushDeferredSettingsSave(void)
+{
+    if(bHopSavePending && (!bHopSavedOnce || deferredSaveDue(true, millis(), hopSaveLast)))
+    {
+        bHopSavePending = false;
+        bHopSavedOnce = true;
+        hopSaveLast = millis();
+        save_settings();    // max_hop_text is persistent (max_hop_pos is not)
+    }
+}
+
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
     // Fernwirken
@@ -3086,8 +3106,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             const int iNewText = prodLockSetHop(iHopText, meshcom_settings.max_hop_text, bInstr);
             if(iNewText != meshcom_settings.max_hop_text)
             {
+                if(!bHopSavePending)
+                    hopSavedText = meshcom_settings.max_hop_text;   // nothing pending: RAM == flash
                 meshcom_settings.max_hop_text = iNewText;
-                save_settings();    // max_hop_text is persistent (max_hop_pos is not)
+                // QA-RX-02: persisted by flushDeferredSettingsSave(); A->B->A inside the window writes nothing
+                bHopSavePending = (iNewText != hopSavedText);
             }
         }
 
