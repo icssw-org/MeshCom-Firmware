@@ -34,27 +34,56 @@ This file contains all web-based setup functions
  */
 enum WsParamType : uint8_t { WS_T_ONOFF, WS_T_INT, WS_T_FLOAT, WS_T_STR };
 
+// Type-tagged address of the stored value. Plain data, so the table is a constant expression (flash, not RAM):
+// captureless lambdas are not constant expressions in C++11 (nRF52 builds gnu++11) and put the table into .data.
+enum WsKind : uint8_t { WS_K_BOOL, WS_K_INT, WS_K_FLOAT, WS_K_CHARS };
+
+struct WsVar {
+    const void *p;
+    WsKind kind;
+};
+
+// One helper per row macro: a row whose variable has another type fails to compile.
+constexpr WsVar wsBoolVar(const bool *v)   { return WsVar{v, WS_K_BOOL}; }
+constexpr WsVar wsIntVar(const int *v)     { return WsVar{v, WS_K_INT}; }
+constexpr WsVar wsFloatVar(const float *v) { return WsVar{v, WS_K_FLOAT}; }
+template<size_t N> constexpr WsVar wsCharsVar(const char (*v)[N]) { return WsVar{v, WS_K_CHARS}; }
+
 struct WsParam {
     const char *name;           // Web API name (unchanged)
     const char *cmd;            // console command after the "--"
     WsParamType type;
     int8_t digits;              // FLOAT read-back digits, -1 = default
     bool settable;
-    double (*num)();            // ONOFF, INT, FLOAT
-    const char *(*str)();       // STR
+    WsVar var;                  // address of the stored value (all types; STR = CHARS)
 };
 
-#define WSP_ROW(n, c, t, d, s, nf, sf) { n, c, t, d, s, nf, sf }
-#define WSP_ONOFF(n, c, v)        WSP_ROW(n, c, WS_T_ONOFF, 0, true,  []() -> double { return (v) ? 1 : 0; }, nullptr)
-#define WSP_INT(n, c, v)          WSP_ROW(n, c, WS_T_INT,   0, true,  []() -> double { return (v); }, nullptr)
-#define WSP_FLOAT(n, c, d, v)     WSP_ROW(n, c, WS_T_FLOAT, d, true,  []() -> double { return (v); }, nullptr)
-#define WSP_STR(n, c, v)          WSP_ROW(n, c, WS_T_STR,   0, true,  nullptr, []() -> const char* { return (v); })
-#define WSP_ONOFF_RO(n, v)        WSP_ROW(n, "", WS_T_ONOFF, 0, false, []() -> double { return (v) ? 1 : 0; }, nullptr)
-#define WSP_INT_RO(n, v)          WSP_ROW(n, "", WS_T_INT,   0, false, []() -> double { return (v); }, nullptr)
-#define WSP_FLOAT_RO(n, d, v)     WSP_ROW(n, "", WS_T_FLOAT, d, false, []() -> double { return (v); }, nullptr)
-#define WSP_STR_RO(n, v)          WSP_ROW(n, "", WS_T_STR,   0, false, nullptr, []() -> const char* { return (v); })
+// numeric value (ONOFF, INT, FLOAT); bool -> 1/0
+static double wsNum(const WsVar &v){
+    switch(v.kind) {
+        case WS_K_BOOL:  return *static_cast<const bool *>(v.p) ? 1 : 0;
+        case WS_K_INT:   return *static_cast<const int *>(v.p);
+        case WS_K_FLOAT: return *static_cast<const float *>(v.p);
+        default:         return 0;
+    }
+}
 
-static const WsParam wsParams[] = {
+// text value (STR)
+static const char *wsStr(const WsVar &v){
+    return (v.kind == WS_K_CHARS) ? static_cast<const char *>(v.p) : "";
+}
+
+#define WSP_ROW(n, c, t, d, s, var) { n, c, t, d, s, var }
+#define WSP_ONOFF(n, c, v)        WSP_ROW(n, c, WS_T_ONOFF, 0, true,  wsBoolVar(&(v)))
+#define WSP_INT(n, c, v)          WSP_ROW(n, c, WS_T_INT,   0, true,  wsIntVar(&(v)))
+#define WSP_FLOAT(n, c, d, v)     WSP_ROW(n, c, WS_T_FLOAT, d, true,  wsFloatVar(&(v)))
+#define WSP_STR(n, c, v)          WSP_ROW(n, c, WS_T_STR,   0, true,  wsCharsVar(&(v)))
+#define WSP_ONOFF_RO(n, v)        WSP_ROW(n, "", WS_T_ONOFF, 0, false, wsBoolVar(&(v)))
+#define WSP_INT_RO(n, v)          WSP_ROW(n, "", WS_T_INT,   0, false, wsIntVar(&(v)))
+#define WSP_FLOAT_RO(n, d, v)     WSP_ROW(n, "", WS_T_FLOAT, d, false, wsFloatVar(&(v)))
+#define WSP_STR_RO(n, v)          WSP_ROW(n, "", WS_T_STR,   0, false, wsCharsVar(&(v)))
+
+static constexpr WsParam wsParams[] = {
     #ifdef OneWire_GPIO
     WSP_INT   ("onewiregpio", "onewire gpio", meshcom_settings.node_owgpio),
     WSP_ONOFF ("onewire", "onewire", bONEWIRE),
@@ -184,19 +213,19 @@ static const WsParam *wsFindParam(const String &name){
 // true if the stored value equals the requested one (same compare per type as the explicit rungs below)
 static bool wsMatches(const WsParam &p, const String &value){
     switch(p.type) {
-        case WS_T_ONOFF: return (p.num() != 0) == (value.compareTo("on")==0);
-        case WS_T_INT:   return (int)p.num() == value.toInt();
-        case WS_T_FLOAT: return fabs(p.num()) == fabs(value.toFloat());
-        default:         return strcmp(p.str(), value.c_str()) == 0;
+        case WS_T_ONOFF: return (wsNum(p.var) != 0) == (value.compareTo("on")==0);
+        case WS_T_INT:   return (int)wsNum(p.var) == value.toInt();
+        case WS_T_FLOAT: return fabs(wsNum(p.var)) == fabs(value.toFloat());
+        default:         return strcmp(wsStr(p.var), value.c_str()) == 0;
     }
 }
 
 static String wsReadback(const WsParam &p){
     switch(p.type) {
-        case WS_T_ONOFF: return (p.num() != 0) ? "on" : "off";
-        case WS_T_INT:   return String((int)p.num());
-        case WS_T_FLOAT: return (p.digits < 0) ? String((float)p.num()) : String((float)p.num(), (int)p.digits);
-        default:         return String(p.str());
+        case WS_T_ONOFF: return (wsNum(p.var) != 0) ? "on" : "off";
+        case WS_T_INT:   return String((int)wsNum(p.var));
+        case WS_T_FLOAT: return (p.digits < 0) ? String((float)wsNum(p.var)) : String((float)wsNum(p.var), (int)p.digits);
+        default:         return String(wsStr(p.var));
     }
 }
 
