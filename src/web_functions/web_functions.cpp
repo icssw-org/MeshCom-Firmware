@@ -4325,7 +4325,7 @@ void sub_page_info()
     if (bINA226ON)
     {
         web_client.println("<tr><td>INA226</td><td>");
-        web_client.printf("vBUS<: %.2fV<br>", meshcom_settings.node_vbus);
+        web_client.printf("vBUS: %.2fV<br>", meshcom_settings.node_vbus);
         web_client.printf("vSHUNT: %.2fmV<br>", meshcom_settings.node_vshunt);
         web_client.printf("vCURRENT: %.1fmA<br>", meshcom_settings.node_vcurrent);
         web_client.printf("vPOWER: %.1fmW<br>", meshcom_settings.node_vpower);

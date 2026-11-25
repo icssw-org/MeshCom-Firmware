@@ -108,6 +108,7 @@ extern void rxSilenceGetStats(uint32_t *silences, uint32_t *longest_s, uint32_t 
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
 #include "ina226_functions.h"
+#include "ina226_cal.h"
 
 // GPS
 #include "gps_functions.h"
@@ -2390,15 +2391,26 @@ void commandAction(char *umsg_text, bool ble)
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
-        if(dVar < INA226_MINIMAL_SHUNT_OHM || dVar > 0.5)
+        if(!ina226cal::shuntInRange((float)dVar))
         {
-            printfdeb("INA226 Rs (shunt) not > %.3f and < 0.500 Ω\n", INA226_MINIMAL_SHUNT_OHM);
+            printfdeb("INA226 Rs (shunt) %.3f .. %.3f Ω\n", ina226cal::kMinShuntOhm, ina226cal::kMaxShuntOhm);
             return;
         }
 
         meshcom_settings.node_shunt=dVar;
 
+        // INA226-CAL-01: the shunt is hardware and wins; lower imax so imax * shunt <= 81.9 mV,
+        // otherwise the chip stays uncalibrated and reads 0 mA
+        if(!ina226cal::pairOk(meshcom_settings.node_imax, meshcom_settings.node_shunt))
+        {
+            meshcom_settings.node_imax = ina226cal::effectiveImax(meshcom_settings.node_imax, meshcom_settings.node_shunt);
+            printfdeb("INA226 imax lowered to %.2f A to fit R(shunt) %.3f Ω\n", meshcom_settings.node_imax, meshcom_settings.node_shunt);
+        }
+
         save_settings();
+
+        if(bINA226ON)
+            setupINA226();
 
         if(ble)
         {
@@ -2416,15 +2428,20 @@ void commandAction(char *umsg_text, bool ble)
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
-        if(dVar < 0 || dVar > 20)
+        // INA226-CAL-01: imax * shunt must stay <= 81.9 mV for the configured shunt
+        float imaxLim = ina226cal::imaxLimit(meshcom_settings.node_shunt);
+        if(!ina226cal::pairOk((float)dVar, meshcom_settings.node_shunt))
         {
-            printfdeb("INA226 maxCurrent 20 A\n");
+            printfdeb("INA226 maxCurrent %.2f .. %.2f A for R(shunt) %.3f Ω\n", ina226cal::kMinImaxA, imaxLim, meshcom_settings.node_shunt);
             return;
         }
 
         meshcom_settings.node_imax=dVar;
 
         save_settings();
+
+        if(bINA226ON)
+            setupINA226();   // apply the new calibration now, not after the next reboot
 
         if(ble)
         {
