@@ -35,7 +35,7 @@
 #define RM_REPEAT_COPIES 4u            // copy 1 + 3 repeats (MAX_RETRANSMIT 3)
 #define RM_REPEAT_GAP_MS 42000u        // ladder step: 0x15 ticks x 2 s
 #define RM_REPEAT_LAST_MS ((RM_REPEAT_COPIES - 1u) * RM_REPEAT_GAP_MS)   // last copy leaves 126 s after the send
-#define RM_REPLY_ALLOWANCE_MS 45000u   // reply allowance after the last copy (the old single-copy order: ~75 s - 30 s)
+#define RM_REPLY_ALLOWANCE_MS 45000u   // reply allowance after the last copy (45 s; no-answer verdict = ladder end 126 s + 45 s = 171 s)
 #define RM_POLICY_WINDOW_MS (RM_REPEAT_LAST_MS + 150000u)
                                        // window of the unanswered-send budget = last copy 126 s + (target reject window
                                        // 90 s + 30 s path delay + 30 s margin for TX-queue latency; equal windows leak at
@@ -47,6 +47,8 @@
 #define RM_NOANSWER_MS (RM_REPEAT_LAST_MS + RM_REPLY_ALLOWANCE_MS)   // 171 s: end of the ladder + reply allowance = "no answer"
 static_assert(RM_NOANSWER_MS >= RM_REPEAT_LAST_MS + RM_REPLY_ALLOWANCE_MS, "no answer is declared only after the last copy had its chance");
 static_assert(RM_POLICY_WINDOW_MS >= RM_NOANSWER_MS + 60000u, "the unanswered-send budget must outlive the no-answer verdict by the path delay + margin (60 s), else a send leaves the budget before it is declared unanswered");
+#define RM_NOANSWER_S_TEXT "171"        // seconds in the no-answer sentence; the assert below keeps it equal to RM_NOANSWER_MS
+static_assert(RM_NOANSWER_MS == 171000u, "RM_NOANSWER_MS changed: update RM_NOANSWER_S_TEXT (the no-answer sentence)");
 #define RM_QUEUED_MS 3000u             // first seconds after the send: still in the local TX queue
 #define RM_POLICY_MAX_ENTRIES 12u      // entries per target the policy looks at (= the sent book, kSentN)
 static_assert(RM_POLICY_MAX_ENTRIES >= RM_POLICY_LIMIT_PROVEN + 2, "book covers the proven budget plus answered entries");
@@ -348,9 +350,9 @@ inline const char *rmStateMessage(RmEntryState s)
     case RM_ST_QUEUED:
         return "Handed to the radio. It goes on air in a moment.";
     case RM_ST_WAITING:
-        return "Sent. Waiting for the node to answer, this can take up to a minute.";
+        return "Sent. Waiting for the node to answer, this can take up to 3 minutes.";
     case RM_ST_NOANSWER:
-        return "No answer after 75 seconds. Check the password, the distance and that remote "
+        return "No answer after " RM_NOANSWER_S_TEXT " seconds. Check the password, the distance and that remote "
                "management is on at the other node. With strict security on, a third failed try locks you "
                "out for 5 minutes.";
     case RM_ST_OK:

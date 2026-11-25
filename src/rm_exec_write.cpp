@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "blocked_calls.h"
@@ -16,6 +17,8 @@
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
 #include "node_position.h"
+#include "pin_board.h"
+#include "gpio_control.h"
 #include "rm_au.h"
 #include "rm_commands.h"
 #include "rm_exec_ext.h"
@@ -136,6 +139,126 @@ int writeAtxt(const RmCmd &c, char *res, size_t n)
     return writeText(c, res, n, false);
 }
 
+// The raw stored setting of a pin function (what the console setter writes), -1 = the board has no such field.
+int storedPin(PinFunc f)
+{
+    switch (f)
+    {
+    case PIN_FN_ONEWIRE:
+        return meshcom_settings.node_owgpio;
+    case PIN_FN_BUTTON:
+        return meshcom_settings.node_button_pin;
+    case PIN_FN_ANALOG:
+        return meshcom_settings.node_analog_pin;
+#if defined(ESP32)
+    case PIN_FN_WIND:
+        return meshcom_settings.node_wind_pin;
+#endif
+    default:
+        return -1;
+    }
+}
+
+// Reply of the read executor (same result as "pins" / "gpio" without args).
+int readBack(const RmCmd &c, char *res, size_t n)
+{
+    RmCmd r = c;
+    r.args[0] = '\0';
+    return rmExecRead(r, res, n);
+}
+
+// pins <ow|btn|an|wind> <n>: shape validated upstream (n 0..48, no leading zero); btn is refused here (read-only over
+// RM). The assignment goes through the console setter (pinCanAssign() and its refusal live there); the stored value is
+// read back afterwards.
+int writePins(const RmCmd &c, char *res, size_t n)
+{
+    PinFunc f = PIN_FN_ONEWIRE;
+    const char *line = "--onewire gpio";
+    size_t skip = 3;
+    if (strncmp(c.args, "btn ", 4) == 0)
+    {
+        f = PIN_FN_BUTTON;
+        line = "--button gpio";
+        skip = 4;
+    }
+    else if (strncmp(c.args, "an ", 3) == 0)
+    {
+        f = PIN_FN_ANALOG;
+        line = "--analog gpio";
+        skip = 3;
+    }
+    else if (strncmp(c.args, "wind ", 5) == 0)
+    {
+        f = PIN_FN_WIND;
+        line = "--windpin";
+        skip = 5;
+    }
+    else if (strncmp(c.args, "ow ", 3) != 0)
+        return fail(res, n, "err failed");
+
+    // btn is read-only over RM: a new button pin applies after a restart, and a pin held low by user hardware can
+    // trigger the long-press path (deep sleep) and strand the node. No setter is called.
+    if (f == PIN_FN_BUTTON)
+        return fail(res, n, "err blocked");
+
+    // Boards without the function have no console setter for it either (--analog gpio, --onewire gpio, --windpin).
+    if (f == PIN_FN_ANALOG)
+    {
+#if !defined(ANALOG_PIN)
+        return fail(res, n, "err unsupported");
+#endif
+    }
+    if (f == PIN_FN_ONEWIRE)
+    {
+#if !defined(OneWire_GPIO)
+        return fail(res, n, "err unsupported");
+#endif
+    }
+    if (f == PIN_FN_WIND)
+    {
+#if !(defined(ESP32) && defined(ENABLE_WIND))
+        return fail(res, n, "err unsupported");
+#endif
+    }
+
+    const int want = atoi(c.args + skip);
+    char cmd[40];
+    snprintf(cmd, sizeof(cmd), "%s %d", line, want);
+    commandAction(cmd, false);
+
+    // The setters restore the old value on a refusal, so a stored value other than the requested one means refused.
+    // An effective match also counts (0 = board default, the T-Beam maps 16 to its default).
+    if (storedPin(f) != want && pinBoardEffective(f) != want)
+        return fail(res, n, "err refused");
+    return readBack(c, res, n);
+}
+
+// gpio <n> on|off|in: straight into the state machine (no console line). The master switch is never touched here.
+int writeGpio(const RmCmd &c, char *res, size_t n)
+{
+#if defined(ESP32)
+    const int pin = atoi(c.args);
+    const char *op = strchr(c.args, ' ');
+    if (op == nullptr || pin < 0 || pin > 48)
+        return fail(res, n, "err failed");
+    op++;
+    const GpioOp o = strcmp(op, "on") == 0 ? GPIO_OP_ON : strcmp(op, "off") == 0 ? GPIO_OP_OFF : GPIO_OP_IN;
+    PinClass why = PIN_FREE;
+    int lvl = 0;
+    const GpioRes r = gpioCtlCommand(pin, o, &why, &lvl);
+    if (r == GPIO_REFUSED_MASTER)
+        return fail(res, n, "err master");
+    if (r == GPIO_REFUSED_CLASS)
+        return fail(res, n, "err refused");
+    if (r != GPIO_OK)
+        return fail(res, n, "err failed");
+    return readBack(c, res, n);
+#else
+    (void)c;
+    return fail(res, n, "err unsupported");
+#endif
+}
+
 // upd check | upd go <tag>: the shape is validated upstream; the AU bridge (rm_au.h) does the work.
 int writeUpd(const RmCmd &c, char *res, size_t n)
 {
@@ -175,6 +298,8 @@ constexpr WriteRow kWriteRows[] = {
     {"pos", writePos},
     {"upd", writeUpd},
     {"blockcall", writeBlockcall},
+    {"pins", writePins},
+    {"gpio", writeGpio},
 };
 static_assert(rmRowsMatchList(kWriteRows, rmKindIsWrite), "kWriteRows = RW rows of rm_commands.h");
 

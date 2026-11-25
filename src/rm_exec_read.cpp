@@ -16,6 +16,8 @@
 #include "nbr_matrix.h"
 #include "nbr_views.h"
 #include "node_position.h"
+#include "pin_board.h"
+#include "gpio_control.h"
 #include "radio_units.h"
 #include "rm_au.h"
 #include "rm_commands.h"
@@ -467,6 +469,54 @@ static int rdBlockcall(const RmCmd &c, char *res, size_t n)
     return done(res, n, body, rmFmtBlock(body, sizeof(body), csv));
 }
 
+// pins: the effective pin per function (0 = no pin); a function the build lacks reports 0 (wind: ESP32 only).
+static int rdPins(const RmCmd &c, char *res, size_t n)
+{
+    if (c.args[0] != '\0')
+        return 0; // write executor
+    int wind = 0;
+#if defined(ESP32) && defined(ENABLE_WIND) // same guard as the write side (writePins: err unsupported otherwise)
+    wind = pinBoardEffective(PIN_FN_WIND);
+#endif
+    int ow = 0, an = 0;
+#if defined(OneWire_GPIO)
+    ow = pinBoardEffective(PIN_FN_ONEWIRE);
+#endif
+#if defined(ANALOG_PIN)
+    an = pinBoardEffective(PIN_FN_ANALOG);
+#endif
+    char body[RM_FMT_BODY_MAX + 1];
+    return done(res, n, body, rmFmtPins(body, sizeof(body), ow, pinBoardEffective(PIN_FN_BUTTON), an, wind));
+}
+
+// gpio: master and the held pins as masks (ESP32 only, the glue lives in gpio_control.cpp).
+static int rdGpio(const RmCmd &c, char *res, size_t n)
+{
+    if (c.args[0] != '\0')
+        return 0; // write executor
+#if defined(ESP32)
+    GpioPinRow rows[50]; // offered pins: at most GPIO 0..48 on the S3
+    const size_t cnt = gpioCtlSnapshot(rows, sizeof(rows) / sizeof(rows[0]));
+    uint64_t outs = 0, ins = 0, lvl = 0;
+    for (size_t i = 0; i < cnt; i++)
+    {
+        if (rows[i].pin < 0 || rows[i].pin > 63 || rows[i].dir == GPIO_DIR_NONE)
+            continue;
+        const uint64_t bit = (uint64_t)1 << rows[i].pin;
+        if (rows[i].dir == GPIO_DIR_OUT)
+            outs |= bit;
+        else
+            ins |= bit;
+        if (rows[i].level > 0)
+            lvl |= bit;
+    }
+    char body[RM_FMT_BODY_MAX + 1];
+    return done(res, n, body, rmFmtGpio(body, sizeof(body), gpioCtlMaster(), outs, ins, lvl));
+#else
+    return fail(res, n, "unsupported");
+#endif
+}
+
 struct ReadRow
 {
     const char *name;
@@ -477,6 +527,7 @@ static constexpr ReadRow kReadRows[] = {
     {"radio", rdRadio}, {"name", rdName}, {"atxt", rdAtxt}, {"pos", rdPos},     {"sens", rdSens},
     {"mh", rdMh},       {"txq", rdTxq},   {"mbox", rdMbox}, {"maxhop", rdMaxhop},
     {"net", rdNet},     {"upd", rdUpd},   {"blockcall", rdBlockcall},
+    {"pins", rdPins},   {"gpio", rdGpio},
 };
 static_assert(rmRowsMatchList(kReadRows, rmKindIsRead), "kReadRows = READ and RW rows of rm_commands.h");
 

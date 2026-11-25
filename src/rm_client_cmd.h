@@ -3,7 +3,7 @@
 //
 // The node's own sender (rm_runtime.cpp bookAndSend(), "--rm") keeps the key and verifies the reply. A
 // client composes the finished command itself: the node has no key, never books it, and without this table
-// the target's reply would stop nothing -- the command repeats on the PN ladder (copy 1 + 3 repeats, 40 s)
+// the target's reply would stop nothing -- the command repeats on the PN ladder (copy 1 + 3 repeats, 126 s)
 // until RETRANSMIT_GIVEUP although it was answered within seconds.
 //
 // Rule: sendMessage() arms (dst, ctr, msg_id) for a client RM1 COMMAND; the first reply from that exact
