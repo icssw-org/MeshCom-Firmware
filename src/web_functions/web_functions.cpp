@@ -1109,7 +1109,7 @@ void work_webpage(void)
                     // an RM handler are guarded and the rest is unchecked. Decided on the
                     // header, the way the router matches (web_guard.h).
                     const bool wg_on = webGuardRequestApplies(web_header.c_str(), web_header.length(), wg_path.c_str());
-                    const WebGuardVerdict wgv = wg_on ? webGuardCheck(web_header.c_str(), web_header.length(), wg_path.c_str()) : WG_OK;
+                    const WebGuardVerdict wgv = wg_on ? webGuardCheck(web_header.c_str(), web_header.length(), wg_path.c_str(), meshcom_settings.node_webhost) : WG_OK; // #1323: + --webhost name
                     web_cors_ok = wg_on ? webGuardCorsAllowed(wg_path.c_str(), web_header.startsWith("POST")) : true;
                     if (wgv != WG_OK)
                     {
@@ -3544,6 +3544,8 @@ void sub_page_setup()
     _create_setup_textinput_element("ownntp", "NTP", String(meshcom_settings.node_ownntp), "192.168.2.1", "setownntp", 50, false, true);          // create Textinput-Element including Label and Button
 
     _create_setup_textinput_element("extudpip", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
+    // #1323: public hostname (DynDNS behind a port forward) the web server accepts besides the LAN names; empty = none
+    _create_setup_textinput_element("webhost", "Public web host", String(meshcom_settings.node_webhost), "node.dyndns.org", "webhost", WEB_GUARD_EXT_HOST_MAX, false, true);
 
     web_client.println("</div><div class=\"grid grid2\">");
     #if defined(HAS_ETHERNET)

@@ -395,6 +395,21 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    // #1323: public web hostname, routed through "--webhost <name>|none" (validation lives there);
+    // an empty field clears it. Read-back is node_webhost (stored lower case), "" when none.
+    if(setupData->paramName.equals("webhost")) {
+        String want = setupData->paramValue;
+        want.trim();
+        want.toLowerCase();
+        if(want.length() == 0 || want == "none")
+            want = "";
+        snprintf(message_text, sizeof(message_text), "--webhost %s", want.length() ? want.c_str() : "none");
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (want == String(meshcom_settings.node_webhost)) ? WS_RETURNCODE_OKAY : WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_webhost);
+        return;
+    } else
+
     // RM-07 (#1189): RM1 remote management, routed through "--remotemgmt on|off"; read-back is node_rm
     if(setupData->paramName.equals("rm")) {
         snprintf(message_text, sizeof(message_text), "--remotemgmt %s", setupData->paramValue.c_str());
@@ -923,6 +938,11 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("mesh")) {
         setupData->returnValue = bMESH?"on":"off";
+        return;
+    } else
+
+    if(setupData->paramName.equals("webhost")) {
+        setupData->returnValue = String(meshcom_settings.node_webhost);
         return;
     } else
 

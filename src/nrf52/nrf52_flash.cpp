@@ -434,7 +434,7 @@ void sanitize_loaded_settings(void)
 	#define SANITIZE_STR(f) do { if(sanitize_cstring(meshcom_settings.f, sizeof(meshcom_settings.f))) { strings++; Serial.printf("[FLASH]...sanitized %s: terminator missing\n", #f); } } while(0)
 	SANITIZE_STR(node_call); SANITIZE_STR(node_short); SANITIZE_STR(node_ossid); SANITIZE_STR(node_opwd);
 	SANITIZE_STR(node_extern); SANITIZE_STR(node_atxt); SANITIZE_STR(node_passwd); SANITIZE_STR(node_ownip);
-	SANITIZE_STR(node_owngw); SANITIZE_STR(node_ownms); SANITIZE_STR(node_name); SANITIZE_STR(node_webpwd);
+	SANITIZE_STR(node_owngw); SANITIZE_STR(node_ownms); SANITIZE_STR(node_name); SANITIZE_STR(node_webpwd); SANITIZE_STR(node_webhost);
 	SANITIZE_STR(node_ssid); SANITIZE_STR(node_pwd); SANITIZE_STR(node_parm); SANITIZE_STR(node_unit);
 	SANITIZE_STR(node_format); SANITIZE_STR(node_eqns); SANITIZE_STR(node_values); SANITIZE_STR(node_lora_call);
 	SANITIZE_STR(node_gwsrv); SANITIZE_STR(node_owndns); SANITIZE_STR(node_ownntp); SANITIZE_STR(node_fwversion);

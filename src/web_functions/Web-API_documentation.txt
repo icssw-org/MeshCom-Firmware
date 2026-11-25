@@ -46,7 +46,9 @@ To set a parameter to the node, use:
 	curl -H 'X-MC: 1' 'http://<node>/setparam/?onewire=on'. The callfunction actions upd*, otaupdate and
 	reboot always need X-MC. Every request needs a Host that is an IP address, a single-label name or a
 	*.local / *.fritz.box / *.lan / *.home.arpa / *.internal / *.speedport.ip / *.localdomain / *.home name
-	(public FQDNs and reverse-proxy names are refused); otherwise, or without X-MC, the node answers 403.
+	(public FQDNs and reverse-proxy names are refused, except the one name set with
+	--webhost <name> or /setparam/?webhost=<name>, exact match, #1323); otherwise, or without X-MC,
+	the node answers 403.
 	Typing a /setparam URL into the browser bar is refused for the same reason. The node sends no CORS headers.
 
 	/setparam/?setcall=AB1CDE-12		Sets the nodes call-sign 

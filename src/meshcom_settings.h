@@ -128,6 +128,8 @@
     A(char, node_ownms, [20], {0})                                                                       \
     A(char, node_name, [20], {0})                                                                        \
     A(char, node_webpwd, [20], {0})                                                                      \
+    /* #1323: public hostname the web guard accepts in Host (--webhost), "" = none. Persisted. */      \
+    A(char, node_webhost, [64], {0})                                                                     \
     A(char, node_ssid, [33], {0})                                                                        \
     A(char, node_pwd, [64], {0})                                                                         \
     M(int, node_analog_pin, 99)                                                                          \

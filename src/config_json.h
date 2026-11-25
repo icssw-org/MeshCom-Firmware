@@ -322,6 +322,7 @@ struct CfgField
     X("node_ownms",    CFG_STR,  node_ownms,            CFG_NORANGE,        CFG_NOESC)        \
     X("node_name",     CFG_STR,  node_name,             CFG_NORANGE,        CFG_NOESC)        \
     X("node_webpwd",   CFG_STR,  node_webpwd,           CFG_NORANGE,        CFG_NOESC)        \
+    X("node_webhost",  CFG_STR,  node_webhost,          CFG_NORANGE,        CFG_NOESC)        \
     X("node_lssid",    CFG_STR,  node_ssid,             CFG_NORANGE,        CFG_NOESC)        \
     X("node_lpwd",     CFG_STR,  node_pwd,              CFG_NORANGE,        CFG_NOESC)        \
     X("node_apin",     CFG_INT,  node_analog_pin,       0.0, 99.0,          CFG_NOESC)        \
