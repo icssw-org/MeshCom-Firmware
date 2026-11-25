@@ -679,8 +679,8 @@ static const ToggleRow COMMAND_TOGGLES[] =
     // existing node starts with msgwake on = today's behaviour. Off: a message does not light a display
     // that is switched off (dispMsgWakes(), sendDisplayText()); it is still stored and read by button/app.
     // Every literal AND-mask on node_sset keeps bit 15 for this reason (0x7xxx -> 0xFxxx).
-    { "--msgwake on",         &bMsgWake,             &meshcom_settings.node_sset,     0xFFFF7FFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
-    { "--msgwake off",        &bMsgWake,             &meshcom_settings.node_sset,     0xFFFFFFFF,   0x8000,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+    { "--msgwake on",         &bMsgWake,             &meshcom_settings.node_sset,     0xFFFF7FFF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_FLAG_TRUE },
+    { "--msgwake off",        &bMsgWake,             &meshcom_settings.node_sset,     0xFFFFFFFF,   0x8000,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE },
     { "--viadebug on",        &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_BLE_ECHO },
     { "--viadebug off",       &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_BLE_ECHO },
     // Upstream d93c05a0/31ef8648: the phone gets SN + SN1, not a text echo the
@@ -8493,6 +8493,7 @@ void sendNodeSetting()
     //   MHOP  text hop limit (--maxhop)
     //   MTU   Ethernet/WiFi MTU (--mtu)
     //   VOLT  true = display shows the battery voltage, false = percent (--volt / --proz)
+    //   MWAKE    true = a message wakes a display that is switched off, false = it stays dark (--msgwake)
     //   NCON  net console on (--netconsole), only with net console in the build
     //   KISS  KISS/TCP bit mask: 1 on, 2 TX, 4 RxMeta, 8 Auth (--kiss ...), only ESP32 with KISS
     JsonDocument nsetdoc1;
@@ -8506,6 +8507,7 @@ void sendNodeSetting()
     nsetdoc1["MHOP"] = meshcom_settings.max_hop_text;
     nsetdoc1["MTU"] = meshcom_settings.node_ethmtu;
     nsetdoc1["VOLT"] = bDisplayVolt;
+    nsetdoc1["MWAKE"]   = bMsgWake;   // T114-DARK-01: --msgwake (true = a message wakes an off display), for the BLE hub
     #ifndef DISABLE_NET_CONSOLE
     nsetdoc1["NCON"] = bNETCONSOLE;
     #endif
