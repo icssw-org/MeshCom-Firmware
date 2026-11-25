@@ -7,6 +7,7 @@
 #include <nrf_eth.h>
 #include "printfdeb_functions.h"
 #include "instrument.h"
+#include "udp_hold.h"
 
 // C4 carve-out of the gateway service block out of nrf52_main.cpp; see
 // gateway_service.h for why it is carved but not unified. Moved unchanged.
@@ -74,6 +75,10 @@ if(bGATEWAY)
     // UDP Action for next loop
     if(!bUDPReceived)
     {
+        // Outage hold: a change of neth.last_upd_timer is the server's sign of life
+        // (read before the stage-2 watchdog below rewrites it).
+        udpHoldTick((uint32_t)neth.last_upd_timer, millis(), neth.hasIPaddress);   // no replay without an IP address
+
         meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
         meshcom_settings.node_last_upd_timer = neth.last_upd_timer;
         
@@ -132,6 +137,7 @@ if(bGATEWAY)
                 Serial.println("LOOP GATEWAY last_upd_timer actions");
 
             neth.last_upd_timer = millis();
+            udpHoldNoteSynthetic((uint32_t)neth.last_upd_timer);   // watchdog rewrite, not a server frame
 
             // avoid TX and UDP
             if(!neth.hasIPaddress)

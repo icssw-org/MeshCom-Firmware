@@ -323,6 +323,7 @@ static inline bool flashLayoutCompatible(int stored)
 #define RING_BYTES_PHONE 2048              // Byte-Ring BLE-Daten zum Telefon (war 20 x 260 Schlitze)
 #define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
 #define RING_BYTES_UDP 2048                // Byte-Ring UDP-Ausgang (war 20 x 256)
+#define UDP_HOLD_BYTES 1024                // text-message hold for a server outage (src/udp_hold.h), static .bss, about 10 frames
 #define NBR_FAMILY_CLASSIC                 // MeshCom-5-Topologie: E22_XML zaehlt zur klassischen Familie (64 Zeilen), docs/meshcom5-topologie 4.2
 #elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(BOARD_RAK4630)
 // ESP32-S3 (320 KB SRAM) and nRF52840 (256 KB RAM) — full buffer sizes
@@ -336,6 +337,7 @@ static inline bool flashLayoutCompatible(int stored)
 #define RING_BYTES_PHONE 3072              // Byte-Ring BLE-Daten zum Telefon (war 20 x 260 Schlitze)
 #define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
 #define RING_BYTES_UDP 3072                // Byte-Ring UDP-Ausgang (war 20 x 256)
+#define UDP_HOLD_BYTES 6144                // text-message hold for a server outage (src/udp_hold.h), static .bss
 #define NBR_FAMILY_LARGE                   // MeshCom-5-Topologie: 128 Zeilen, 128-Bit-Masken, docs/meshcom5-topologie 4.2
 #elif defined(ENABLE_TBEAM)                // very smal version only for developer tests
 #define MAX_RING 10                        // max count of messages in ringbuffer
@@ -344,6 +346,7 @@ static inline bool flashLayoutCompatible(int stored)
 #define RING_BYTES_PHONE 1024              // Byte-Ring BLE-Daten zum Telefon (war 10 x 260 Schlitze)
 #define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
 #define RING_BYTES_UDP 1024                // Byte-Ring UDP-Ausgang (war 10 x 256)
+#define UDP_HOLD_BYTES 0                   // developer build: no RAM for the outage hold
 #define NBR_FAMILY_DEV                     // MeshCom-5-Topologie: Entwickler-Variante, 32 Zeilen
 #else
 // ESP32 original (~160 KB DRAM) — reduced buffer sizes due to RAM constraints
@@ -364,7 +367,16 @@ static inline bool flashLayoutCompatible(int stored)
 #define RING_BYTES_PHONE 2048              // Byte-Ring BLE-Daten zum Telefon (war 20 x 260 = 5200)
 #define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
 #define RING_BYTES_UDP 2048                // Byte-Ring UDP-Ausgang (war 20 x 256 = 5120)
+#define UDP_HOLD_BYTES 1024                // text-message hold for a server outage (src/udp_hold.h), static .bss, about 10 frames
 #define NBR_FAMILY_CLASSIC                 // MeshCom-5-Topologie: 64 Zeilen, 64-Bit-Masken, docs/meshcom5-topologie 4.2
+#endif
+
+#if defined(BOARD_HELTEC_T114) || defined(BOARD_T_ECHO)
+#undef UDP_HOLD_BYTES
+#define UDP_HOLD_BYTES 0                   // no network interface: never a gateway, no RAM for the outage hold
+#endif
+#ifndef UDP_HOLD_BYTES
+#define UDP_HOLD_BYTES 0                   // 0 = outage hold compiled out (no RAM)
 #endif
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message

@@ -35,6 +35,7 @@
 #include "loop_functions.h"        // addTxRingEntryOnce() with its default args, insertOwnTx()
 #include "dedup_functions.h"       // addLoraRxBuffer()
 #include "udp_functions.h"         // addNodeData()
+#include "udp_hold.h"              // udpHoldLoraHoldable()
 #include <loop_functions_extern.h> // ringBuffer[], bpCurrentState(), stat_last_window
 #include "printfdeb_functions.h"
 
@@ -217,7 +218,9 @@ static bool glueNotify(const struct MsgStoreEntry *e)
     insertOwnTx(m.msg_id);
     addLoraRxBuffer(m.msg_id, gw_up);
 
-    if(gw_up)
+    // A gateway without an IP address still passes holdable text: addNodeData()
+    // keeps a copy in the outage hold and does not enqueue it (udp_hold.h).
+    if(gw_up || (bGATEWAY && udpHoldLoraHoldable(buf, len)))
         addNodeData(buf, len, 0, 0);   // rssi 0, snr 0 = own frame, not heard on air
 
     return true;

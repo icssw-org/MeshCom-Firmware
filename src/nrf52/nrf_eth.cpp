@@ -31,6 +31,7 @@
 #include "gw_link_status.h"
 #include "gw_servers.h"      // central gateway server table
 #include "eth_recovery.h"   // ETH-04: F1 reopen-UDP / F2 W5100S hw reset decision
+#include "udp_hold.h"      // udpHoldNoteSynthetic()
 
 EthernetUDP Udp;
 
@@ -321,6 +322,7 @@ void NrfETH::initethfixIP()
   s_leaseHeld = false;   // ETH-04: statische IP, kein Lease
 
   last_upd_timer = millis();
+  udpHoldNoteSynthetic((uint32_t)last_upd_timer);   // not a server frame: no sign of life for the outage hold
 
   // start the UDP service
   startFIXUDP();
@@ -720,6 +722,7 @@ int NrfETH::resetDHCP()
         hasIPaddress = true;
         s_leaseHeld = false;
         last_upd_timer = millis();
+        udpHoldNoteSynthetic((uint32_t)last_upd_timer);   // not a server frame: no sign of life for the outage hold
         startServerLink();
         Serial.printf("[ETH];event;reapply_static;mode;begin;stalled;%d;gap;%d;ip;%d;ms;%lu\n", si.reopen_stalled ? 1 : 0, si.hw_reset_allowed ? 0 : 1, hasIPaddress ? 1 : 0, (unsigned long)millis());
         return 0;
@@ -745,6 +748,7 @@ int NrfETH::resetDHCP()
       hasIPaddress = true;
       s_leaseHeld = false;
       last_upd_timer = millis();
+      udpHoldNoteSynthetic((uint32_t)last_upd_timer);   // not a server frame: no sign of life for the outage hold
       startServerLink();
     }
     Serial.printf("[ETH];event;reapply_static;mode;hw_reset;stalled;%d;ip;%d;ms;%lu\n", si.reopen_stalled ? 1 : 0, hasIPaddress ? 1 : 0, (unsigned long)millis());
@@ -1069,6 +1073,7 @@ void NrfETH::startUDP()
   }
 
   last_upd_timer = millis();
+  udpHoldNoteSynthetic((uint32_t)last_upd_timer);   // not a server frame: no sign of life for the outage hold
 
 }
 

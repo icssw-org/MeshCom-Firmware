@@ -5,6 +5,7 @@
 #include "extudp_functions.h"
 #include "printfdeb_functions.h"
 #include "instrument.h"
+#include "udp_hold.h"
 #include <WiFi.h>
 
 // C4 carve-out of the gateway service block out of esp32_main.cpp; see
@@ -20,6 +21,11 @@ void gatewayService_esp32(void)
 if(bGATEWAY && meshcom_settings.node_hasIPaddress)
 {
     { INSTR_SECTION("udp"); getMeshComUDP(); sendMeshComUDP(); }
+
+    // Outage hold: a change of last_upd_timer is the server's sign of life. Read it
+    // here, before the watchdog below rewrites it (those writes carry no server frame).
+    udpHoldTick((uint32_t)last_upd_timer, millis());
+    const unsigned long hold_timer_before = last_upd_timer;
 
     // heartbeat
     if ((uint32_t)(millis() - hb_timer) >= (HEARTBEAT_INTERVAL * 1000))
@@ -72,6 +78,9 @@ if(bGATEWAY && meshcom_settings.node_hasIPaddress)
             }
         }
     }
+
+    if (last_upd_timer != hold_timer_before)
+        udpHoldNoteSynthetic((uint32_t)last_upd_timer);   // watchdog rewrite, not a server frame
 
     meshcom_settings.node_last_upd_timer = hb_timer;
 
