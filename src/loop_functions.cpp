@@ -2,6 +2,7 @@
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "node_position.h"   // nodeSignedLat/Lon: own position as signed degrees (#1279)
 #include "Arduino.h"
+#include "gw_link_status.h"   // gwLinkServerAlive (#1324)
 
 #include <atomic>
 
@@ -5199,7 +5200,7 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
 
     if(hasMsgFromPhone)
     {
-        if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        if(gwLinkServerAlive(bGATEWAY, meshcom_settings.node_hasIPaddress, millis()))
         {
             // set Info message send and Server reached, not on DM
             if(!bDM && (strcmp(aprsmsg.msg_destination_call, "*") == 0 || CheckGroup(strDestinationCall)))

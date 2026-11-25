@@ -121,6 +121,7 @@
 #include "test_inject.h"   // TM-06: raw-inject drain / TX-burst ticker, serviced from OnRxDone()
 
 #include "via_functions.h"
+#include "gw_link_status.h"
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions.h>
@@ -2497,8 +2498,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             // MESH only max. hops (default 3...TEXT 1...POS)
                             if((aprsmsg.max_hop & 0x0F) > 0)   // nur das Hop-Nibble zaehlt, Flag-Bits oeffnen den Relay-Guard nicht
                             {
-                                // only set Serverflag if connection to MeshCom-Server
-                                if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+                                // only set Serverflag if the MeshCom-Server really answers, not just router up (#1324)
+                                if(gwLinkServerAlive(bGATEWAY, meshcom_settings.node_hasIPaddress, millis()))
                                     aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
 
                                 aprsmsg.max_hop--;

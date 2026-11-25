@@ -52,6 +52,17 @@ static const char *pathLabel()
     return gw_path; // unknown path: verbatim
 }
 
+// Single age check shared by gwLinkFormat and gwLinkServerAlive (wrap-safe).
+static bool rxFresh(uint32_t now_ms)
+{
+    return have_rx && (uint32_t)(now_ms - last_rx) <= (uint32_t)GW_LINK_RX_TIMEOUT_S * 1000UL;
+}
+
+bool gwLinkServerAlive(bool gateway, bool hasIp, uint32_t now_ms)
+{
+    return gateway && hasIp && gw_host[0] != 0 && rxFresh(now_ms);
+}
+
 size_t gwLinkFormat(char *buf, size_t len, bool gateway, bool hasIp, uint32_t now_ms)
 {
     if (buf == NULL || len == 0)
@@ -84,7 +95,7 @@ size_t gwLinkFormat(char *buf, size_t len, bool gateway, bool hasIp, uint32_t no
         uint32_t age = (uint32_t)(now_ms - last_rx);
         uint32_t secs = age / 1000;
 
-        if (age <= (uint32_t)GW_LINK_RX_TIMEOUT_S * 1000UL)
+        if (rxFresh(now_ms))
             n = snprintf(buf, len, "%s %s, connected (last rx %lu s)", label, gw_host, (unsigned long)secs);
         else
             n = snprintf(buf, len, "%s %s, no response for %lu s", label, gw_host, (unsigned long)secs);
