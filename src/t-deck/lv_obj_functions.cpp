@@ -3049,7 +3049,7 @@ static MsgTabEntry *msg_tabs_find_entry(const String &group, int *index_out)
 // Remove tab k (button + entry) and fix the active index, the CHECKED state of the
 // remaining buttons and the hint. Does NOT render: callers that need the view
 // refreshed (bubble delete) do so themselves after their last read of event data;
-// eviction/trim only remove inactive tabs, so the view stays valid. Does not touch
+// eviction only removes inactive tabs, so the view stays valid. Does not touch
 // persisted_msgs (callers may be iterating it); only the user delete path prunes it.
 static void msg_tabs_remove_index(size_t k)
 {
@@ -3068,8 +3068,11 @@ static void msg_tabs_remove_index(size_t k)
 }
 
 // TD-22: while internal free heap is below MSG_HEAP_FLOOR, drop the oldest bubble
-// of the least-recently-active tab. Invalidates entry pointers and tab indices.
-// Never renders: trimming the active tab deletes the same number of oldest view
+// of the least-recently-active tab. TD-35: a tab the trim empties stays (its
+// button and group cost no internal heap worth trimming); removing it made a
+// conversation vanish while a newer one stayed. Only the tab cap and the user's
+// delete remove tabs. Callers still treat entry pointers as stale. Never
+// renders: trimming the active tab deletes the same number of oldest view
 // children (view mirrors the active tab 1:1, see msg_list_trim_view). Skipped
 // while loading from file (callers iterate persisted_msgs and the view is not
 // kept in sync during a load).
@@ -3098,8 +3101,6 @@ static void msg_tabs_heap_trim(void)
         trimmed++;
         if((int)k == msg_active_tab_index)
             active_trimmed = true;
-        else if(b.empty())
-            msg_tabs_remove_index(k);
     }
     if(trimmed > 0)
     {
