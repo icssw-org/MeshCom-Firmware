@@ -290,6 +290,18 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             bCallsignOk=false;
         }
 
+        // QA-RX-07: routing/group marks are destinations only, never a source
+        // (a DM from "*" would make the receiver broadcast an :ack).
+        if(isSpecialTargetCall(aprsmsg.msg_source_call))
+        {
+            if(bLORADEBUG)
+            {
+                Serial.printf("APRS decode - Source-CallSign is a routing mark [%s]\n", aprsmsg.msg_source_call);
+            }
+
+            bCallsignOk=false;
+        }
+
         if(!bCallsignOk)
         {
             return 0x00;
