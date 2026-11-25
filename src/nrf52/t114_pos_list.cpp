@@ -13,6 +13,7 @@
 #include "loop_functions_extern.h"
 #include "gps_functions.h"
 #include "aprs_functions.h"
+#include "node_position.h"
 #include "t114_pos_list.h"
 
 extern Adafruit_ST7789 tft1;   // nrf52_main.cpp
@@ -193,8 +194,8 @@ static void drawBody(PosEntry *e)
     char cd[10];
 
     bool ownKnown = !(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0);
-    double dist_m = TinyGPSPlus::distanceBetween(e->lat, e->lon, meshcom_settings.node_lat, meshcom_settings.node_lon);
-    double dir = TinyGPSPlus::courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, e->lat, e->lon);
+    double dist_m = TinyGPSPlus::distanceBetween(e->lat, e->lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c));   // signed own position (f56f7f91, #1279)
+    double dir = TinyGPSPlus::courseTo(nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c), e->lat, e->lon);
     t114PosFormatDist(dist_m, ownKnown, cd, sizeof(cd));
 
     snprintf(buf, sizeof(buf), "%-20s", e->call);

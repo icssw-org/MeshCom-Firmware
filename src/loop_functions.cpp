@@ -3724,7 +3724,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     (void)dist_to;   // the T114 shows cdist below instead of the whole-km value
     // T114: meters below 1 km, one decimal below 10 km, "--" while the own position is unknown
     char cdist[10];
-    t114PosFormatDist(gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon),
+    t114PosFormatDist(gps.distanceBetween(lat, lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c)),
                       !(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0), cdist, sizeof(cdist));
     #endif
 
