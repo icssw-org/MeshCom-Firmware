@@ -914,6 +914,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     rxBufIndex = nextBuf;
     rxBufInUse[rxBufIndex] = true;
     memcpy(rxPayloadCopy[rxBufIndex], payload, rxSize);
+    // BL-02: zero the tail so a shorter frame never carries bytes of an older one
+    if(rxSize < UDP_TX_BUF_SIZE)
+        memset(rxPayloadCopy[rxBufIndex] + rxSize, 0, UDP_TX_BUF_SIZE - rxSize);
     payload = rxPayloadCopy[rxBufIndex];
     size = rxSize;
     taskEXIT_CRITICAL();
@@ -1068,11 +1071,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         const bool rx_blocked = msg_type_b_lora != 0 &&
                                 isBlockedFrame(aprsmsg.msg_source_call, aprsmsg.msg_source_path);
 
+        // QA-RX-03: only a decoded frame that passed its FCS may release a ring
+        // slot; 5 junk bytes with a matching msg_id must not stop a retransmission.
+        // decodeAPRS() returns 0x41 before any check, and every plausible ACK was
+        // already consumed by handleACK() above, so a 0x41 here is junk.
+        const bool rx_decoded = msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 ||
+                                msg_type_b_lora == 0x40;
+
         // RX-OK do not need retransmission
         // RX-OK: find matching ring buffer slot and release it
         uint32_t dbg_msg_id = 0;
         int rxSlot = -1;
-        for(int i = 0; !rx_blocked && i < MAX_RING; i++)
+        for(int i = 0; rx_decoded && !rx_blocked && i < MAX_RING; i++)
         {
             if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY &&
                ringBuffer[i][1] != RING_STATUS_INFLIGHT) // INFLIGHT: doTX() ends it (TXP W1b)
@@ -1930,15 +1940,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 {
 
                                     int iAckPos=mcIndexOfStr(aprsmsg.msg_payload, ":ack");
+                                    int iRefPos=mcIndexOfStr(aprsmsg.msg_payload, ":rej");
                                     int iEnqPos=mcIndexOfStrFrom(aprsmsg.msg_payload, "{", 1);
                                     uint16_t stoNnn=0;   // stage 4: :sto custody notice NNN
 
-                                    if(iAckPos > 0 || mcIndexOfStr(aprsmsg.msg_payload, ":rej") > 0)
+                                    if(iAckPos > 0 || iRefPos > 0)
                                     {
                                         //
                                         // next sequence only to mark a massage to node_call with ACK
                                         //
-                                        unsigned int iAckId = (unsigned int)mcSliceToLong(aprsmsg.msg_payload, (size_t)(iAckPos+4), strlen(aprsmsg.msg_payload));
+                                        unsigned int iAckId = (unsigned int)mcSliceToLong(aprsmsg.msg_payload, (size_t)((iAckPos > 0 ? iAckPos : iRefPos)+4), strlen(aprsmsg.msg_payload));
                                         msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
 
                                         uint16_t plen = buildAckPhoneFrame(print_buff, msg_counter, 0x02, aprsmsg.msg_source_call);
