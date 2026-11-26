@@ -29,6 +29,8 @@
 //       [A-Za-z0-9-]{1,63} (not all digits, not `0x...`: numeric host spellings), and dotted
 //       names ending in .local .fritz.box .lan .home.arpa .internal .speedport.ip .localdomain .home (router DNS names).
 //       `attacker.com`, `evil.local.attacker.com`, `192.168.68.71.evil.com` are refused.
+//     - plus, when configured, the operator's public hostname (`--webhost <name>`, #1323):
+//       exact, case-insensitive match of the whole name, no suffix or wildcard match.
 //     - everything else, a duplicate or an obs-folded Host header: WG_BAD_HOST.
 //     - MISSING Host: refused (WG_BAD_HOST) for HTTP/1.1 and for anything truncated. Accepted
 //       only for a complete request whose request line ends in exactly `HTTP/1.0` (legacy
@@ -295,8 +297,10 @@ inline bool isPort(Span s)
     return v <= 65535;
 }
 
-// Host header VALUE (already trimmed) -> acceptable node address?
-inline bool hostValueOk(Span v)
+// Host header VALUE (already trimmed) -> acceptable node address? `ext` is the operator's
+// public hostname (--webhost, #1323) or NULL/"": accepted by exact, case-insensitive match of the
+// whole name (port and one trailing dot stripped as above), never as a suffix or wildcard.
+inline bool hostValueOk(Span v, const char *ext = NULL)
 {
     if (v.n == 0)
         return false;
@@ -331,6 +335,8 @@ inline bool hostValueOk(Span v)
         name.n--; // one trailing dot (FQDN form)
     if (name.n == 0)
         return false;
+    if (ext != NULL && ext[0] != '\0' && ieqSpan(name, mk(ext, strlen(ext))))
+        return true;
     return isIPv4(name) || ieq(name, "localhost") || isSingleLabel(name) || isDottedLanName(name);
 }
 
@@ -514,6 +520,60 @@ inline bool webGuardAppliesToRequest(const char *header, size_t len, const char 
     return guardAll || webGuardIsRmRoute(header, len) || webGuardAppliesTo(path, false);
 }
 
+// Is `s` (n bytes) acceptable as the operator's public hostname (--webhost, #1323)? Checked
+// before the value is stored. Dotted DNS name only: labels [A-Za-z0-9-]{1,63}, no leading or
+// trailing '-', at least two labels, at most WEB_GUARD_EXT_HOST_MAX characters, no trailing dot.
+// Refused: IP literals, ports, wildcards, URLs, and a last label a browser would parse as a
+// number (all digits, or 0x + hex), which would make the name an IPv4 spelling.
+#ifndef WEB_GUARD_EXT_HOST_MAX
+#define WEB_GUARD_EXT_HOST_MAX 63 // node_webhost is char[64]
+#endif
+inline bool webGuardExtHostValid(const char *s, size_t n)
+{
+    if (s == NULL || n < 3 || n > (size_t)WEB_GUARD_EXT_HOST_MAX)
+        return false;
+    size_t labels = 0, start = 0;
+    for (size_t i = 0; i <= n; i++)
+    {
+        if (i < n && s[i] != '.')
+        {
+            char c = s[i];
+            bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-';
+            if (!ok)
+                return false;
+            continue;
+        }
+        size_t len = i - start;
+        if (len == 0 || len > 63 || s[start] == '-' || s[i - 1] == '-')
+            return false;
+        labels++;
+        if (i == n)
+        {
+            // last label must not read as a number
+            bool allDigits = true;
+            for (size_t k = start; k < i; k++)
+                if (!(s[k] >= '0' && s[k] <= '9'))
+                    allDigits = false;
+            if (allDigits)
+                return false;
+            if (len >= 2 && s[start] == '0' && (s[start + 1] == 'x' || s[start + 1] == 'X'))
+            {
+                bool hex = true;
+                for (size_t k = start + 2; k < i; k++)
+                {
+                    char c = s[k];
+                    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                        hex = false;
+                }
+                if (hex)
+                    return false;
+            }
+        }
+        start = i + 1;
+    }
+    return labels >= 2;
+}
+
 inline bool webGuardRequestApplies(const char *header, size_t len, const char *path)
 {
     return webGuardAppliesToRequest(header, len, path, MC_WEB_GUARD != 0);
@@ -521,7 +581,9 @@ inline bool webGuardRequestApplies(const char *header, size_t len, const char *p
 
 // Judge one request. `header` is the raw request text (request line + headers, `len` bytes),
 // `path` the route the caller derived from the request line ("/setparam/", "/", "/?page=x").
-inline WebGuardVerdict webGuardCheck(const char *header, size_t len, const char *path)
+// `extHost`: the operator's public hostname (node_webhost, #1323), NULL or "" for none. It only
+// widens the Host allowlist by that one exact name; Origin, X-MC and Sec-Fetch rules are unchanged.
+inline WebGuardVerdict webGuardCheck(const char *header, size_t len, const char *path, const char *extHost = NULL)
 {
     using namespace webguard_detail;
 
@@ -677,7 +739,7 @@ inline WebGuardVerdict webGuardCheck(const char *header, size_t len, const char 
     }
     else
     {
-        if (hostCount > 1 || hostFolded || !hostValueOk(hostVal))
+        if (hostCount > 1 || hostFolded || !hostValueOk(hostVal, extHost))
             return WG_BAD_HOST;
     }
 

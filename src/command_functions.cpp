@@ -37,6 +37,7 @@
 #include "gw_servers.h"   // GWU: gwCodes(), gwSelectNet() for --setnet / --gateway srv
 #include "radio_units.h"   // RF-01..RF-03 unit conversions
 #include "web_functions/web_auth.h" // WEB-AUTH-01: webAuthReset()
+#include "web_functions/web_guard.h" // #1323: webGuardExtHostValid() for --webhost
 #include "extudp_functions.h"
 #include "ntp_async.h"
 #include "ble_json_frame.h"
@@ -108,6 +109,7 @@ extern void rxSilenceGetStats(uint32_t *silences, uint32_t *longest_s, uint32_t 
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
 #include "ina226_functions.h"
+#include "ina226_cal.h"
 
 // GPS
 #include "gps_functions.h"
@@ -211,7 +213,15 @@ static void sendBleJsonRegister(JsonDocument &doc)
     msg_buffer[0] = 0x44;
     uint16_t len = bleJsonFrameFailSoft(doc, msg_buffer, sizeof(msg_buffer), BLE_JSON_PAYLOAD_MAX);
     if (len > 1)
-        addBLEComToOutBuffer(msg_buffer, len);
+    {
+        // EXTUDP register query: the frame goes to the EXTUDP reply (through the
+        // secret filter), not to the BLE ring -- a connected phone must not see
+        // frames it did not ask for. Phone frames below are unchanged.
+        if (extRegSinkActive())
+            extRegSinkFrame(msg_buffer + 1, len - 1);
+        else
+            addBLEComToOutBuffer(msg_buffer, len);
+    }
 }
 
 // Both the case-insensitive compare and the matching rule now live in
@@ -284,6 +294,15 @@ bool auRebootToSafeboot(void)
     loopCrumbClear();   // INS-05: deliberate reboot into safeboot
     esp_restart();
     return true;   // not reached
+}
+
+// OTA-LOWHEAP-01 / AU-30: restart into the app for the verify boot (NVS "vfy" armed by the caller). Declared in
+// esp32/fw_update_net.h. The log line leaves before the restart.
+[[noreturn]] void auRestartForVerify(void)
+{
+    Serial.flush();
+    loopCrumbClear();   // INS-05: deliberate restart
+    esp_restart();
 }
 #endif
 
@@ -804,6 +823,105 @@ void nodePasswdApply(const char *pw)
     rmRuntimeReceiverUnlock();
     save_settings();
 }
+
+#if defined(ESP32)
+// Install schedule (src/fw_schedule.h): the three settings and the plan. Shown only; nothing installs by itself.
+static __attribute__((noinline)) void auSchedPrint(void)
+{
+    static const char *const dayName[] = {"off", "mon", "tue", "wed", "thu", "fri", "sat", "sun"};
+    const int day = (meshcom_settings.node_auday >= 0 && meshcom_settings.node_auday <= 7) ? meshcom_settings.node_auday : 0;
+    const int tm = (meshcom_settings.node_autime >= 0 && meshcom_settings.node_autime <= 1439) ? meshcom_settings.node_autime : FWSCHED_TIME_DEFAULT;
+    const int dl = (meshcom_settings.node_audelay >= 0 && meshcom_settings.node_audelay <= FWSCHED_DELAY_MAX) ? meshcom_settings.node_audelay : FWSCHED_DELAY_DEFAULT;
+    // one Serial.print of a stack buffer: Print::printf mallocs above 64 B, which starves NimBLE on the classic ESP32
+    char ln[220];
+    snprintf(ln, sizeof(ln), "[AU];sched;delay;%d;day;%s;time;%02d:%02d\n", dl, dayName[day], tm / 60, tm % 60);
+    Serial.print(ln);
+    FwSchedView v;
+    if(fwNetSchedGet(v))
+    {
+        static const char *const stn[] = {"none", "clock", "waiting", "due"};
+        snprintf(ln, sizeof(ln), "[AU];sched;state;%s;install;%s;left;%dd%dh;tag;%s\n", stn[v.out.state], v.when, (int)v.out.daysLeft, (int)v.out.hoursLeft, v.tag);
+        Serial.print(ln);
+        snprintf(ln, sizeof(ln), "[AU];sched;notice;%s\n", v.text);
+        Serial.print(ln);
+    }
+    else
+        Serial.printf("[AU];sched;state;none\n");
+}
+// verb alone or verb + blanks + value; *val points at the value ("" when absent)
+static bool auSchedVerb(const char *arg, const char *verb, const char **val)
+{
+    const size_t n = strlen(verb);
+    if(strncasecmp(arg, verb, n) != 0 || (arg[n] != '\0' && arg[n] != ' '))
+        return false;
+    const char *p = arg + n;
+    while(*p == ' ')
+        p++;
+    *val = p;
+    return true;
+}
+// "--autoupdate delay|day|time <v>" and "--autoupdate status": the install schedule (src/fw_schedule.h). Persisted;
+// nothing installs by itself (D14). True when the argument was one of these (answered, valid or not).
+// noinline: its locals stay out of the (already large) commandAction frame.
+static __attribute__((noinline)) bool auSchedCommand(const char *arg)
+{
+    const char *av = nullptr;
+    int sv = 0;
+    if(auSchedVerb(arg, "delay", &av))
+    {
+        if(*av == '\0')
+        {
+            Serial.printf("[ERR];autoupdate;delay needs a value 0-7 (days after the release)\n");
+            return true;
+        }
+        if(!fwSchedParseDelay(av, &sv))
+        {
+            Serial.printf("[ERR];autoupdate;delay must be 0-7 (days after the release)\n");
+            return true;
+        }
+        meshcom_settings.node_audelay = sv;
+    }
+    else if(auSchedVerb(arg, "day", &av))
+    {
+        if(*av == '\0')
+        {
+            Serial.printf("[ERR];autoupdate;day needs a value: off, mon, tue, wed, thu, fri, sat or sun\n");
+            return true;
+        }
+        if(!fwSchedParseDay(av, &sv))
+        {
+            Serial.printf("[ERR];autoupdate;day must be off, mon, tue, wed, thu, fri, sat or sun\n");
+            return true;
+        }
+        meshcom_settings.node_auday = sv;
+    }
+    else if(auSchedVerb(arg, "time", &av))
+    {
+        if(*av == '\0')
+        {
+            Serial.printf("[ERR];autoupdate;time needs a value HH:MM (00:00-23:59)\n");
+            return true;
+        }
+        if(!fwSchedParseTime(av, &sv))
+        {
+            Serial.printf("[ERR];autoupdate;time must be HH:MM (00:00-23:59)\n");
+            return true;
+        }
+        meshcom_settings.node_autime = sv;
+    }
+    else if(strcasecmp(arg, "status") == 0)
+    {
+        Serial.printf("[AU];mode;%s\n", meshcom_settings.node_autoupd == 2 ? "auto" : "notify");
+        auSchedPrint();
+        return true;
+    }
+    else
+        return false;
+    save_settings();
+    auSchedPrint();
+    return true;
+}
+#endif
 
 void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 {
@@ -1532,6 +1650,15 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("[AU];ota-update;note;safeboot_too_old;ver;%d;need;%d;nocap;%d;proceeding\n", fwNetSafebootVersion(), AU_SAFEBOOT_MIN, fwNetSafebootOld() ? 1 : 0);
             Serial.printf("[AU];note;flash once with the web flasher to install the new Safeboot\n");
         }
+        // AU-30: Safeboot applies any record it finds; one whose dry run is still pending must not reach it unproven
+        {
+            FwStageRecord _vrec;
+            if(fwNetLoadRecord(_vrec) && fwNetVerifyPending(_vrec.tag))
+            {
+                fwNetClearRecord();
+                Serial.printf("[AU];ota-update;dropped_unverified;%s\n", _vrec.tag);
+            }
+        }
         auRebootToSafeboot();   // returns only without a safeboot partition (or AU-16: DIO bootloader, already reported)
 
         return;
@@ -1579,7 +1706,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--ota-update            reboot into safeboot OTA\n");
             #endif
             #if defined(ESP32)
-            printdeb("--autoupdate notify      firmware update mode (ESP32)\n--updchan " AU_UPDCHAN_HELP "\n");
+            printdeb("--autoupdate notify      firmware update mode (ESP32)\n--autoupdate status      mode and planned install\n--autoupdate delay 0-7   planned install: days after the release (default 3)\n--autoupdate day off|mon..sun  planned install on a weekday (replaces the delay)\n--autoupdate time HH:MM  planned install time (default 03:00); shown only, nothing installs by itself\n--updchan " AU_UPDCHAN_HELP "\n");
             printdeb("--update check/install/status/apply  firmware update now (ESP32)\n");
             #endif
             printdeb("--conffin               send config-finished to app\n");
@@ -1650,7 +1777,7 @@ void commandAction(char *umsg_text, bool ble)
                 gwCodesList(_gwl, sizeof(_gwl), '/');
                 printfdeb("--gateway srv %s  gateway server, reboots\n", _gwl);
             }
-            printdeb("--setudpcall <call>     UDP callsign\n--setnet auto/inet/hamnet  gateway network (auto: Hamnet if own IP is 44.x)\n--setnet                show network mode\n--sethamnet on/off      deprecated alias of --setnet hamnet/inet\n--setinet on/off        deprecated alias of --setnet inet/hamnet\n--extudp on/off         external UDP\n--extudpip a.b.c.d/none external UDP peer\n--nopmother on/off      no foreign DMs to EXTUDP peer\n--webserver on/off      web server\n--webpwd <pwd>/none     web password\n--webtimer 0            reset web session timer\n");
+            printdeb("--setudpcall <call>     UDP callsign\n--setnet auto/inet/hamnet  gateway network (auto: Hamnet if own IP is 44.x)\n--setnet                show network mode\n--sethamnet on/off      deprecated alias of --setnet hamnet/inet\n--setinet on/off        deprecated alias of --setnet inet/hamnet\n--extudp on/off         external UDP\n--extudpip a.b.c.d/none external UDP peer\n--nopmother on/off      no foreign DMs to EXTUDP peer\n--webserver on/off      web server\n--webpwd <pwd>/none     web password\n--webhost <name>/none   public hostname the web server accepts (DynDNS)\n--webtimer 0            reset web session timer\n");
             #ifndef DISABLE_NET_CONSOLE
             printdeb("--netconsole on/off     console on TCP 2323\n");
             #endif
@@ -2273,15 +2400,26 @@ void commandAction(char *umsg_text, bool ble)
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
-        if(dVar < INA226_MINIMAL_SHUNT_OHM || dVar > 0.5)
+        if(!ina226cal::shuntInRange((float)dVar))
         {
-            printfdeb("INA226 Rs (shunt) not > %.3f and < 0.500 Ω\n", INA226_MINIMAL_SHUNT_OHM);
+            printfdeb("INA226 Rs (shunt) %.3f .. %.3f Ω\n", ina226cal::kMinShuntOhm, ina226cal::kMaxShuntOhm);
             return;
         }
 
         meshcom_settings.node_shunt=dVar;
 
+        // INA226-CAL-01: the shunt is hardware and wins; lower imax so imax * shunt <= 81.9 mV,
+        // otherwise the chip stays uncalibrated and reads 0 mA
+        if(!ina226cal::pairOk(meshcom_settings.node_imax, meshcom_settings.node_shunt))
+        {
+            meshcom_settings.node_imax = ina226cal::effectiveImax(meshcom_settings.node_imax, meshcom_settings.node_shunt);
+            printfdeb("INA226 imax lowered to %.2f A to fit R(shunt) %.3f Ω\n", meshcom_settings.node_imax, meshcom_settings.node_shunt);
+        }
+
         save_settings();
+
+        if(bINA226ON)
+            setupINA226();
 
         if(ble)
         {
@@ -2299,15 +2437,20 @@ void commandAction(char *umsg_text, bool ble)
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
-        if(dVar < 0 || dVar > 20)
+        // INA226-CAL-01: imax * shunt must stay <= 81.9 mV for the configured shunt
+        float imaxLim = ina226cal::imaxLimit(meshcom_settings.node_shunt);
+        if(!ina226cal::pairOk((float)dVar, meshcom_settings.node_shunt))
         {
-            printfdeb("INA226 maxCurrent 20 A\n");
+            printfdeb("INA226 maxCurrent %.2f .. %.2f A for R(shunt) %.3f Ω\n", ina226cal::kMinImaxA, imaxLim, meshcom_settings.node_shunt);
             return;
         }
 
         meshcom_settings.node_imax=dVar;
 
         save_settings();
+
+        if(bINA226ON)
+            setupINA226();   // apply the new calibration now, not after the next reboot
 
         if(ble)
         {
@@ -3483,6 +3626,41 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"webhost ") == 0 || commandCheck(msg_text+2, (char*)"webhost") == 0)
+    {
+        // #1323: one public hostname (DynDNS name behind a port forward) the web guard accepts in
+        // the Host header, exact match only. "none" clears it; a bare --webhost shows it.
+        snprintf(_owner_c, sizeof(_owner_c), "%s", (strlen(msg_text) > 10) ? msg_text+10 : "");
+        if(_owner_c[0] != 0 && _owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        sVar = _owner_c;
+        sVar.trim();
+
+        if(sVar.length() > 0)
+        {
+            if(sVar.equalsIgnoreCase("none"))
+                sVar = "";
+            else if(!webGuardExtHostValid(sVar.c_str(), sVar.length()))
+            {
+                printfdeb("[WEB];webhost;invalid (DNS name, max %d chars, no IP, port or wildcard)\n", WEB_GUARD_EXT_HOST_MAX);
+                return;
+            }
+            sVar.toLowerCase();
+            snprintf(meshcom_settings.node_webhost, sizeof(meshcom_settings.node_webhost), "%s", sVar.c_str());
+
+            if(ble)
+            {
+                addBLECommandBack((char*)msg_text);
+            }
+
+            save_settings();
+        }
+
+        printfdeb("[WEB];webhost;%s\n", meshcom_settings.node_webhost[0] ? meshcom_settings.node_webhost : "none");
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"webpwd ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
@@ -3608,6 +3786,7 @@ void commandAction(char *umsg_text, bool ble)
             {
                 printfdeb("\nEXTERNAL-IP:%s refused - %s\n", meshcom_settings.node_extern, extudp_target_reason(tv));
                 snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", "");
+                extudpRequestPeerRefresh();   // EXT-PEER-01: the field is empty now, stop sending to the old peer
                 return;
             }
         }
@@ -3618,6 +3797,8 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         save_settings();
+
+        extudpRequestPeerRefresh();   // EXT-PEER-01: socket task re-resolves apip, see extudp_functions.cpp
 
         bReturn = true;
     }
@@ -5750,6 +5931,10 @@ void commandAction(char *umsg_text, bool ble)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+13);
 
+        // install schedule: delay / day / time / status (auSchedCommand above commandAction)
+        if(auSchedCommand(_owner_c))
+            return;
+
         if(casecmp(_owner_c, (char*)"off") == 0)
         {
             // D1: off no longer exists; notify is the lowest mode. Nothing is changed or saved.
@@ -5801,6 +5986,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"autoupdate") == 0)
     {
         Serial.printf("[AU];mode;%s\n", meshcom_settings.node_autoupd == 2 ? "auto" : "notify");
+        auSchedPrint();
 
         return;
     }
@@ -5894,6 +6080,15 @@ void commandAction(char *umsg_text, bool ble)
             }
             else
             {
+#if AU_BLE_PAUSE
+                // OTA-LOWHEAP-01 / AU-30: one user action, one BLE pause. With no phone on BLE the CHECK runs under the
+                // guard with the DOWNLOAD chained (auGuardTick starts it only for an installable newer release), so the
+                // heap freed by the pause and the AU buffer carry over instead of a second pause and a second click.
+                // Loop task (console and the web "updinstall" button both run here), as auBleGuardRequest requires.
+                if(!fwNetPhoneHeld() && !auBleGuardActive() && auBleGuardRequest(true))
+                    Serial.printf("[AU];install;check_first;chain\n");
+                else
+#endif
                 // nothing known to be newer yet: check first, the user retries when it is done
                 if(fwNetStart(FWJ_CHECK, (uint8_t)meshcom_settings.node_updchan))
                     Serial.printf("[AU];install;check_first;retry_when_done\n");
@@ -5903,8 +6098,9 @@ void commandAction(char *umsg_text, bool ble)
         }
         else if(casecmp(_owner_c, (char*)"apply") == 0)
         {
-            // operator action (bench): hand over now, no update window, no idle / phone / battery
-            // test. Needs a valid staged record; fwNetLoadRecord() drops a stale one.
+            // operator action (bench): hand over now, no update window, no idle / phone
+            // test; the battery floor still applies (QA-AU-09). Needs a valid staged
+            // record; fwNetLoadRecord() drops a stale one.
             FwStageRecord _rec;
             if(_auBusy)
             {
@@ -5923,10 +6119,29 @@ void commandAction(char *umsg_text, bool ble)
                     Serial.printf("[ERR];safeboot;bootloader_dio;renew with the web flasher\n");
                     return;
                 }
+                if(!fwBattOk(battHardwarePresent(), global_batt))
+                {
+                    // QA-AU-09: the erase + rewrite of ota_0 must not start on a weak battery
+                    Serial.printf("[AU];apply;refuse;battery\n");
+                    return;
+                }
                 if(fwNetSafebootOld())
                     Serial.printf("[AU];apply;note;old_safeboot_flag_set_trying_anyway\n");
                 else if(!fwNetSafebootCapable())
                     Serial.printf("[AU];apply;note;safeboot_too_old;ver;%d;trying_anyway\n", fwNetSafebootVersion());
+                if(fwNetVerifyPending(_rec.tag))
+                {
+                    // AU-30: the dry run was deferred (no memory after the download): run it on a verify boot first,
+                    // which hands over itself when it passes
+                    if(!fwNetArmVerifyBoot(_rec.tag))
+                        Serial.printf("[ERR];update;nvs\n");
+                    else
+                    {
+                        Serial.printf("[AU];apply;verify_boot;%s\n", _rec.tag);
+                        auRestartForVerify();
+                    }
+                }
+                else
                 if(!fwNetMarkHandover(_rec.tag))   // before the reboot, as in the auto path
                 {
                     Serial.printf("[ERR];update;nvs\n");

@@ -1109,7 +1109,7 @@ void work_webpage(void)
                     // an RM handler are guarded and the rest is unchecked. Decided on the
                     // header, the way the router matches (web_guard.h).
                     const bool wg_on = webGuardRequestApplies(web_header.c_str(), web_header.length(), wg_path.c_str());
-                    const WebGuardVerdict wgv = wg_on ? webGuardCheck(web_header.c_str(), web_header.length(), wg_path.c_str()) : WG_OK;
+                    const WebGuardVerdict wgv = wg_on ? webGuardCheck(web_header.c_str(), web_header.length(), wg_path.c_str(), meshcom_settings.node_webhost) : WG_OK; // #1323: + --webhost name
                     web_cors_ok = wg_on ? webGuardCorsAllowed(wg_path.c_str(), web_header.startsWith("POST")) : true;
                     if (wgv != WG_OK)
                     {
@@ -1123,6 +1123,37 @@ void work_webpage(void)
                         web_client.stop();
                         continue;
                     }
+
+#if defined(ESP32)
+                    // OTA-LOWHEAP-01 A4: while an AU session runs (gate to TLS end) only /austatus and the GUI assets
+                    // are served; every other request, the 10 s mailbox refresh included, would take heap the TLS
+                    // handshake needs (a page costs 4.5-7 KB peak, about 3 KB held in TIME_WAIT). The page JS retries.
+                    if (!fwWebAdmit(fwNetSessionActive(), wg_path.c_str()))
+                    {
+                        static const char kBusy[] = "{\"ok\":false,\"err\":\"au_session_active\"}";
+                        // a full page load (reload, bookmark) gets a readable page that reloads itself
+                        static const char kBusyHtml[] =
+                            "<!DOCTYPE html><meta charset=utf-8><meta http-equiv=refresh content=10>"
+                            "<p>Update l\u00e4uft, die Seite l\u00e4dt in 10 s neu. / Update running, reloading in 10 s.";
+                        const bool page = wg_path == "/" || wg_path.startsWith("/?");
+                        const char *body = page ? kBusyHtml : kBusy;
+                        const unsigned blen = (unsigned)(page ? sizeof(kBusyHtml) - 1 : sizeof(kBusy) - 1);
+                        web_cors_ok = false;
+                        web_client.println("HTTP/1.1 503 Service Unavailable");
+                        web_client.println("Retry-After: 10");
+                        web_client.println(page ? "Content-Type: text/html; charset=utf-8" : "Content-Type: application/json");
+                        web_client.print("Content-Length: ");
+                        web_client.println(blen);
+                        web_client.println("Connection: close");
+                        web_client.println();
+                        web_client.write((const uint8_t *)body, blen);
+                        rm_wipe_string(web_header);
+                        rm_wipe_string(web_currentLine);
+                        web_client.stop();
+                        continue;
+                    }
+#endif
+
 
                     // static CSS/JS of the GUI: before the login gate (the login page needs them), after the guard
                     if (deliver_web_asset(web_header))
@@ -3385,6 +3416,24 @@ void sub_page_setup()
         web_client.printf("\t<option value=\"auto\" disabled %s>auto (coming soon)</option>\n", (au_mode == 2) ? "selected" : "");
         web_client.println("</select>");
         web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">auto: coming soon -- for now the node notifies only. Install new firmware from the Info page.</p>");
+        { // install schedule: shown on the Info page, nothing installs by itself (src/fw_schedule.h)
+            static const char *const dayVal[] = {"off", "mon", "tue", "wed", "thu", "fri", "sat", "sun"};
+            static const char *const dayTxt[] = {"none (use the delay)", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+            const int s_day = (meshcom_settings.node_auday >= 0 && meshcom_settings.node_auday <= 7) ? meshcom_settings.node_auday : 0;
+            const int s_delay = (meshcom_settings.node_audelay >= 0 && meshcom_settings.node_audelay <= FWSCHED_DELAY_MAX) ? meshcom_settings.node_audelay : FWSCHED_DELAY_DEFAULT;
+            const int s_tm = (meshcom_settings.node_autime >= 0 && meshcom_settings.node_autime <= 1439) ? meshcom_settings.node_autime : FWSCHED_TIME_DEFAULT;
+            char s_tms[8];
+            snprintf(s_tms, sizeof(s_tms), "%02d:%02d", s_tm / 60, s_tm % 60);
+            web_client.println("</div><div class=\"grid grid3\">"); // text fields emit label + field + button
+            _create_setup_textinput_element("audelay", "Planned install: days after release (0-7)", String(s_delay), "3", "audelay", 1, false, false);
+            web_client.println("<label for=\"auday\">Planned install: weekday :</label>");
+            web_client.println("<select id=\"auday\" name=\"auday\" style=\"grid-column:2/-1\" onchange=\"setvalue('auday',this.value,true);\">");
+            for (int i = 0; i < 8; i++)
+                web_client.printf("\t<option value=\"%s\" %s>%s</option>\n", dayVal[i], i == s_day ? "selected" : "", dayTxt[i]);
+            web_client.println("</select>");
+            _create_setup_textinput_element("autime", "Planned install: time (HH:MM)", String(s_tms), "03:00", "autime", 5, false, false);
+            web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">The plan is shown on the Info page. A weekday replaces the delay. Automatic install is not active in this firmware: the node does not install by itself, use Download or Install on the Info page.</p>");
+        }
 
         if (!au_sb_ok && !fwNetBootloaderQio())
         {
@@ -3495,6 +3544,8 @@ void sub_page_setup()
     _create_setup_textinput_element("ownntp", "NTP", String(meshcom_settings.node_ownntp), "192.168.2.1", "setownntp", 50, false, true);          // create Textinput-Element including Label and Button
 
     _create_setup_textinput_element("extudpip", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
+    // #1323: public hostname (DynDNS behind a port forward) the web server accepts besides the LAN names; empty = none
+    _create_setup_textinput_element("webhost", "Public web host", String(meshcom_settings.node_webhost), "node.dyndns.org", "webhost", WEB_GUARD_EXT_HOST_MAX, false, true);
 
     web_client.println("</div><div class=\"grid grid2\">");
     #if defined(HAS_ETHERNET)
@@ -4276,7 +4327,7 @@ void sub_page_info()
     if (bINA226ON)
     {
         web_client.println("<tr><td>INA226</td><td>");
-        web_client.printf("vBUS<: %.2fV<br>", meshcom_settings.node_vbus);
+        web_client.printf("vBUS: %.2fV<br>", meshcom_settings.node_vbus);
         web_client.printf("vSHUNT: %.2fmV<br>", meshcom_settings.node_vshunt);
         web_client.printf("vCURRENT: %.1fmA<br>", meshcom_settings.node_vcurrent);
         web_client.printf("vPOWER: %.1fmW<br>", meshcom_settings.node_vpower);
@@ -4886,6 +4937,14 @@ static void sub_au_status()
 
     char body[832];
     size_t n = auStatusJson(in, body, sizeof(body));
+    { // install schedule: the countdown notice rides outside auStatusJson (its golden strings stay as they are)
+        FwSchedView sv;
+        fwNetSchedGet(sv);
+        n = auAppendSched(body, sizeof(body), n, sv.text);
+    }
+    // AU-30 "vpend": the staged record's dry run was deferred to the install (the page says "checked at install").
+    // One NVS read, only while a record is staged.
+    n = auAppendVpend(body, sizeof(body), n, (au.staged && fwNetVerifyPending(au.stagedTag)) ? 1 : 0);
 
     // "up": seconds since boot, appended outside auStatusJson. The page compares it across the install restart
     // when the build tag cannot be compared (an image built without MC_BUILD_TAG reports run "local").

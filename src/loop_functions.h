@@ -35,6 +35,7 @@ void init_loop_function();
 void initAnalogPin();
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr);
+void flushDeferredSettingsSave(void);
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr);
 
 String getDateString();

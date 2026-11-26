@@ -18,6 +18,7 @@
 #include <lora_setchip.h>
 #include <configuration.h>
 #include "configuration_global.h"
+#include "udp_hold.h"   // text-message hold for a server outage
 #include "ArduinoJson.h"
 #include "web_functions/web_functions.h"
 
@@ -40,6 +41,7 @@
 
 #if defined(ESP32)
 #include "esp_task_wdt.h"
+#include "esp32/fw_update_net.h"   // fwNetSessionActive(): no WiFi scan during an AU session (OTA-LOWHEAP-01)
 #endif
 
 #if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
@@ -151,6 +153,9 @@ void udpPrintStat()
                 (unsigned long)s_udpTxCount,
                 (unsigned long)s_udpTxFail,
                 (unsigned long)s_udpTxLastMs);
+  char holdLine[200];
+  udpHoldStatusLine(holdLine, sizeof(holdLine));
+  Serial.printf("%s\n", holdLine);
 }
 
 
@@ -730,9 +735,11 @@ void wifiDnsPoll()
   // wieder mit Scan. Die Felddiagnose bleibt genau dort erhalten, wo sie
   // gebraucht wird, und ein gesunder Knoten ist ~4-5 s frueher online.
   s_wifiBringupCount++;
-  if(s_wifiBringupCount == 1)
+  // OTA-LOWHEAP-01 fix A5: a scan costs ~10 KB of heap; during an Auto Update session connect directly.
+  if(s_wifiBringupCount == 1 || fwNetSessionActive())
   {
-    Serial.printf("[WIFI];scan;skipped;first_bringup;ms;%lu\n", (unsigned long)millis());
+    Serial.printf("[WIFI];scan;skipped;%s;ms;%lu\n", s_wifiBringupCount == 1 ? "first_bringup" : "au_session",
+                  (unsigned long)millis());
     s_wifiScanPending = false;
     wifiBegin();
   }
@@ -1379,6 +1386,40 @@ void resetMeshComUDP()
 ///////////////////////////////////////////////////////////////////////////////
 // ESP32 & RAK
 
+// Outage hold (src/udp_hold.h): static RAM, no heap. The hold is filled in
+// addNodeData() (not here), so a replay through addUdpOutBuffer() never
+// re-enters it and keeps its frame bytes and message ID.
+#if UDP_HOLD_BYTES > 0
+static uint8_t s_udpHoldStore[UDP_HOLD_BYTES];
+
+#if defined(NRF52_SERIES)
+#include <FreeRTOS.h>
+#include <task.h>
+static void udpHoldLock()   { taskENTER_CRITICAL(); }
+static void udpHoldUnlock() { taskEXIT_CRITICAL(); }
+#else
+#include <freertos/FreeRTOS.h>
+#include <freertos/portmacro.h>
+static portMUX_TYPE s_udpHoldMux = portMUX_INITIALIZER_UNLOCKED;
+static void udpHoldLock()   { portENTER_CRITICAL(&s_udpHoldMux); }
+static void udpHoldUnlock() { portEXIT_CRITICAL(&s_udpHoldMux); }
+#endif
+static void udpHoldSink(uint8_t *b, uint16_t n) { addUdpOutBuffer(b, n); }
+static void udpHoldLog(const char *l) { Serial.print(l); }
+
+namespace {
+struct UdpHoldBoot
+{
+    UdpHoldBoot()
+    {
+        udpHoldAttach(s_udpHoldStore, sizeof(s_udpHoldStore), udpHoldSink, udpHoldLog,
+                      udpHoldLock, udpHoldUnlock);
+    }
+};
+UdpHoldBoot s_udpHoldBoot;
+}
+#endif
+
 void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
 {
     if (len > UDP_TX_BUF_SIZE)
@@ -1514,10 +1555,12 @@ void sendKEEP()
 void addNodeData(uint8_t msg_buffer[UDP_TX_BUF_SIZE], uint16_t size, int16_t rssi, int8_t snr)
 {
   #ifdef ESP32
-  
-  if(!hasIPaddress)
+
+  // Without an IP the frame is not enqueued, but a gateway still holds a
+  // TEXT copy for the outage replay (UDP_HOLD_BYTES == 0: no hold, as before).
+  if(!hasIPaddress && !(UDP_HOLD_BYTES > 0 && bGATEWAY))
     return;
-    
+
   #endif
 
   int dt_buffer_size=0;
@@ -1534,6 +1577,32 @@ void addNodeData(uint8_t msg_buffer[UDP_TX_BUF_SIZE], uint16_t size, int16_t rss
   memcpy(dt_buffer, data_buffer, dt_buffer_size);
   memcpy(dt_buffer+dt_buffer_size, msg_buffer, size);
   
+  // Holdable TEXT (udp_hold.h) is copied into the outage hold; held_class = the
+  // frame is of that class. Callers pass such text on a gateway without an IP
+  // address too (own web/BLE text), where it is held and not enqueued.
+  bool held_class = false;
+  #if UDP_HOLD_BYTES > 0
+  if(bGATEWAY)
+    held_class = udpHoldCapture(dt_buffer, (uint16_t)((dt_buffer_size+size) > UDP_TX_BUF_SIZE ? UDP_TX_BUF_SIZE : (dt_buffer_size+size)), millis(),
+      #ifdef ESP32
+      hasIPaddress);
+      #else
+      meshcom_settings.node_hasIPaddress);
+      #endif
+  #endif
+
+  #ifdef ESP32
+  (void)held_class;
+  if(!hasIPaddress)
+    return;
+  #else
+  // nRF52: no early return above, so the callers that always checked the IP
+  // keep their behaviour; holdable text passed without an IP stays out of the
+  // UDP ring. It is marked unsent in the hold and replayed when the link is back.
+  if(held_class && !meshcom_settings.node_hasIPaddress)
+    return;
+  #endif
+
   addUdpOutBuffer(dt_buffer, dt_buffer_size+size);
 
   if(bLORADEBUG)

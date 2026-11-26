@@ -23,6 +23,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h> // AU-30: strcmp in fwApplyNeedsVerifyBoot
+
+#include "fw_schedule.h" // planned install time + countdown notice (pure; never starts an install)
 
 // D14 (AU web GUI campaign): the automatic apply is physically impossible in this firmware line.
 // AU_AUTO_INSTALL is fixed 0; the automatic download start and the automatic handover in
@@ -404,6 +407,26 @@ inline bool fwShouldInstall(const FwVersion &running, const FwVersion &cand, con
 }
 
 // ---------------------------------------------------------------------------
+// install schedule (ESP32 glue lives in esp32/fw_update_net.cpp; the maths in fw_schedule.h)
+// ---------------------------------------------------------------------------
+// The plan is computed from the newest release the last CHECK saw (tag date) and the three settings
+// node_audelay / node_auday / node_autime. It is shown and logged. AU_AUTO_INSTALL stays 0: when the plan is due the
+// firmware logs "[AU];sched;due;blocked;auto_install_off" once and does nothing else.
+#if defined(ESP32)
+struct FwSchedView
+{
+    FwSchedOut out;
+    char tag[24];   // candidate tag
+    char text[FWSCHED_NOTICE_MAX]; // the countdown notice, "" without candidate
+    char when[24];  // "Sun 8 Nov 03:00", "" without candidate
+};
+// False without a candidate release (then v.out.state is FWSCHED_NO_CANDIDATE and the texts are empty).
+bool fwNetSchedGet(FwSchedView &v);
+// Once a second from the AU tick: logs the due line once per candidate.
+void fwNetSchedTick(void);
+#endif
+
+// ---------------------------------------------------------------------------
 // policy / timer
 // ---------------------------------------------------------------------------
 
@@ -413,12 +436,6 @@ inline bool fwShouldInstall(const FwVersion &running, const FwVersion &cand, con
 #define FW_WINDOW_START_MIN 180u          // 03:00
 #define FW_WINDOW_END_MIN 300u            // 05:00 (exclusive)
 #define FW_BATT_FLOOR_MV 3600u
-
-// QA-AU-09: no install below the battery floor when a battery is fitted
-inline bool fwBattOk(bool battHw, float mv)
-{
-    return !battHw || mv >= (float)FW_BATT_FLOOR_MV;
-}
 #define FW_MAX_ATTEMPTS 3u
 #define FW_ATTEMPT_SPACING_MS (6u * 3600u * 1000u)
 #define FW_PHONE_GUARD_MS (30u * 60u * 1000u) // D16: phone connected this long past the due time
@@ -582,15 +599,19 @@ inline FwAction fwTick(FwTimer &t, const FwPolicyIn &in, bool stagedPending, uin
 // by hand. No update window and no mode requirement (works with auto-update off); a connected phone
 // and a battery below the floor (AU-D17) still hold it back. Safeboot capability and the 8 s reply
 // delay are checked by the caller.
-// Minutes since the last successful check ("upd" ck=), -1 when unknown. lastCheckEpoch and now are
-// both time(): seconds since boot until NTP/GPS set the system clock, an epoch afterwards. A pair from
-// different domains (clock set in between) or a clock that went back is unknown.
+// Value stored as a check/stage timestamp (AU-22): node UTC, 0 while the node clock is not valid.
+inline uint32_t fwNodeStamp(bool clockOk, int64_t utc)
+{
+    return (clockOk && utc > 0) ? (uint32_t)utc : 0u;
+}
+// Minutes since the last successful check ("upd" ck=), -1 when unknown. lastCheckEpoch and now are node UTC
+// (fwNodeStamp), 0 while the node clock is not valid. Unknown: no check yet, the check ran before the clock was
+// set (stored 0), the clock is unset now (0), or the clock went back. A value below the node-clock floor
+// (node_date_year > 2023, i.e. 2024-01-01) is no UTC stamp and counts as unknown.
 inline int32_t fwCheckAgeMin(uint32_t lastCheckEpoch, int64_t now)
 {
-    const int64_t kEpochMin = 1700000000; // below: seconds since boot (system clock not set)
-    if (lastCheckEpoch == 0 || now < (int64_t)lastCheckEpoch)
-        return -1;
-    if (((int64_t)lastCheckEpoch >= kEpochMin) != (now >= kEpochMin))
+    const int64_t kUtcMin = 1704067200; // 2024-01-01T00:00:00Z
+    if ((int64_t)lastCheckEpoch < kUtcMin || now < kUtcMin || now < (int64_t)lastCheckEpoch)
         return -1;
     return (int32_t)((now - (int64_t)lastCheckEpoch) / 60);
 }
@@ -598,6 +619,13 @@ inline int32_t fwCheckAgeMin(uint32_t lastCheckEpoch, int64_t now)
 inline bool fwGoHandoverReady(const FwPolicyIn &in)
 {
     return !in.phoneConnected && (!in.onBattery || in.battMv >= FW_BATT_FLOOR_MV);
+}
+
+// QA-AU-09: the battery floor for the manual apply paths (--update apply, web Apply), the same test
+// as the auto download start and the remote go. battHw: battery hardware present; mv: global_batt.
+inline bool fwBattOk(bool battHw, float mv)
+{
+    return !battHw || mv >= (float)FW_BATT_FLOOR_MV;
 }
 
 // Remote go, request side ("upd go <tag>", rmAuGo in src/esp32/rm_au_esp32.cpp). Pure decision over a
@@ -810,6 +838,23 @@ inline bool fwNetHeapOk(uint32_t freeB, uint32_t largestBlk, uint32_t minFree, u
     return freeB >= minFree && largestBlk >= minBlk;
 }
 
+// AU-29: staging erase in 64 KB blocks. Each block erase holds CPU0 (ipc0, cache off) for ~260-300 ms;
+// with only a 1-tick yield between blocks the CPU0 IDLE task starved past the 5 s task watchdog
+// (T-Beam TASK_WDT during the install). The gap is a real sleep, followed by a bounded wait until IDLE0 ran.
+#ifndef FW_ERASE_STEP
+#define FW_ERASE_STEP 0x10000u
+#endif
+#ifndef FWNET_ERASE_GAP_MS
+#define FWNET_ERASE_GAP_MS 20u
+#endif
+// Modelled worst-case time CPU0's IDLE task does not run during the staging erase. Without the idle
+// guarantee the backlog after a block can eat every gap, so all blocks add up; with it (the loop waits
+// for an IDLE0 run after each block) the worst case is one block plus one gap.
+static inline uint32_t fwEraseWorstIdleGapMs(uint32_t blockMs, uint32_t gapMs, uint32_t blocks, bool idleGuaranteed)
+{
+    return idleGuaranteed ? blockMs + gapMs : blocks * blockMs;
+}
+
 // AU-13: heap gate for boards whose mbedTLS runs on the PSRAM-first allocator. The handshake
 // buffers then live in PSRAM (needs a block for the 16 KB records), but mbedTLS and WiFi still
 // take small internal allocations, so a floor of INTERNAL free heap stays. Without the allocator
@@ -820,7 +865,13 @@ inline bool fwNetHeapOk(uint32_t freeB, uint32_t largestBlk, uint32_t minFree, u
 #ifndef FWNET_TLS_REC_BUF
 #define FWNET_TLS_REC_BUF 16717u
 #endif
-// twoBufOk: result of the caller's probe (two FWNET_TLS_REC_BUF internal allocations held at once);
+// The OUTPUT record buffer: stock mbedTLS 2.28 of arduino-esp32 2.0.17 allocates it with the same length as the
+// input buffer (MBEDTLS_SSL_OUT_CONTENT_LEN = 16384). A smaller value needs a rebuilt mbedTLS, which this firmware
+// does not carry.
+#ifndef FWNET_TLS_OUT_BUF
+#define FWNET_TLS_OUT_BUF FWNET_TLS_REC_BUF
+#endif
+// twoBufOk: result of the caller's probe (FWNET_TLS_REC_BUF + FWNET_TLS_OUT_BUF internal allocations held at once);
 // only consulted on the classic (non-PSRAM) path.
 inline bool fwNetHeapGate(bool psramTls, uint32_t internalFree, uint32_t internalBlk,
                           uint32_t psramLargestBlk, uint32_t minFree, uint32_t minBlk,
@@ -829,6 +880,48 @@ inline bool fwNetHeapGate(bool psramTls, uint32_t internalFree, uint32_t interna
     if (!psramTls)
         return fwNetHeapOk(internalFree, internalBlk, minFree, minBlk) && twoBufOk;
     return psramLargestBlk >= minBlk && internalFree >= minIFree;
+}
+
+// OTA-LOWHEAP-01 fix A1: total-free floor of the pre-TLS gate (internal heap, no PSRAM-TLS).
+// Classic ESP32: 76000 = 69.2 KB measured chain-verify peak + margin (#1187, DK5EN-92).
+// Other targets (S3 without PSRAM, measured on a Heltec V3 on 2026-11-23): with the stock TLS client
+// the check took ~85 KB and the download ~94 KB of total heap (low-water 2.9 KB); the gate passed at free 60 KB
+// and TLS then failed. With McTlsClient (fix B) and these admission rules: check 85.7 -> 24.3 KB = 61.4 KB,
+// download 85.1 -> 15.6 KB = 69.5 KB. 78000 = the download's 69.5 KB + 8 KB margin. With mbedTLS on PSRAM the record buffers are outside internal heap and
+// FWNET_MIN_IFREE_PSRAM governs instead (this floor is not consulted; 0 returned).
+#ifndef FWNET_MIN_FREE_CLASSIC
+#define FWNET_MIN_FREE_CLASSIC 76000u
+#endif
+#ifndef FWNET_MIN_FREE_S3
+#define FWNET_MIN_FREE_S3 78000u
+#endif
+inline uint32_t fwGateMinFree(bool classic, bool tlsOnPsram)
+{
+    if (classic)
+        return FWNET_MIN_FREE_CLASSIC;
+    return tlsOnPsram ? 0u : FWNET_MIN_FREE_S3;
+}
+
+// OTA-LOWHEAP-01 fix A4: while an AU session runs the web server serves only what the open update page polls:
+// GET /austatus (mcau.js, 1 s while busy) and the static assets /mc.css, /mc.js, /mcau.js (also with ?v=).
+// Everything else gets 503 + Retry-After. `path` is the request target (no method). Exact token: the path
+// must end after the name or continue with '?'.
+inline bool fwWebAdmit(bool sessionActive, const char *path)
+{
+    if (!sessionActive)
+        return true;
+    if (path == nullptr)
+        return false;
+    static const char *const kAllowed[] = {"/austatus", "/mc.css", "/mc.js", "/mcau.js"};
+    for (const char *a : kAllowed)
+    {
+        size_t n = 0;
+        while (a[n] != '\0' && path[n] == a[n])
+            n++;
+        if (a[n] == '\0' && (path[n] == '\0' || path[n] == '?'))
+            return true;
+    }
+    return false;
 }
 
 // n * size without wrap-around (calloc contract): false = the product does not fit in size_t.
@@ -1041,6 +1134,90 @@ inline bool fwShedAllowed(bool blePaused, bool guarded, bool phoneHeld)
     return blePaused || guarded || !phoneHeld;
 }
 
+// The gate refused with enough free heap, because the job's own stack splits the big block: one more run on a new stack,
+// allocated with BLE already down. Only once per job.
+inline bool fwJobRestartDue(bool bleDown, bool restarted, bool fragmented, bool lowheap)
+{
+    return bleDown && !restarted && fragmented && lowheap;
+}
+
+// OTA-LOWHEAP-01 / AU-30: startJob() creates the job task (10 KB stack) before the BLE pause, so the stack lands in the
+// biggest block and the 32 KB AU buffer (FWNET_BUF32_LEN) then finds only 25-27 KB (T-Beam, the block shrinks by exactly
+// the stack size). One restart right after the missed buffer, on a stack allocated with BLE down, before any TLS work.
+// Only when BLE is down (otherwise BLE, not the stack, holds the heap), once per job (restarted also blocks the
+// end-of-job restart), never with PSRAM (no AU buffer there).
+inline bool fwJobEarlyRestartDue(bool bleDown, bool restarted, bool psram, bool haveBuf32)
+{
+    return bleDown && !restarted && !psram && !haveBuf32;
+}
+
+// OTA-LOWHEAP-01 / AU-30: the dry-run inflate needs 32 KB + 11.4 KB at once, which a classic ESP32 without PSRAM
+// (T-Beam) never has after WiFi start. When that is the only failure and the staged bytes are proven against the
+// release digest (shaVerified: a real download), the image is staged with a verify mark and the
+// dry run runs on a verify boot before WiFi and BLE. Every other dry-run failure still refuses.
+inline bool fwDryDeferOk(bool classicNoPsram, bool dryErrIsNomem, bool shaVerified)
+{
+    return classicNoPsram && dryErrIsNomem && shaVerified;
+}
+
+// AU-30: an apply of the record recTag goes through the verify boot when the verify mark names exactly that tag.
+// No mark (every record staged before AU-30, and every verified one) = hand over as before.
+inline bool fwApplyNeedsVerifyBoot(const char *recTag, const char *pendTag)
+{
+    return recTag != nullptr && pendTag != nullptr && recTag[0] != '\0' && strcmp(recTag, pendTag) == 0;
+}
+
+// AU-30: the NVS keys stageFinish commits a staged image with, in commit order.
+enum FwStageKey : uint8_t
+{
+    FW_SK_VPEND, // verify mark: the dry-run inflate was deferred to the install
+    FW_SK_REC,   // the stage record
+    FW_SK_LAST   // the reinstall guard
+};
+
+// AU-30: commits a stage record. The verify mark goes in first (only for a deferred dry run), then the record, then
+// the reinstall guard, so a deferred record without its mark can never exist; a cut between two writes leaves at most
+// a mark without a record, which is harmless (the apply check fires only on a tag match, the next stage clears it).
+// put() returns false on a failed write; then all three keys are dropped (drop() of an absent key is a no-op) and
+// the result is false.
+inline bool fwStageCommit(bool vfyPending, bool (*put)(void *ctx, FwStageKey k), void (*drop)(void *ctx, FwStageKey k),
+                          void *ctx)
+{
+    bool ok = !vfyPending || put(ctx, FW_SK_VPEND);
+    ok = ok && put(ctx, FW_SK_REC);
+    ok = ok && put(ctx, FW_SK_LAST);
+    if (!ok)
+    {
+        drop(ctx, FW_SK_VPEND);
+        drop(ctx, FW_SK_REC);
+        drop(ctx, FW_SK_LAST);
+    }
+    return ok;
+}
+
+// AU-30: what the verify boot does with the record it finds. vfyTag = the tag the apply armed, pendTag = the verify
+// mark ("" when absent). Tag mismatch (or no tag) = a real failure; the right tag without a mark = already verified
+// (a verify boot that removed the mark and then could not hand over): hand over, never drop it; with the mark = dry run.
+enum FwVerifyBootPlan : uint8_t
+{
+    FWVBP_MISMATCH,
+    FWVBP_ALREADY,
+    FWVBP_DRYRUN
+};
+
+inline FwVerifyBootPlan fwVerifyBootPlan(const char *recTag, const char *vfyTag, const char *pendTag)
+{
+    if (recTag == nullptr || vfyTag == nullptr || recTag[0] == '\0' || strcmp(recTag, vfyTag) != 0)
+        return FWVBP_MISMATCH;
+    return fwApplyNeedsVerifyBoot(recTag, pendTag) ? FWVBP_DRYRUN : FWVBP_ALREADY;
+}
+
+// Shedding frees small pieces and cannot join a split heap: leave the services up while a restart can still fix it.
+inline bool fwShedSkipForRestart(bool restartAvail, uint32_t freeNow, uint32_t need)
+{
+    return restartAvail && freeNow >= need;
+}
+
 // First stage: KISS TCP only (cheap, nobody is typing into it). avail = what the node could stop (FW_SHED_* bits).
 inline uint8_t fwShedFirst(bool allowed, uint8_t avail)
 {
@@ -1073,6 +1250,13 @@ inline const char *fwTlsFailToken(uint32_t allocFails)
     return allocFails > 0 ? "lowheap_tls" : "tls";
 }
 
+// mc_ssl_connect returns the socket fd (>= 0) on success and a negative code on failure. Only a negative value is a
+// TLS error; storing the fd made a later HTTP failure log "[AU];tls;51" (51 = the socket) instead of "conn <code>".
+inline int fwTlsConnectErr(int connectRet)
+{
+    return connectRet < 0 ? connectRet : 0;
+}
+
 // The stored `--display off` setting (bDisplayOff), not the screensaver, decides whether the TFT sprite is
 // wanted (operator decision 2026-10-24); shedHeld = the update has released it; jobBusy = an AU job runs (no
 // 25.6 KB allocation in the middle of a TLS handshake, also when the job started without the hold).
@@ -1096,11 +1280,22 @@ inline bool fwNotifyDue(bool checkDoneOk, bool availNewer, int effMode, bool alr
 // While the guard is set the job task force-pauses BLE (also with a phone linked) and esp32BleResume() refuses.
 bool auBleGuardRequest(bool chainDownload);
 bool auBleGuardActive(void);
+// OTA-LOWHEAP-01 / AU-30: the guard is set and its CHECK was requested with a chained DOWNLOAD that has not started yet.
+// Read by the job task at the CHECK's end: it then keeps the idle AU buffer for the DOWNLOAD (buf32Detach) instead of
+// freeing it, so the DOWNLOAD task's stack cannot land in the freed block. Read only.
+bool auBleGuardChainPending(void);
+// OTA-LOWHEAP-01 / AU-30 (fw_update_net.cpp): frees an AU buffer that a finished job kept for a chained DOWNLOAD
+// (detached: no task owns it, no record live, not lent); no-op otherwise. Called by the loop when the guard ends
+// without the DOWNLOAD adopting the buffer. Loop task.
+void fwNetDropIdleBuf32(void);
 // True from auRequestApplyReboot() until the loop has acted on it. fwNetStart() refuses new jobs meanwhile.
 bool auApplyRebootPending(void);
 // Web "Install now": asks the main loop (esp32_main.cpp auTick) to call auRebootToSafeboot() >= 500 ms
 // later (fwApplyRebootDue), so the HTTP answer leaves first. Sets a flag only; returns at once.
 void auRequestApplyReboot(void);
+// AU-30: web "Install now" for a record with the verify mark: the same 500 ms answer-first timing, but auTick restarts
+// into the app (verify boot, auRestartForVerify) instead of Safeboot. The caller armed NVS "vfy" before.
+void auRequestVerifyReboot(void);
 #endif
 
 #endif // FW_UPDATE_H

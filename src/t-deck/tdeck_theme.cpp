@@ -57,6 +57,10 @@ static void fill_styles(const TdeckPalette& p)
     lv_style_set_bg_opa(&tdeck_style_btn_off, LV_OPA_COVER);
     lv_style_set_bg_color(&tdeck_style_btn_off, C(p.btn_off));
     lv_style_set_text_color(&tdeck_style_btn_off, C(p.btn_fg_off));
+    // TD-36: LVGL's light default theme puts a grey drop shadow under every button and button-matrix item;
+    // under the near-white btn_off fill only that shadow showed (grey edges/corners). No shadow in either mode.
+    lv_style_set_shadow_width(&tdeck_style_btn_on, 0);
+    lv_style_set_shadow_width(&tdeck_style_btn_off, 0);
 
     lv_style_set_bg_opa(&tdeck_style_bubble_in, LV_OPA_COVER);
     lv_style_set_bg_color(&tdeck_style_bubble_in, C(p.bubble_in));

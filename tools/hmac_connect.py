@@ -41,6 +41,7 @@ import signal
 import socket
 import sys
 import threading
+import _thread
 
 DEFAULT_PORT = 2323
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -161,6 +162,27 @@ def _raise_keyboard_interrupt(signum, frame):
     raise KeyboardInterrupt
 
 
+# Signals main() turns into KeyboardInterrupt; cleanup() ignores all of them.
+EXIT_SIGNALS = tuple(s for s in (signal.SIGINT, signal.SIGTERM, getattr(signal, "SIGHUP", None))
+                     if s is not None)
+
+
+def wake_main_thread(main_tid):
+    """Interrupt the main thread's blocking input() after the remote closed the session."""
+    if hasattr(signal, "pthread_kill"):
+        signal.pthread_kill(main_tid, signal.SIGINT)
+        return
+    # Windows has no pthread_kill. A console Ctrl-C event aborts the console read the same way the
+    # user's Ctrl-C does; without a console (stdin redirected) interrupt_main is enough.
+    try:
+        import ctypes
+        if ctypes.windll.kernel32.GenerateConsoleCtrlEvent(0, 0):  # CTRL_C_EVENT, own process group
+            return
+    except (ImportError, AttributeError, OSError):
+        pass
+    _thread.interrupt_main()
+
+
 def run(args, sess):
     host, port = args.host, args.port
 
@@ -243,7 +265,12 @@ def run(args, sess):
     def emit(text):
         if not text:
             return
-        sys.stdout.write(text)
+        try:
+            sys.stdout.write(text)
+        except UnicodeEncodeError:
+            # console code page without these characters (e.g. cp1252 on Windows)
+            enc = sys.stdout.encoding or "ascii"
+            sys.stdout.write(text.encode(enc, errors="replace").decode(enc))
         sys.stdout.flush()
         if log:
             log.rx(text)
@@ -260,11 +287,17 @@ def run(args, sess):
                 emit(decoder.decode(data))
         except OSError:
             pass
+        except Exception as e:  # noqa: BLE001 -- the thread must not die without waking the main thread
+            if not sess.stop.is_set():
+                sess.close_reason = f"receive error: {e!r}"
+                print(f"\n[Receive error: {e!r}]", file=sys.stderr, flush=True)
+                wake_main_thread(main_tid)
+            return
         if not sess.stop.is_set():
             # Remote side closed: wake the main thread out of input()
             sess.close_reason = "disconnected by remote"
             print("\n[Disconnected by remote]", flush=True)
-            signal.pthread_kill(main_tid, signal.SIGINT)
+            wake_main_thread(main_tid)
 
     sess.rx_thread = threading.Thread(target=recv_loop, name="rx")
     sess.rx_thread.start()
@@ -284,8 +317,9 @@ def run(args, sess):
 
 
 def cleanup(sess):
-    # From here on, ignore further Ctrl-C so cleanup cannot be interrupted
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    # From here on, ignore further Ctrl-C, SIGTERM and SIGHUP so cleanup cannot be interrupted
+    for sig in EXIT_SIGNALS:
+        signal.signal(sig, signal.SIG_IGN)
     sess.stop.set()
     if sess.sock is not None:
         try:
@@ -305,9 +339,8 @@ def cleanup(sess):
 
 def main():
     args = parse_args()
-    for sig in (signal.SIGINT, signal.SIGTERM, getattr(signal, "SIGHUP", None)):
-        if sig is not None:
-            signal.signal(sig, _raise_keyboard_interrupt)
+    for sig in EXIT_SIGNALS:
+        signal.signal(sig, _raise_keyboard_interrupt)
 
     sess = Session()
     rc = 0

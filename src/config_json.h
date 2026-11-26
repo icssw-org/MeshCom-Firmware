@@ -322,6 +322,7 @@ struct CfgField
     X("node_ownms",    CFG_STR,  node_ownms,            CFG_NORANGE,        CFG_NOESC)        \
     X("node_name",     CFG_STR,  node_name,             CFG_NORANGE,        CFG_NOESC)        \
     X("node_webpwd",   CFG_STR,  node_webpwd,           CFG_NORANGE,        CFG_NOESC)        \
+    X("node_webhost",  CFG_STR,  node_webhost,          CFG_NORANGE,        CFG_NOESC)        \
     X("node_lssid",    CFG_STR,  node_ssid,             CFG_NORANGE,        CFG_NOESC)        \
     X("node_lpwd",     CFG_STR,  node_pwd,              CFG_NORANGE,        CFG_NOESC)        \
     X("node_apin",     CFG_INT,  node_analog_pin,       0.0, 99.0,          CFG_NOESC)        \
@@ -364,6 +365,9 @@ struct CfgField
     X("node_rmstrict", CFG_INT,  node_rmstrict,         0.0, 1.0,           CFG_NOESC)        \
     X("node_autoupd",  CFG_INT,  node_autoupd,          0.0, 2.0,           CFG_NOESC)        \
     X("node_updchan",  CFG_INT,  node_updchan,          0.0, 1.0,           CFG_NOESC)        \
+    X("node_audelay",  CFG_INT,  node_audelay,          0.0, 7.0,           CFG_NOESC)        \
+    X("node_auday",    CFG_INT,  node_auday,            0.0, 7.0,           CFG_NOESC)        \
+    X("node_autime",   CFG_INT,  node_autime,           0.0, 1439.0,        CFG_NOESC)        \
     CFG_FIELD_LIST_PLATFORM(X)
 
 /* Platform-only persisted fields.

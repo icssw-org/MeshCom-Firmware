@@ -10,6 +10,15 @@ char* regex_call_match = (char*)"^[0-9A-Z]?[A-Z]?[0-9]+[A-Z][A-Z]?[A-Z]?[%-]?[0-
 
 int ret_call;
 
+bool isSpecialTargetCall(const char *callsign)
+{
+	return strcmp(callsign, "*") == 0 ||	// TOALL message
+	       strcmp(callsign, "H") == 0 ||	// HEY Message
+	       strcmp(callsign, "HG") == 0 ||	// HEY Message from Gateway
+	       strcmp(callsign, "TEST") == 0 ||
+	       strcmp(callsign, "TESTER") == 0;
+}
+
 bool checkRegexCall(String callsign)
 {
 	if(callsign.length() < 1)
@@ -21,22 +30,10 @@ bool checkRegexCall(String callsign)
 		return false;
 
 	// legal
-	if(callsign.compareTo("*") == 0) // TOALL message
-		return true;
-	
-	if(callsign.compareTo("H") == 0)	// HEY Message
-		return true;
-
-	if(callsign.compareTo("HG") == 0)	// HEY Message from Gateway
+	if(isSpecialTargetCall(callsign.c_str()))
 		return true;
 
 	if(callsign.compareTo("BOT GATE") == 0)
-		return true;
-
-	if(callsign.compareTo("TEST") == 0)
-		return true;
-
-	if(callsign.compareTo("TESTER") == 0)
 		return true;
 
 	if(callsign.compareTo("WLNK-1") == 0)

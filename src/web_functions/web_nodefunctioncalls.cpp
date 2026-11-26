@@ -114,6 +114,18 @@ void webFunctionCall(funCallStruct* functionData) {
             functionData->returnCode = WF_RETURNCODE_FAIL;
             return;
         }
+        if(fwNetVerifyPending(rec.tag)) {
+            // AU-30: the dry run was deferred (no memory after the download): restart into the app for the verify
+            // boot, which hands over itself when it passes. Same answer-first timing as the handover.
+            if(!fwNetArmVerifyBoot(rec.tag)) {
+                functionData->returnCode = WF_RETURNCODE_FAIL;
+                return;
+            }
+            Serial.printf("[AU];apply;verify_boot;%s\n", rec.tag);
+            auRequestVerifyReboot();
+            functionData->returnCode = WF_RETURNCODE_OKAY;
+            return;
+        }
         if(!fwNetMarkHandover(rec.tag)) {   // before the reboot, as in --update apply
             functionData->returnCode = WF_RETURNCODE_FAIL;
             return;

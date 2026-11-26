@@ -352,6 +352,45 @@ inline size_t rmFmtAtxt(char *out, size_t n, const char *atxt)
     return rmfText(out, n, "a=", atxt, RM_ATXT_MAX);
 }
 
+// ---- pins / gpio (GPIO-01 W5) -------------------------------------------------------------------------------
+// pins -> "ow=<n> btn=<n> an=<n> wind=<n>", each the stored effective pin 0..99 (0 = none), clamped; 26 chars at most.
+inline size_t rmFmtPins(char *out, size_t n, int ow, int btn, int an, int wind)
+{
+    RmFmtBuf b;
+    rmfInit(b);
+    rmfStr(b, "ow=");
+    rmfI(b, ow, 0, 99);
+    rmfStr(b, " btn=");
+    rmfI(b, btn, 0, 99);
+    rmfStr(b, " an=");
+    rmfI(b, an, 0, 99);
+    rmfStr(b, " wind=");
+    rmfI(b, wind, 0, 99);
+    return rmfEmit(out, n, b);
+}
+
+// 13 lowercase hex digits of a pin mask (bit n = GPIO n, GPIO 0..48 fit in 52 bits; higher bits are dropped)
+inline void rmfMask13(RmFmtBuf &b, uint64_t m)
+{
+    for (int i = 12; i >= 0; i--)
+        rmfCh(b, "0123456789abcdef"[(m >> (4 * i)) & 0xF]);
+}
+
+// gpio -> "m=<0|1> o=<13 hex> i=<13 hex> l=<13 hex>": master, held outputs, held inputs, level of held pins
+// (driven level for outputs, sampled for inputs). Always 51 chars.
+inline size_t rmFmtGpio(char *out, size_t n, bool master, uint64_t outs, uint64_t ins, uint64_t level)
+{
+    RmFmtBuf b;
+    rmfInit(b);
+    rmfStr(b, master ? "m=1 o=" : "m=0 o=");
+    rmfMask13(b, outs);
+    rmfStr(b, " i=");
+    rmfMask13(b, ins);
+    rmfStr(b, " l=");
+    rmfMask13(b, level);
+    return rmfEmit(out, n, b);
+}
+
 // ---- blockcall --------------------------------------------------------------------------------------------
 // "b=<csv>" ("b=-" when empty). A csv that does not fit the body is cut at an entry boundary and closed with
 // ",+N" (N = entries left out); an entry is never cut.

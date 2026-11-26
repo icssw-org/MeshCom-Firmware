@@ -150,6 +150,8 @@ enum RmArgShape : uint8_t
     RM_ARGS_MH,      // row index 0..999 | callsign with optional SSID
     RM_ARGS_UPD,     // none (read) | "check" | "go <tag>", tag [A-Za-z0-9._-] 1..23
     RM_ARGS_CALLS,   // none (read) | "none" | comma list of [A-Za-z0-9,-] 1..RM_MAX_ARGS (syntax only, the executor validates)
+    RM_ARGS_PINS,    // none (read) | "<ow|btn|an|wind> <0..48>" (GPIO-01, no leading zero)
+    RM_ARGS_GPIO,    // none (read) | "<0..48> <on|off|in>" (GPIO-01; never the master switch)
 };
 
 struct RmAllowRow
@@ -212,6 +214,31 @@ bool argsMatch(RmArgShape shape, const char *a, int minTxPower, int maxTxPower)
                 return false;
         }
         return strlen(a) <= RM_MAX_ARGS;
+    }
+    case RM_ARGS_PINS:
+    {
+        if (a[0] == '\0')
+            return true;
+        static const char *const fns[] = {"ow ", "btn ", "an ", "wind "};
+        for (const char *f : fns)
+        {
+            const size_t fl = strlen(f);
+            int v = 0;
+            if (strncmp(a, f, fl) == 0)
+                return parseSmallInt(a + fl, 2, v) && v <= 48;
+        }
+        return false;
+    }
+    case RM_ARGS_GPIO:
+    {
+        if (a[0] == '\0')
+            return true;
+        const char *sp = strchr(a, ' ');
+        if (sp == nullptr || sp - a < 1 || sp - a > 2)
+            return false;
+        char num[3] = {a[0], sp - a == 2 ? a[1] : '\0', '\0'};
+        int v = 0;
+        return parseSmallInt(num, 2, v) && v <= 48 && (strcmp(sp + 1, "on") == 0 || strcmp(sp + 1, "off") == 0 || strcmp(sp + 1, "in") == 0);
     }
     case RM_ARGS_UPD:
     {

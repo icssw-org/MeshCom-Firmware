@@ -84,7 +84,9 @@ void rmAuGetState(RmAuState &out)
         snprintf(out.staged, sizeof(out.staged), "%s", st.stagedTag);
     out.busy = (st.state == FWS_BUSY);
     out.goPending = s_goArmed;
-    out.ckMin = fwCheckAgeMin(st.lastCheckEpoch, (int64_t)time(nullptr));
+    bool clkOk = false;
+    const int64_t nowUtc = fwNetNodeUtc(clkOk); // node UTC; 0 (ck=-1) while the node clock is not valid
+    out.ckMin = fwCheckAgeMin(st.lastCheckEpoch, clkOk ? nowUtc : 0);
     snprintf(out.err, sizeof(out.err), "%s", st.lastErr);
 }
 
