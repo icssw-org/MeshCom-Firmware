@@ -1911,6 +1911,7 @@ void oledStat()
 
 #if defined(BOARD_HELTEC_T114)
 #include "t114_gps_page.h"
+#include "t114_pos_list.h"
 extern bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr);   // nrf52_main.cpp
 #endif
 
@@ -2302,6 +2303,19 @@ void sendDisplayTime()
         }
         t114GpsPageClose();
         sendDisplayHead(true);   // back to the status page
+        return;
+    }
+
+    // list of the heard positions: static page, only the age in its header runs
+    if(t114PosPageActive())
+    {
+        if(pageHold > 0)
+        {
+            t114PosPageUpdate();
+            return;
+        }
+        t114PosPageClose();
+        sendDisplayHead(true);
         return;
     }
     #endif
@@ -3228,6 +3242,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #if defined(BOARD_HELTEC_T114)
     t114GpsPageClose();   // draws nothing: the GPS page must be inactive so the next click shows the message
+    t114PosPageClose();
     #endif
 
     #if defined(WP_DISP)
@@ -3644,6 +3659,11 @@ void initAnalogPin()
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
     (void)snr;
+
+    #if defined(BOARD_HELTEC_T114)
+    t114PosListStore(aprsmsg, rssi);   // kept for the button list, whatever the display state is
+    #endif
+
     //printfdeb("bPosDisplay:%i DisplayOffWait:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i bDisplayIsOff:%i\n", bPosDisplay, DisplayOffWait, bSetDisplay, pageHold, bDisplayTrack, bDisplayIsOff);
 
     if(!bPosDisplay)
@@ -3728,6 +3748,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     dir_to = d_dir_to;
     dist_to = gps.distanceBetween(lat, lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c))/1000.0;
 
+    #if defined(BOARD_HELTEC_T114)
+    (void)dist_to;   // the T114 shows cdist below instead of the whole-km value
+    // T114: meters below 1 km, one decimal below 10 km, "--" while the own position is unknown
+    char cdist[10];
+    t114PosFormatDist(gps.distanceBetween(lat, lon, nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c), nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c)),
+                      !(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0), cdist, sizeof(cdist));
+    #endif
+
     sendDisplayMainline();
 
     #ifdef HAS_EPAPER
@@ -3764,6 +3792,8 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             #if defined(BOARD_T_ECHO)
             snprintf(msg_text, sizeof(msg_text), "LAT: %s%c", scan_text, aprsmsg.msg_payload[itxt]);
+            #elif defined(BOARD_HELTEC_T114)
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%6s", scan_text, aprsmsg.msg_payload[itxt], cdist);
             #else
             snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", scan_text, aprsmsg.msg_payload[itxt], dist_to);
             #endif
@@ -3911,6 +3941,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                         msg_text[20]=0x00;
                         sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
                         izeile++;
+                    #elif defined(BOARD_HELTEC_T114)
+                        if(bat > 0)
+                            snprintf(msg_text, sizeof(msg_text), "ALT :%4im B%3i%%", alt, bat);
+                        else
+                            snprintf(msg_text, sizeof(msg_text), "ALT :%4im", alt);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+                        izeile++;
                     #else
                         snprintf(msg_text, sizeof(msg_text), "ALT :%4im", alt);
                         msg_text[20]=0x00;
@@ -3935,7 +3973,13 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     
     #if defined(BOARD_T3S3_V13)
     // done above
-    #elif defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)  or defined(BOARD_T_CONNECT_PRO)
+    #elif defined(BOARD_HELTEC_T114)
+    // last line: weather values of the sender, only those it sent (a sender without a
+    // weather sensor sends no /T= /H= /P=; 0 is taken as "not sent")
+    t114PosFormatWx(aprspos.temp, aprspos.hum, aprspos.press, msg_text, sizeof(msg_text));
+    msg_text[20]=0x00;
+    sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    #elif defined(BOARD_TRACKER) or defined(BOARD_T_CONNECT_PRO)
     memset(msg_text, 0x00, sizeof(msg_text));
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
     #else
