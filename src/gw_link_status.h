@@ -38,6 +38,13 @@ void gwLinkNoteRx(uint32_t now_ms);
 // Returns the number of characters written (excluding the NUL).
 size_t gwLinkFormat(char *buf, size_t len, bool gateway, bool hasIp, uint32_t now_ms);
 
+// True iff the MeshCom server really answers: gateway && hasIp && a destination
+// is chosen && a server frame was received <= 65 s ago (same age check as the
+// "connected" text of gwLinkFormat; wrap-safe). hasIp alone only says the
+// router is up, not the ISP (#1324): use this, not hasIp, to decide that the
+// server has a frame (msg_server flag, phone "server reached" ACK).
+bool gwLinkServerAlive(bool gateway, bool hasIp, uint32_t now_ms);
+
 #if defined(UNIT_TEST)
 void gwLinkResetForTest();
 #endif
