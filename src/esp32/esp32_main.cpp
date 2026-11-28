@@ -13,6 +13,7 @@
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "posinfo_timer.h"   // POSINFO-LAG-01: beacon due / spacing decision
 #include "beacon_rate.h"      // POSINFO_AUTO_MIN_MS
+#include "gps_interval.h"     // #1327: --postime while GPS gives no position
 #include <atomic>
 #include <configuration.h>
 #include "capture_functions.h"
@@ -4767,7 +4768,7 @@ void esp32loop()
             no_gps_reset_counter++;
             if(no_gps_reset_counter > 10)
             {
-                posinfo_interval = POSINFO_INTERVAL;
+                posinfo_interval = gpsNoFixInterval(meshcom_settings.node_postime, POSINFO_INTERVAL);
                 no_gps_reset_counter = 0;
             }
         }
