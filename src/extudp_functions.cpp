@@ -3,6 +3,7 @@
 #include "mc_text.h"
 #include <Arduino.h>
 #include <atomic>
+#include "ext_queue_core.h"
 
 #include <extudp_functions.h>
 #include "command_functions.h"   // commandAction(): register query
@@ -102,6 +103,7 @@ struct externQueueEntry {
 };
 static struct externQueueEntry externQueue[MAX_EXTERN_QUEUE];
 static int externQueueWrite = 0;
+static uint32_t externQueueDropCount = 0;  // frames dropped because the ring was full
 
 // Extern JSON UDP
 //
@@ -969,21 +971,27 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
                 (unsigned)uxTaskGetStackHighWaterMark(NULL), (unsigned long)millis());
 }
 
+uint32_t externQueueDrops() { return externQueueDropCount; }
+
 void queueExtern(char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr)
 {
-    struct externQueueEntry *entry = &externQueue[externQueueWrite];
-    if(buflen > sizeof(entry->buffer)) {
+    if(buflen > sizeof(externQueue[0].buffer)) {
         Serial.printf("[EXT] queueExtern: buflen %u > %u, dropped\n",
-                      (unsigned)buflen, (unsigned)sizeof(entry->buffer));
+                      (unsigned)buflen, (unsigned)sizeof(externQueue[0].buffer));
         return;
     }
-    memcpy(entry->buffer, buffer, buflen);
-    entry->buflen = buflen;
-    entry->rssi = rssi;
-    entry->snr = snr;
-    snprintf(entry->src_type, sizeof(entry->src_type), "%s", src_type);
-    entry->used.store(true, std::memory_order_release);
-    externQueueWrite = (externQueueWrite + 1) % MAX_EXTERN_QUEUE;
+    // The busy slot is checked BEFORE it is touched; a full ring drops and counts the frame (ext_queue_core.h).
+    bool ok = extQueueWrite(externQueue, MAX_EXTERN_QUEUE, externQueueWrite, externQueueDropCount,
+        [&](struct externQueueEntry *entry) {
+            memcpy(entry->buffer, buffer, buflen);
+            entry->buflen = buflen;
+            entry->rssi = rssi;
+            entry->snr = snr;
+            snprintf(entry->src_type, sizeof(entry->src_type), "%s", src_type);
+        });
+    if(!ok)
+        Serial.printf("[EXT] queueExtern: ring full, frame dropped (total %lu)\n",
+                      (unsigned long)externQueueDropCount);
 }
 
 // DR-18 part 2 (docs/ack-wer-hat-quittiert.md §6.3): the outbound ack status
@@ -1229,7 +1237,7 @@ void flushExternQueue()
             // hier durch, siehe queueExternAck().
             sendExtern(true, externQueue[i].src_type, externQueue[i].buffer,
                        externQueue[i].buflen, externQueue[i].rssi, externQueue[i].snr);
-            externQueue[i].used.store(false, std::memory_order_relaxed);
+            externQueue[i].used.store(false, std::memory_order_release);   // pairs with the writer's acquire (ext_queue_core.h)
         }
     }
 }
