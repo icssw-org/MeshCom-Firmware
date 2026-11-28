@@ -6,6 +6,7 @@
 #include <esp_sleep.h>
 #include <esp_task_wdt.h>
 #include <driver/gpio.h>
+#include <driver/rtc_io.h>
 #if !ARDUINO_USB_CDC_ON_BOOT
 #include <driver/uart.h>
 #endif
@@ -17,6 +18,7 @@
 #include "esp32_pmu.h"
 #include "batt_functions.h"
 #include "loop_functions_extern.h"   // remoteLedForceOff()
+#include "sleep_wake_pull.h"   // #1341: wake pin pull-up also with --button off
 #include "loop_breadcrumb.h"   // INS-05: loopCrumbClear() right before the sleep
 
 // Runtime wake-button GPIO (loop_functions.cpp:186). Seeded from the
@@ -236,6 +238,28 @@ void esp32EnterDeepSleep()
     if (iButtonPin != 99)
     {
         esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+
+        // #1341: the pull-up --button on gives this pin (init_onebutton), also with --button off.
+        // The pad is an RTC IO while asleep, so the RTC pull is set as well (ESP-IDF ext1 notes).
+        #if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213)
+        const bool extPullup = true;    // init_onebutton() uses plain INPUT on these boards
+        #else
+        const bool extPullup = false;
+        #endif
+        #if CONFIG_IDF_TARGET_ESP32
+        const bool classicEsp32 = true;    // GPIO12 (MTDI) strapping rule applies
+        #else
+        const bool classicEsp32 = false;
+        #endif
+        if (sleepWakeNeedsPullup(iButtonPin, extPullup, classicEsp32))
+        {
+            pinMode(iButtonPin, INPUT_PULLUP);
+            if (rtc_gpio_is_valid_gpio((gpio_num_t)iButtonPin))
+            {
+                rtc_gpio_pullup_en((gpio_num_t)iButtonPin);
+                rtc_gpio_pulldown_dis((gpio_num_t)iButtonPin);
+            }
+        }
 
         #if CONFIG_IDF_TARGET_ESP32
         esp_sleep_enable_ext1_wakeup((1ULL << iButtonPin), ESP_EXT1_WAKEUP_ALL_LOW);
