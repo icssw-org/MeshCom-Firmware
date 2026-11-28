@@ -693,6 +693,14 @@ static void aprsExtractTag(const String &PayloadBuffer, unsigned int istarttext,
     }
 }
 
+// sscanf("%lf") also reads an exponent, "inf" and "nan", so a lat/lon field such as "1e99" gave a value whose
+// (int)(x / 100.0) at the end of decodeAPRSPOS() is undefined behaviour. A value is usable when x / 100 fits an
+// int; 2e11 keeps every 11-digit field without exponent (at most 99999999999), NaN fails both comparisons.
+static bool aprsPosRawInRange(double x)
+{
+    return x > -2.0e11 && x < 2.0e11;
+}
+
 uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 {
     initAPRSPOS(aprspos);
@@ -720,7 +728,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
             decode_text[ipt]=0x00;
 
-            sscanf(decode_text, "%lf", &aprspos.lat);
+            double raw = 0.0; // aprspos.lat is 0.0 from initAPRSPOS(), sscanf() without a number leaves it so
+            sscanf(decode_text, "%lf", &raw);
+            if (!aprsPosRawInRange(raw))
+                return 0x00;
+            aprspos.lat = raw;
 
             aprspos.lat_c = PayloadBuffer.charAt(itxt);
             itxt++;
@@ -752,7 +764,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
             decode_text[ipt]=0x00;
 
-            sscanf(decode_text, "%lf", &aprspos.lon);
+            double raw = 0.0; // aprspos.lon is 0.0 from initAPRSPOS(), sscanf() without a number leaves it so
+            sscanf(decode_text, "%lf", &raw);
+            if (!aprsPosRawInRange(raw))
+                return 0x00;
+            aprspos.lon = raw;
             aprspos.lon_c = PayloadBuffer.charAt(itxt);
             itxt++;
             aprspos.aprs_symbol = PayloadBuffer.charAt(itxt);
