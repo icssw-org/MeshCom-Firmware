@@ -6,6 +6,16 @@
 
 #include "mc_ssl_client.h"
 
+// The cet_age.h clock part includes loop_functions_extern.h, which needs the configuration constants
+// (MAX_RING, UDP_TX_BUF_SIZE, ...) and meshcom_settings declared before it.
+#include <configuration.h>
+#include <meshcom_settings.h>
+#ifndef CET_AGE_WITH_CLOCK
+#define CET_AGE_WITH_CLOCK // cetDeviceTrusted()/cetNowUtc(): the node clock (RTC, GPS fix, NTP)
+#endif
+#include "cet_age.h"
+#include "fw_tls_time.h"
+
 #include <esp32-hal-log.h>
 #include <lwip/err.h>
 #include <lwip/sockets.h>
@@ -14,6 +24,36 @@
 #include <string.h>
 
 static const char *mc_pers = "esp32-tls";
+
+static_assert(FW_TLS_BADCERT_EXPIRED == MBEDTLS_X509_BADCERT_EXPIRED, "fw_tls_time.h flag value");
+static_assert(FW_TLS_BADCERT_FUTURE == MBEDTLS_X509_BADCERT_FUTURE, "fw_tls_time.h flag value");
+
+// mbedtls_ssl_conf_verify callback, called for every certificate of the chain (depth 0 = leaf, up to the
+// trust anchor). Only sets date flags; the chain result stays mbedTLS's. The decision is fw_tls_time.h:
+// now_eff = max(node UTC if the node clock is valid, build floor).
+static int mcVerifyDates(void *p_ctx, mbedtls_x509_crt *crt, int depth, uint32_t *flags)
+{
+    (void)depth;
+    mc_ssl_context *ctx = (mc_ssl_context *)p_ctx;
+    static const int64_t build_floor = fwTlsBuildFloor(__DATE__, __TIME__);
+    uint32_t now_utc = 0;
+    const bool clock_valid = cetDeviceTrusted() && cetNowUtc(&now_utc);
+    int64_t from = 0, to = 0;
+    const bool from_ok = fwTlsEpochFromX509(crt->valid_from.year, crt->valid_from.mon, crt->valid_from.day,
+                                            crt->valid_from.hour, crt->valid_from.min, crt->valid_from.sec, &from);
+    const bool to_ok = fwTlsEpochFromX509(crt->valid_to.year, crt->valid_to.mon, crt->valid_to.day,
+                                          crt->valid_to.hour, crt->valid_to.min, crt->valid_to.sec, &to);
+    const uint32_t f = fwTlsCertFlags(from_ok, from, to_ok, to, clock_valid, (int64_t)now_utc, build_floor);
+    if (f != 0) {
+        log_e("certificate date check failed at depth %d: flags 0x%x (clock %s)", depth, (unsigned)f,
+              clock_valid ? "valid" : "not set");
+        *flags |= f;
+        if (ctx != NULL) {
+            ctx->time_flags |= f;
+        }
+    }
+    return 0;
+}
 
 static int mcHandleError(int err, const char *function, int line)
 {
@@ -71,7 +111,11 @@ int mc_ssl_prepare(mc_ssl_context *ctx, const char *hostname, bool insecure)
         log_d("WARNING: Skipping SSL Verification. INSECURE!");
     } else {
         mbedtls_ssl_conf_authmode(&ctx->ssl_conf, MBEDTLS_SSL_VERIFY_REQUIRED);
+        mbedtls_ssl_conf_verify(&ctx->ssl_conf, mcVerifyDates, ctx);
     }
+
+    // TLS 1.2 minimum (major 3, minor 3); no cipher-suite restriction.
+    mbedtls_ssl_conf_min_version(&ctx->ssl_conf, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 
     mbedtls_ssl_conf_rng(&ctx->ssl_conf, mbedtls_ctr_drbg_random, &ctx->drbg_ctx);
 

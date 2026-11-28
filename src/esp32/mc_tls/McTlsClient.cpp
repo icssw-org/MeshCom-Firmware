@@ -24,6 +24,7 @@
 #include "McTlsClient.h"
 #include <esp_heap_caps.h>
 #include "fw_update_roots.h"
+#include "fw_tls_time.h"
 #include "fw_update.h" // fwTlsConnectErr
 #include <freertos/FreeRTOS.h>
 #include <lwip/sockets.h>
@@ -88,7 +89,7 @@ int McTlsClient::connect(const char *host, uint16_t port)
     // -9984 also comes from an allocation failure inside the signature check: retry only when the heap could
     // carry a second session at all (records 2 x 16.7 KB), else it doubles time and heap at the worst moment.
     if (r == 0 && _lastError == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED && _CA_cert == NULL && ca != FW_UPDATE_ROOTS_PEM
-        && !_use_insecure && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= MC_TLS_RETRY_MIN_BLK) {
+        && !_use_insecure && !fwTlsFlagsAreDate(_lastTimeFlags) && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= MC_TLS_RETRY_MIN_BLK) {
         log_w("single trust anchor did not verify %s, retrying with the full bundle", host);
         r = connectTo(host, address, port, FW_UPDATE_ROOTS_PEM);
     }
@@ -106,6 +107,7 @@ int McTlsClient::connectTo(const char *host, IPAddress ip, uint16_t port, const 
 {
     const bool resolve = (ip == IPAddress((uint32_t)0));
     stop(); // a reused client starts from a clean context
+    _lastTimeFlags = 0;
 
     int ret = mc_ssl_prepare(sslclient, host, _use_insecure); // B1
     if (ret == 0 && !_use_insecure) {
@@ -124,6 +126,7 @@ int McTlsClient::connectTo(const char *host, IPAddress ip, uint16_t port, const 
     }
     ret = mc_ssl_connect(sslclient, ip, port, _timeout);
     _lastError = fwTlsConnectErr(ret); // success returns the socket fd, which is not an error
+    _lastTimeFlags = sslclient->time_flags; // before stop() re-initialises the context
     if (ret < 0) {
         log_e("mc_ssl_connect: %d", ret);
         stop();

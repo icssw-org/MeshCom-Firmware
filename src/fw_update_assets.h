@@ -346,6 +346,8 @@ inline void stringChar(FwJsonScan &s, char c)
             s.escState = 1;
         else if (c == '"')
             endString(s);
+        else if ((unsigned char)c < 0x20)
+            s.err = true; // RFC 8259: a raw control byte (incl. NUL) inside a string is invalid; fail closed
         else
             emit(s, c);
         return;

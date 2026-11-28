@@ -43,6 +43,7 @@ class McTlsClient : public WiFiClient
 protected:
     mc_ssl_context *sslclient;
     int _lastError = 0;
+    uint32_t _lastTimeFlags = 0; // EXPIRED/FUTURE of the last handshake (survives stop())
     int _peek = -1;
     int _timeout;
     bool _use_insecure;

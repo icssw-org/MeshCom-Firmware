@@ -43,6 +43,7 @@ static auto& s_hwSerial = Serial;
 
 #include "net_console.h"
 #include "net_console_gate.h"
+#include "net_console_slot.h"
 #include "instrument.h"
 #include "configuration_global.h"
 #include <configuration.h>        // board defines (HAS_ETHERNET)
@@ -64,6 +65,16 @@ static bool              s_started        = false;
 static volatile bool     s_server_pending = false;
 static bool              s_authenticated  = false;
 static volatile bool     s_hs_running     = false;
+// Handshake-slot takeover: a silent peer must not hold the single slot.
+// Per generation, not a bool: a preempted task wakes later (EOF after shutdown) and must not mark the
+// NEW holder as "sending". Each task stores its own generation; rxSeen = (s_hs_rx_gen == s_hs_gen).
+static volatile uint32_t s_hs_rx_gen      = 0;       // generation of the holder that last sent a byte / left the receive phase
+static volatile int      s_hs_fd          = -1;      // socket of the slot holder
+static volatile uint32_t s_hs_startMs     = 0;       // when the slot was taken
+static volatile uint32_t s_hs_gen         = 0;       // slot generation; a preempted task must not free the new holder's slot
+// The generation, the rx mark and the slot flag change together under this lock, so a task's "am I still the
+// holder?" check and its store are one step. Held for a few instructions only, never across a syscall.
+static portMUX_TYPE      s_hs_mux         = portMUX_INITIALIZER_UNLOCKED;
 
 // 1-byte lookahead for netConsoleAvailable()
 static bool     s_peek_valid = false;
@@ -137,14 +148,29 @@ static void teardownIfCurrent(int fd, TickType_t wait)
 }
 
 // ── Auth task — HMAC-SHA256 challenge-response ────────────────────────────────
-struct AuthArgs { int fd; };
+struct AuthArgs { int fd; uint32_t gen; };
 
 static void authTask(void* arg)
 {
     AuthArgs* a = static_cast<AuthArgs*>(arg);
     int fd      = a->fd;
+    const uint32_t myGen = a->gen;
     delete a;
-    if (fd < 0) { s_hs_running = false; vTaskDelete(nullptr); return; }
+    // A preempted task must not free the slot of the connection that took it over.
+    auto freeSlot = [myGen]() {
+        portENTER_CRITICAL(&s_hs_mux);
+        if (netConsoleSlotMayFree(s_hs_gen, myGen))
+            s_hs_running = false;
+        portEXIT_CRITICAL(&s_hs_mux);
+    };
+    // Only the current holder marks: a preempted task that wakes late must not make the new
+    // holder look silent. Check and store under the lock that changes the generation.
+    auto markRx = [myGen]() {
+        portENTER_CRITICAL(&s_hs_mux);
+        s_hs_rx_gen = netConsoleSlotMark(s_hs_rx_gen, s_hs_gen, myGen);
+        portEXIT_CRITICAL(&s_hs_mux);
+    };
+    if (fd < 0) { freeSlot(); vTaskDelete(nullptr); return; }
 
     // Blocking mode for the auth exchange
     { int fl = fcntl(fd, F_GETFL, 0); fcntl(fd, F_SETFL, fl & ~O_NONBLOCK); }
@@ -153,6 +179,7 @@ static void authTask(void* arg)
 
     if (s_password[0] == '\0')
     {
+        markRx();  // nothing to wait for: not preemptable
         authOk = true;  // no password configured — grant immediately
     }
     else
@@ -168,23 +195,32 @@ static void authTask(void* arg)
         strcat(chalBuf, "\r\n");
         ::send(fd, chalBuf, strlen(chalBuf), 0);
 
-        // 3. Receive response line (30 s timeout)
-        struct timeval tv = {30, 0};
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        // 3. Receive response line. Total deadline 10 s: a per-recv timeout alone
+        //    would let a slow peer (1 byte / 29 s) hold the single handshake slot.
+        const uint32_t hsStart = millis();
+        const uint32_t hsBudgetMs = 10000;
 
         char respBuf[72] = {0};
         uint8_t idx = 0;
         bool readOk = false;
         while (idx < sizeof(respBuf) - 1)
         {
+            uint32_t elapsed = millis() - hsStart;
+            if (elapsed >= hsBudgetMs) break;   // deadline hit: readOk stays false -> FAIL path
+            uint32_t left = hsBudgetMs - elapsed;
+            struct timeval tv = { (time_t)(left / 1000), (suseconds_t)((left % 1000) * 1000) };
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
             char c;
             int r = ::recv(fd, &c, 1, 0);
             if (r <= 0) break;
+            markRx();           // peer is sending: the slot is no longer preemptable
             if (c == '\r') { readOk = true; break; } //continue;
             if (c == '\n') { readOk = true; break; }
             respBuf[idx++] = c;
         }
 
+        markRx();           // receive phase over (verify/deadline): never preempt from here
         if (readOk)
         {
             Serial.printf("[CON ]...s_password:<***> lng:%i resoBuf:<***>\n", strlen(s_password));
@@ -213,7 +249,7 @@ static void authTask(void* arg)
         ::send(fd, "FAIL\r\n", 6, 0);
         ::close(fd);
         s_hwSerial.println("[CON ]...Authentication failed.");
-        s_hs_running = false;
+        freeSlot();
         vTaskDelete(nullptr);
         return;
     }
@@ -244,13 +280,13 @@ static void authTask(void* arg)
     {
         ::close(fd);
         s_hwSerial.println("[CON ]...Console stopped, session dropped.");
-        s_hs_running = false;
+        freeSlot();
         vTaskDelete(nullptr);
         return;
     }
     s_hwSerial.printf("[CON ]...Client authenticated on port %d. free heap=%u\n",
                       NET_CONSOLE_PORT, (unsigned)esp_get_free_heap_size());
-    s_hs_running = false;
+    freeSlot();
     vTaskDelete(nullptr);
 }
 
@@ -491,9 +527,31 @@ void loopNetConsole()
 
     if (s_hs_running)
     {
-        s_hwSerial.println("[CON ]...Rejected: auth already in progress");
-        ::close(client_fd);
-        return;
+        // Take the slot over from a holder that has sent nothing for NET_CONSOLE_HS_SILENT_MS.
+        // shutdown() (not close()) wakes the old task's recv() with EOF; the task closes its own fd on the
+        // FAIL path, so the fd number cannot be reused under it. A holder that is sending is never preempted.
+        portENTER_CRITICAL(&s_hs_mux);
+        const uint32_t gen0 = s_hs_gen;
+        const int      fd0  = s_hs_fd;
+        const bool     preempt = netConsoleSlotMayPreempt(s_hs_running, netConsoleSlotRxSeen(s_hs_rx_gen, gen0), millis(), s_hs_startMs);
+        portEXIT_CRITICAL(&s_hs_mux);
+        if (preempt)
+        {
+            s_hwSerial.println("[CON ]...Silent handshake peer dropped, slot taken over");
+            // Check-then-act: the holder may have got EOF and freed the slot (closing fd0) since the check
+            // above. Re-check the generation right before shutdown() so we do not hit a reused fd number.
+            // Residual window (a few instructions between this re-check and the syscall, same core, task
+            // switch only at a tick): a close+reuse inside it would shut down a foreign socket; the
+            // consequence is one dropped connection, never a wrong grant. Only the task closes its own fd.
+            if (s_hs_running && s_hs_gen == gen0 && fd0 >= 0)
+                ::shutdown(fd0, SHUT_RDWR);
+        }
+        else
+        {
+            s_hwSerial.println("[CON ]...Rejected: auth already in progress");
+            ::close(client_fd);
+            return;
+        }
     }
 
     // Detect a peer that vanished without FIN within ~90 s (P-0168).
@@ -503,13 +561,24 @@ void loopNetConsole()
     setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
     setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPCNT,   &cnt,   sizeof(cnt));
 
+    const uint32_t nowMs = millis();
+    portENTER_CRITICAL(&s_hs_mux);
+    s_hs_gen++;   // new generation: the previous holder's rx mark no longer counts (s_hs_rx_gen != s_hs_gen)
+    const uint32_t newGen = s_hs_gen;
+    s_hs_fd      = client_fd;
+    s_hs_startMs = nowMs;
     s_hs_running = true;
-    AuthArgs* args = new AuthArgs{ client_fd };
+    portEXIT_CRITICAL(&s_hs_mux);
+    AuthArgs* args = new AuthArgs{ client_fd, newGen };
     BaseType_t rc = xTaskCreatePinnedToCore(authTask, "con_auth", 3072, args, 1, nullptr, 1);
     if (rc != pdPASS)
     {
         s_hwSerial.printf("[CON ]...xTaskCreate failed: %d\n", rc);
-        delete args; ::close(client_fd); s_hs_running = false;
+        delete args; ::close(client_fd);
+        portENTER_CRITICAL(&s_hs_mux);
+        s_hs_running = false;
+        s_hs_gen++;
+        portEXIT_CRITICAL(&s_hs_mux);
     }
 }
 
