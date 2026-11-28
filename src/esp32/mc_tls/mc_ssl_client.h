@@ -19,6 +19,8 @@
  *  - Dropped (the Auto Update does not use them): PSK, client certificate and key, the ESP
  *    certificate bundle, ALPN, fingerprint helpers.
  *  - A failed peer verification now returns an error (the original returned the stale 0).
+ *  - The prebuilt mbedTLS never checks certificate dates (HAVE_TIME_DATE off); a verify callback
+ *    applies src/fw_tls_time.h to every certificate of the chain. Minimum TLS 1.2.
  */
 #ifndef MC_SSL_CLIENT_H
 #define MC_SSL_CLIENT_H
@@ -44,6 +46,7 @@ typedef struct mc_ssl_context {
     mbedtls_entropy_context entropy_ctx;
     mbedtls_x509_crt ca_cert;
     bool ca_loaded;
+    uint32_t time_flags; // date flags (EXPIRED/FUTURE) the verify callback set; read before stop()
     unsigned long socket_timeout;
     unsigned long handshake_timeout;
 } mc_ssl_context;
