@@ -1076,8 +1076,12 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
 
     uint16_t ilng=strlen(aprsmsg.msg_source_path) + 1 + strlen(aprsmsg.msg_destination_path) + 1;
     
-    if(ilng >= UDP_TX_BUF_SIZE)
-        ilng = UDP_TX_BUF_SIZE - 1;
+    // With the current path width the cap below never truncates; a truncated frame would lose the payload-type
+    // byte and encodeAPRS would append behind it. Widening MC_PATH_LEN must fail here, not at runtime.
+    static_assert(2 * (MC_PATH_LEN - 1) + 2 <= UDP_TX_BUF_SIZE - 6, "MC_PATH_LEN too wide for encodeStartAPRS");
+    // The copy lands at msg_buffer+6, so the cap is the room behind the 6-byte header.
+    if(ilng > UDP_TX_BUF_SIZE - 6)
+        ilng = UDP_TX_BUF_SIZE - 6;
 
     memcpy(msg_buffer+6, msg_start, ilng);
 
